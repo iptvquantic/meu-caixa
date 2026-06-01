@@ -408,8 +408,8 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Análise mensal automática</div>
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Suporte por WhatsApp</div>
       </div>
-      <button class="btn-plan btn-plan-secondary" onclick="openPix('mensal','R$ 14,90','Plano Mensal')">Assinar via PIX</button>
-      <div class="plan-pix">🟢 Pagar via PIX · Ativação imediata</div>
+      <button class="btn-plan btn-plan-secondary" onclick="window.open('https://pag.ae/81RjjwLHN','_blank')">Pagar com PagBank</button>
+      <div class="plan-pix">💳 PIX ou Cartão · Ativação imediata</div>
     </div>
     <!-- TRIMESTRAL -->
     <div class="plan-card popular">
@@ -427,8 +427,8 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Prioridade no suporte</div>
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Histórico ilimitado</div>
       </div>
-      <button class="btn-plan btn-plan-primary" onclick="openPix('trimestral','R$ 39,90','Plano Trimestral')">Assinar via PIX</button>
-      <div class="plan-pix">🟢 Pagar via PIX · Ativação imediata</div>
+      <button class="btn-plan btn-plan-primary" onclick="window.open('https://pag.ae/81RjjRMhR','_blank')">Pagar com PagBank</button>
+      <div class="plan-pix">💳 PIX ou Cartão · Ativação imediata</div>
     </div>
     <!-- ANUAL -->
     <div class="plan-card">
@@ -445,18 +445,18 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Suporte VIP prioritário</div>
         <div class="plan-feat"><div class="plan-feat-icon">✓</div>Acesso a novos recursos primeiro</div>
       </div>
-      <button class="btn-plan btn-plan-secondary" onclick="openPix('anual','R$ 149,90','Plano Anual')">Assinar via PIX</button>
-      <div class="plan-pix">🟢 Pagar via PIX · Ativação imediata</div>
+      <button class="btn-plan btn-plan-secondary" onclick="window.open('https://pag.ae/81Rjk7oKs','_blank')">Pagar com PagBank</button>
+      <div class="plan-pix">💳 PIX ou Cartão · Ativação imediata</div>
     </div>
   </div>
 
   <!-- PIX INFO -->
   <div class="pix-section">
     <div class="pix-icon">🟢</div>
-    <h3 style="font-size:22px;font-weight:900;margin-bottom:8px">Pagamento 100% via PIX</h3>
-    <p style="font-size:14px;color:var(--muted2);line-height:1.6">Rápido, seguro e sem taxas extras. Após o pagamento, seu acesso é liberado em até 1 hora.</p>
+    <h3 style="font-size:22px;font-weight:900;margin-bottom:8px">Pagamento via PagBank</h3>
+    <p style="font-size:14px;color:var(--muted2);line-height:1.6">PIX ou Cartão de crédito. Após o pagamento confirmado, envie o comprovante no WhatsApp e seu acesso é liberado em até 1 hora.</p>
     <div style="font-size:13px;color:var(--muted2);margin-top:16px">Chave PIX (Email):</div>
-    <div class="pix-key" onclick="copyPix()" id="pix-key-display">22991053813</div>
+    <div class="pix-key" onclick="copyPix()" id="pix-key-display">topflex.guilherme@gmail.com</div>
     <div style="font-size:12px;color:var(--muted2);margin-top:-10px;margin-bottom:20px">Clique para copiar a chave PIX</div>
     <div class="pix-steps">
       <div class="pix-step"><div class="pix-step-n">1</div><div class="pix-step-t">Escolha seu plano</div><div class="pix-step-d">Selecione o plano desejado e clique em "Assinar via PIX".</div></div>
@@ -534,7 +534,7 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
     <a href="#plans">Planos</a>
     <a href="#faq">FAQ</a>
     <a href="app.html">Entrar</a>
-    <a href="#" onclick="alert('WhatsApp: (22) 99105-3813')">Suporte</a>
+    <a href="#" onclick="alert('WhatsApp: (22) 99999-9999')">Suporte</a>
   </div>
   <div class="footer-copy">© 2026 Meu Caixa · Todos os direitos reservados</div>
 </footer>
@@ -551,7 +551,7 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
     </div>
     <div style="text-align:left;margin-bottom:16px">
       <div style="font-size:12px;color:var(--muted2);margin-bottom:6px;font-weight:600">CHAVE PIX (EMAIL):</div>
-      <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:800;font-family:monospace;letter-spacing:.5px">22991053813</div>
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:800;font-family:monospace;letter-spacing:.5px">topflex.guilherme@gmail.com</div>
     </div>
     <button class="copy-pix-btn" onclick="copyPixModal()">📋 Copiar chave PIX</button>
     <a href="https://wa.me/5522999999999?text=Ol%C3%A1!%20Fiz%20o%20pagamento%20do%20Meu%20Caixa%20e%20quero%20ativar%20meu%20acesso." target="_blank" style="display:block;width:100%;padding:14px;background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.25);border-radius:12px;color:var(--green);font-size:15px;font-weight:800;text-align:center;text-decoration:none;margin-bottom:10px">📱 Enviar comprovante no WhatsApp</a>
@@ -586,14 +586,14 @@ function closePixModal(){document.getElementById('modal-pix').classList.remove('
 document.getElementById('modal-pix').addEventListener('click',function(e){if(e.target===this)closePixModal();});
 
 function copyPix(){
-  navigator.clipboard.writeText('22991053813').then(()=>{
+  navigator.clipboard.writeText('topflex.guilherme@gmail.com').then(()=>{
     const el=document.getElementById('pix-key-display');
     el.textContent='✅ Chave copiada!';
-    setTimeout(()=>el.textContent='22991053813',2000);
+    setTimeout(()=>el.textContent='topflex.guilherme@gmail.com',2000);
   });
 }
 function copyPixModal(){
-  navigator.clipboard.writeText('22991053813').then(()=>{
+  navigator.clipboard.writeText('topflex.guilherme@gmail.com').then(()=>{
     const btn=event.target;
     btn.textContent='✅ Chave copiada!';
     setTimeout(()=>btn.textContent='📋 Copiar chave PIX',2000);
