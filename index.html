@@ -456,7 +456,7 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
     <h3 style="font-size:22px;font-weight:900;margin-bottom:8px">Pagamento 100% via PIX</h3>
     <p style="font-size:14px;color:var(--muted2);line-height:1.6">Rápido, seguro e sem taxas extras. Após o pagamento, seu acesso é liberado em até 1 hora.</p>
     <div style="font-size:13px;color:var(--muted2);margin-top:16px">Chave PIX (Email):</div>
-    <div class="pix-key" onclick="copyPix()" id="pix-key-display">topflex.guilherme@gmail.com</div>
+    <div class="pix-key" onclick="copyPix()" id="pix-key-display">22991053813</div>
     <div style="font-size:12px;color:var(--muted2);margin-top:-10px;margin-bottom:20px">Clique para copiar a chave PIX</div>
     <div class="pix-steps">
       <div class="pix-step"><div class="pix-step-n">1</div><div class="pix-step-t">Escolha seu plano</div><div class="pix-step-d">Selecione o plano desejado e clique em "Assinar via PIX".</div></div>
@@ -551,7 +551,7 @@ body{background:var(--bg);color:var(--text);overflow-x:hidden}
     </div>
     <div style="text-align:left;margin-bottom:16px">
       <div style="font-size:12px;color:var(--muted2);margin-bottom:6px;font-weight:600">CHAVE PIX (EMAIL):</div>
-      <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:800;font-family:monospace;letter-spacing:.5px">topflex.guilherme@gmail.com</div>
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;font-size:15px;font-weight:800;font-family:monospace;letter-spacing:.5px">22991053813</div>
     </div>
     <button class="copy-pix-btn" onclick="copyPixModal()">📋 Copiar chave PIX</button>
     <a href="https://wa.me/5522999999999?text=Ol%C3%A1!%20Fiz%20o%20pagamento%20do%20Meu%20Caixa%20e%20quero%20ativar%20meu%20acesso." target="_blank" style="display:block;width:100%;padding:14px;background:rgba(34,197,94,.12);border:1.5px solid rgba(34,197,94,.25);border-radius:12px;color:var(--green);font-size:15px;font-weight:800;text-align:center;text-decoration:none;margin-bottom:10px">📱 Enviar comprovante no WhatsApp</a>
@@ -586,14 +586,14 @@ function closePixModal(){document.getElementById('modal-pix').classList.remove('
 document.getElementById('modal-pix').addEventListener('click',function(e){if(e.target===this)closePixModal();});
 
 function copyPix(){
-  navigator.clipboard.writeText('topflex.guilherme@gmail.com').then(()=>{
+  navigator.clipboard.writeText('22991053813').then(()=>{
     const el=document.getElementById('pix-key-display');
     el.textContent='✅ Chave copiada!';
-    setTimeout(()=>el.textContent='topflex.guilherme@gmail.com',2000);
+    setTimeout(()=>el.textContent='22991053813',2000);
   });
 }
 function copyPixModal(){
-  navigator.clipboard.writeText('topflex.guilherme@gmail.com').then(()=>{
+  navigator.clipboard.writeText('22991053813').then(()=>{
     const btn=event.target;
     btn.textContent='✅ Chave copiada!';
     setTimeout(()=>btn.textContent='📋 Copiar chave PIX',2000);
