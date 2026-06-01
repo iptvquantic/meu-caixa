@@ -546,10 +546,14 @@ document.documentElement.setAttribute('data-theme',savedTheme);
 setTimeout(()=>setTheme(savedTheme),100);
 
 // AUTH
-onAuthStateChanged(auth,user=>{
+onAuthStateChanged(auth,async user=>{
   if(user){
     cUser=user;
+    // Check subscription
+    const ok=await checkSubscription(user);
+    if(!ok) return;
     document.getElementById('auth-screen').style.display='none';
+    document.getElementById('sub-screen').style.display='none';
     document.getElementById('app').style.display='block';
     const init=user.email?user.email[0].toUpperCase():'U';
     ['s-avatar','m-avatar'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=init;});
@@ -558,9 +562,60 @@ onAuthStateChanged(auth,user=>{
   }else{
     cUser=null;allTxs=[];
     document.getElementById('auth-screen').style.display='flex';
+    document.getElementById('sub-screen').style.display='none';
     document.getElementById('app').style.display='none';
   }
 });
+
+async function checkSubscription(user){
+  try{
+    const{getDoc,setDoc}=await import('https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js');
+    const userRef=doc(db,'users',user.uid);
+    const snap=await getDoc(userRef);
+    const now=new Date();
+    if(!snap.exists()){
+      // New user — 15 days free trial
+      const trialEnd=new Date();
+      trialEnd.setDate(trialEnd.getDate()+15);
+      await setDoc(userRef,{
+        email:user.email,
+        createdAt:now.toISOString(),
+        plan:'trial',
+        planExpiry:trialEnd.toISOString(),
+        active:true
+      });
+      return true;
+    }
+    const data=snap.data();
+    const expiry=new Date(data.planExpiry);
+    const daysLeft=Math.ceil((expiry-now)/(1000*60*60*24));
+    if(data.active===false||expiry<now){
+      showSubScreen(user.email,0,data.plan);
+      return false;
+    }
+    if(daysLeft<=3){
+      showSubWarning(daysLeft);
+    }
+    return true;
+  }catch(e){
+    console.error(e);
+    return true; // fail open
+  }
+}
+
+function showSubScreen(email,daysLeft,plan){
+  document.getElementById('auth-screen').style.display='none';
+  document.getElementById('app').style.display='none';
+  document.getElementById('sub-screen').style.display='flex';
+  const msg=daysLeft<=0?'Seu acesso expirou.':'Seu plano vence em breve.';
+  document.getElementById('sub-msg').textContent=msg;
+  document.getElementById('sub-email').textContent=email;
+}
+
+function showSubWarning(days){
+  const w=document.getElementById('sub-warning');
+  if(w){w.style.display='flex';w.querySelector('span').textContent=`⚠️ Seu plano vence em ${days} dia${days>1?'s':''}! Renove para não perder o acesso.`;}
+}
 
 window.showAuthTab=t=>{
   ['login','signup','reset'].forEach(x=>{document.getElementById('tab-'+x).classList.toggle('active',x===t);document.getElementById('form-'+x).style.display=x===t?'flex':'none';});
@@ -806,5 +861,51 @@ function renderBalance(){
 
 updML();
 </script>
+
+<!-- SUBSCRIPTION SCREEN -->
+<div id="sub-screen" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:900;align-items:center;justify-content:center;padding:20px;flex-direction:column">
+  <div style="width:100%;max-width:480px;background:var(--card);border:1px solid var(--border);border-radius:24px;padding:36px 28px;text-align:center">
+    <div style="font-size:56px;margin-bottom:16px">🔒</div>
+    <h2 style="font-size:24px;font-weight:900;margin-bottom:10px">Acesso bloqueado</h2>
+    <p id="sub-msg" style="font-size:15px;color:var(--muted2);margin-bottom:6px;line-height:1.6">Seu período de acesso expirou.</p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:24px">Conta: <strong id="sub-email" style="color:var(--text)"></strong></p>
+    
+    <div style="background:var(--card2);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:20px">
+      <div style="font-size:13px;color:var(--muted2);font-weight:600;text-transform:uppercase;letter-spacing:.6px;margin-bottom:16px">Escolha seu plano para renovar</div>
+      
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <a href="https://pag.ae/81RjjwLHN" target="_blank" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--card);border:1.5px solid var(--border);border-radius:12px;text-decoration:none;color:var(--text);transition:border-color .2s" onmouseover="this.style.borderColor='var(--green)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="text-align:left"><div style="font-size:14px;font-weight:700">Plano Mensal</div><div style="font-size:11px;color:var(--muted2)">Renovação mensal</div></div>
+          <div style="font-size:18px;font-weight:900;color:var(--green)">R$ 14,90</div>
+        </a>
+        <a href="https://pag.ae/81RjjRMhR" target="_blank" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:linear-gradient(135deg,rgba(124,58,237,.1),var(--card));border:1.5px solid var(--accent);border-radius:12px;text-decoration:none;color:var(--text);position:relative">
+          <div style="position:absolute;top:-10px;right:12px;background:var(--accent);color:#fff;font-size:10px;font-weight:800;padding:3px 10px;border-radius:20px">MAIS POPULAR</div>
+          <div style="text-align:left"><div style="font-size:14px;font-weight:700">Plano Trimestral</div><div style="font-size:11px;color:var(--muted2)">Economia de R$ 4,80</div></div>
+          <div style="font-size:18px;font-weight:900;color:var(--purple2)">R$ 39,90</div>
+        </a>
+        <a href="https://pag.ae/81Rjk7oKs" target="_blank" style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;background:var(--card);border:1.5px solid var(--border);border-radius:12px;text-decoration:none;color:var(--text);transition:border-color .2s" onmouseover="this.style.borderColor='var(--yellow)'" onmouseout="this.style.borderColor='var(--border)'">
+          <div style="text-align:left"><div style="font-size:14px;font-weight:700">Plano Anual</div><div style="font-size:11px;color:var(--muted2)">Melhor custo-benefício</div></div>
+          <div style="font-size:18px;font-weight:900;color:var(--yellow)">R$ 149,90</div>
+        </a>
+      </div>
+    </div>
+
+    <div style="background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:14px;margin-bottom:16px;font-size:13px;color:var(--muted2);line-height:1.6">
+      📱 Após pagar, envie o comprovante no WhatsApp:<br>
+      <a href="https://wa.me/5522999999999?text=Ol%C3%A1!%20Paguei%20o%20Meu%20Caixa%20e%20quero%20renovar%20meu%20acesso." target="_blank" style="color:var(--green);font-weight:700;font-size:14px">Clique aqui para enviar o comprovante →</a>
+    </div>
+
+    <button onclick="doLogout()" style="width:100%;padding:12px;background:none;border:1.5px solid var(--border);border-radius:12px;color:var(--muted2);font-family:Inter,sans-serif;font-size:13px;cursor:pointer">Sair da conta</button>
+  </div>
+</div>
+
+<!-- WARNING BANNER -->
+<div id="sub-warning" style="display:none;position:fixed;top:64px;left:260px;right:0;z-index:45;background:rgba(245,158,11,.12);border-bottom:1px solid rgba(245,158,11,.3);padding:10px 20px;align-items:center;justify-content:space-between;gap:10px">
+  <span style="font-size:13px;font-weight:600;color:var(--yellow)"></span>
+  <div style="display:flex;gap:8px;flex-shrink:0">
+    <a href="https://pag.ae/81RjjRMhR" target="_blank" style="padding:7px 16px;background:var(--yellow);border:none;border-radius:8px;color:#000;font-size:12px;font-weight:800;cursor:pointer;text-decoration:none">Renovar agora</a>
+    <button onclick="document.getElementById('sub-warning').style.display='none'" style="padding:7px 12px;background:none;border:1px solid rgba(245,158,11,.3);border-radius:8px;color:var(--yellow);font-size:12px;cursor:pointer">✕</button>
+  </div>
+</div>
 </body>
 </html>
