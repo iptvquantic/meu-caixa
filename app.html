@@ -48,6 +48,56 @@
 [data-theme="matrix"] .fab{background:linear-gradient(135deg,#00ff41,#00cc33)!important;color:#000!important}
 [data-theme="matrix"] .cc-vis{background:linear-gradient(145deg,#001200,#002800,#001800)!important}
 [data-theme="matrix"] body::before{content:'';position:fixed;top:0;left:0;right:0;bottom:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,65,.015) 2px,rgba(0,255,65,.015) 4px);pointer-events:none;z-index:9999}
+[data-theme="matrix"] .snav{color:#00aa22}
+[data-theme="matrix"] .snav:hover{background:rgba(0,255,65,.08);color:#00ff41}
+[data-theme="matrix"] .snav-lbl{color:#005510}
+[data-theme="matrix"] .sb-title{color:#00ff41}
+[data-theme="matrix"] .sb-em{color:#00aa22}
+[data-theme="matrix"] .month-lbl{color:#00ff41}
+[data-theme="matrix"] .mnb{background:#001200;border-color:#003300;color:#00ff41}
+[data-theme="matrix"] .theme-row{color:#00ff41}
+[data-theme="matrix"] .topbar-d h2{color:#00ff41}
+[data-theme="matrix"] .card-title{color:#00aa22}
+[data-theme="matrix"] .sbox-lbl{color:#00aa22}
+[data-theme="matrix"] .sbox-sub{color:#00aa22}
+[data-theme="matrix"] .tx-name{color:#00ff41}
+[data-theme="matrix"] .tx-meta{color:#00aa22}
+[data-theme="matrix"] .fpill{color:#00aa22;border-color:#003300}
+[data-theme="matrix"] .fpill:hover{color:#00ff41;border-color:#00ff41}
+[data-theme="matrix"] .wbar-lbl{color:#00aa22}
+[data-theme="matrix"] .wbar-val{color:#00aa22}
+[data-theme="matrix"] .analysis-box{color:#00cc33;background:rgba(0,255,65,.04);border-color:rgba(0,255,65,.15)}
+[data-theme="matrix"] .bal-hero .lbl{color:#00aa22}
+[data-theme="matrix"] .bal-hero .val{color:#00ff41}
+[data-theme="matrix"] .btn-import-d{color:#00ff41;background:rgba(0,255,65,.08);border-color:rgba(0,255,65,.2)}
+[data-theme="matrix"] .btn-logout{background:rgba(255,51,0,.08);border-color:rgba(255,51,0,.2);color:#ff3300}
+[data-theme="matrix"] .ai-header{background:#001200;border-color:#003300}
+[data-theme="matrix"] .ai-msg.bot .ai-msg-bubble{background:#001200;border-color:#003300;color:#00ff41}
+[data-theme="matrix"] .ai-sug{background:#001200;border-color:#003300;color:#00aa22}
+[data-theme="matrix"] .ai-sug:hover{color:#00ff41;border-color:#00ff41}
+[data-theme="matrix"] .ai-input{background:#001200;border-color:#003300;color:#00ff41}
+[data-theme="matrix"] .ai-input::placeholder{color:#005510}
+[data-theme="matrix"] .modal{background:#001200;border-color:#003300}
+[data-theme="matrix"] .modal-title{color:#00ff41}
+[data-theme="matrix"] .flabel{color:#00aa22}
+[data-theme="matrix"] .finput{background:#001800;border-color:#003300;color:#00ff41}
+[data-theme="matrix"] select.finput option{background:#001200;color:#00ff41}
+[data-theme="matrix"] .btn-cancel{color:#00aa22;border-color:#003300}
+[data-theme="matrix"] .mtab{color:#005510}
+[data-theme="matrix"] .atab{color:#005510}
+[data-theme="matrix"] .field input{background:#001800;border-color:#003300;color:#00ff41}
+[data-theme="matrix"] .src-name-input{color:#00ff41}
+[data-theme="matrix"] .auth-right{background:#001200}
+[data-theme="matrix"] .auth-right h2{color:#00ff41}
+[data-theme="matrix"] .auth-right .sub{color:#00aa22}
+[data-theme="matrix"] .btn-link{color:#00ff41}
+[data-theme="matrix"] .field label{color:#00aa22}
+[data-theme="matrix"] .pdf-pill{color:#00aa22;border-color:#003300}
+[data-theme="matrix"] .pdf-pill.active{color:#00ff41;border-color:#00ff41;background:rgba(0,255,65,.08)}
+[data-theme="matrix"] .pdf-preview-box{background:#001800;border-color:#003300;color:#00aa22}
+[data-theme="matrix"] .ai-status::before{background:#00ff41}
+[data-theme="matrix"] .ai-status{color:#00ff41}
+[data-theme="matrix"] .collapse-btn{background:linear-gradient(135deg,#00ff41,#00cc33);color:#000}
 
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;font-family:'Inter',sans-serif}
@@ -106,7 +156,47 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;fon
 .snav{display:flex;align-items:center;gap:9px;width:100%;padding:10px 10px;border:none;background:none;color:var(--muted2);font-size:13px;font-weight:500;border-radius:10px;cursor:pointer;margin-bottom:2px;text-align:left;transition:all .2s;white-space:nowrap;overflow:hidden}
 .snav:hover{background:var(--card2);color:var(--text)}
 .snav.active{background:var(--purple-bg);color:var(--purple2);font-weight:700}
-[data-theme="light"] .snav.active{background:rgba(124,58,237,.1);color:var(--accent)}
+[data-theme="light"] .snav.active{background:rgba(124,58,237,.12);color:var(--accent);font-weight:700}
+[data-theme="light"] .snav:hover{background:rgba(0,0,0,.05);color:#0f172a}
+[data-theme="light"] .snav{color:#475569}
+[data-theme="light"] .sb-title{color:#0f172a}
+[data-theme="light"] .sb-em{color:#64748b}
+[data-theme="light"] .month-lbl{color:#0f172a}
+[data-theme="light"] .btn-logout{background:rgba(220,38,38,.08);border-color:rgba(220,38,38,.2);color:#dc2626}
+[data-theme="light"] .mnb{background:#e2e8f0;border-color:#cbd5e1;color:#0f172a}
+[data-theme="light"] .theme-row{color:#0f172a}
+[data-theme="light"] .snav-lbl{color:#94a3b8}
+[data-theme="light"] .topbar-d{background:#f1f5f9;border-color:#e2e8f0}
+[data-theme="light"] .topbar-d h2{color:#0f172a}
+[data-theme="light"] .card-title{color:#64748b}
+[data-theme="light"] .sbox-lbl{color:#64748b}
+[data-theme="light"] .sbox-sub{color:#64748b}
+[data-theme="light"] .tx-name{color:#0f172a}
+[data-theme="light"] .tx-meta{color:#64748b}
+[data-theme="light"] .bal-hero .lbl{color:#64748b}
+[data-theme="light"] .fpill{color:#64748b;border-color:#e2e8f0}
+[data-theme="light"] .fpill:hover{color:#0f172a;border-color:#94a3b8}
+[data-theme="light"] .filter-row .fpill.active{color:#16a34a}
+[data-theme="light"] .analysis-box{color:#1e293b}
+[data-theme="light"] .wbar-lbl{color:#64748b}
+[data-theme="light"] .wbar-val{color:#64748b}
+[data-theme="light"] .btn-add-d{color:#fff}
+[data-theme="light"] .btn-import-d{color:#16a34a}
+[data-theme="light"] .ai-status{color:#16a34a}
+[data-theme="light"] .ai-msg.bot .ai-msg-bubble{background:#fff;border-color:#e2e8f0;color:#0f172a}
+[data-theme="light"] .ai-sug{color:#374151;background:#f8fafc;border-color:#e2e8f0}
+[data-theme="light"] .ai-sug:hover{color:#7c3aed;background:rgba(124,58,237,.06)}
+[data-theme="light"] .ai-input{background:#fff;border-color:#e2e8f0;color:#0f172a}
+[data-theme="light"] .ai-header{background:#fff;border-color:#e2e8f0}
+[data-theme="light"] .src-name-input{color:#0f172a}
+[data-theme="light"] .modal{background:#fff}
+[data-theme="light"] .finput{color:#0f172a;background:#f8fafc}
+[data-theme="light"] select.finput option{background:#fff;color:#0f172a}
+[data-theme="light"] .modal-title{color:#0f172a}
+[data-theme="light"] .flabel{color:#64748b}
+[data-theme="light"] .btn-cancel{color:#64748b;border-color:#e2e8f0}
+[data-theme="light"] .atab{color:#64748b}
+[data-theme="light"] .field input{background:#f8fafc;color:#0f172a;border-color:#e2e8f0}
 .snav .sni{font-size:17px;width:22px;text-align:center;flex-shrink:0}
 .sb-bot{padding:10px 8px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:7px}
 .month-ctrl{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:var(--card2);border-radius:10px;gap:4px}
@@ -119,7 +209,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);overflow:hidden;fon
 [data-theme="light"] .tpo.active{background:var(--accent);color:#fff}
 [data-theme="matrix"] .tpo.active{background:#00ff41;color:#000}
 .btn-logout{width:100%;padding:9px;background:var(--red-bg);border:1px solid rgba(239,68,68,.18);border-radius:10px;color:var(--red);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden}
-.collapse-btn{position:fixed;top:50%;left:256px;transform:translateY(-50%);width:20px;height:44px;background:var(--card);border:1px solid var(--border);border-left:none;border-radius:0 8px 8px 0;cursor:pointer;z-index:51;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--muted2);transition:left .3s;box-shadow:2px 0 8px rgba(0,0,0,.2)}
+.collapse-btn{position:fixed;top:50%;left:256px;transform:translateY(-50%);width:26px;height:64px;background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;border-radius:0 12px 12px 0;cursor:pointer;z-index:51;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;font-weight:900;transition:left .3s,opacity .2s;box-shadow:3px 0 16px rgba(124,58,237,.45);opacity:.9}
+.collapse-btn:hover{opacity:1;width:30px}
 .collapse-btn.collapsed-pos{left:64px}
 
 /* ===== MAIN ===== */
@@ -353,10 +444,11 @@ select.finput option{background:var(--select-bg);color:var(--text)}
 
 /* ===== PRINT STYLES ===== */
 @media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;color-adjust:exact!important}
   body *{visibility:hidden!important}
   #print-area,#print-area *{visibility:visible!important}
   #print-area{position:fixed!important;top:0!important;left:0!important;width:210mm!important;min-height:297mm!important;margin:0!important;padding:0!important;background:#fff!important;z-index:99999!important}
-  @page{size:A4;margin:0}
+  @page{size:A4 portrait;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 </style>
 </head>
@@ -454,7 +546,7 @@ select.finput option{background:var(--select-bg);color:var(--text)}
       <button class="snav" id="snav-card" onclick="goPage('card')"><span class="sni">💳</span><span>Cartão de Crédito</span></button>
       <button class="snav" id="snav-balance" onclick="goPage('balance')"><span class="sni">📅</span><span>Balanço Mensal</span></button>
       <div class="snav-lbl">Configurações</div>
-      <button class="snav" id="snav-sources" onclick="goPage('sources')"><span class="sni">⚙️</span><span>Minhas Fontes</span></button>
+      <button class="snav" id="snav-sources" onclick="goPage('sources')"><span class="sni">⚙️</span><span>Fontes de Renda</span></button>
       <div class="snav-lbl">IA</div>
       <button class="snav" id="snav-ai" onclick="goPage('ai')"><span class="sni">🤖</span><span>Conselheiro IA</span></button>
     </nav>
@@ -710,7 +802,7 @@ const EMOJIS=['📺','🎰','💵','💼','🏠','🚗','📦','💻','🎯','�
 
 const CI=['#22c55e','#34d399','#a3e635','#6ee7b7','#86efac','#4ade80'];
 const CO=['#ef4444','#f97316','#f59e0b','#8b5cf6','#3b82f6','#ec4899','#94a3b8','#06b6d4','#84cc16','#f43f5e','#a855f7','#14b8a6'];
-const PTITLES={home:'Início',txs:'Lançamentos',charts:'Gráficos',card:'Cartão de Crédito',balance:'Balanço Mensal',sources:'Minhas Fontes',ai:'Conselheiro IA'};
+const PTITLES={home:'Início',txs:'Lançamentos',charts:'Gráficos',card:'Cartão de Crédito',balance:'Balanço Mensal',sources:'Fontes de Renda',ai:'Conselheiro IA'};
 
 let ctab='in',cfilter='all',cdate=new Date(),allTxs=[],cUser=null,chartRefs={};
 let sidebarCollapsed=false;
@@ -1103,24 +1195,30 @@ window.sendAI=async function(){
   if(aiHistory.length>20)aiHistory=aiHistory.slice(-20);
   const btn=document.getElementById('ai-send-btn');btn.disabled=true;btn.style.opacity='.5';
   try{
+    // Use Anthropic API via artifact proxy
+    const payload = {
+      model:'claude-sonnet-4-6',
+      max_tokens:1000,
+      system:AI_SYSTEM+'\n\n'+context,
+      messages:aiHistory
+    };
     const res=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-6',
-        max_tokens:1000,
-        system:AI_SYSTEM+'\n\n'+context,
-        messages:aiHistory
-      })
+      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify(payload)
     });
     const data=await res.json();
-    const reply=data.content?.[0]?.text||'Desculpe, não consegui processar sua pergunta. Tente novamente.';
+    const reply=data.content?.[0]?.text||'Desculpe, não consegui processar. Tente novamente.';
     typing.remove();
     aiHistory.push({role:'assistant',content:reply});
     addAIMessage('bot',reply);
   }catch(e){
-    console.error(e);typing.remove();
-    addAIMessage('bot','⚠️ Erro de conexão. Verifique sua internet e tente novamente.');
+    console.error('AI Error:',e);typing.remove();
+    if(e.message&&e.message.includes('CORS')){
+      addAIMessage('bot','⚠️ Erro de CORS: A API Anthropic não permite chamadas diretas do navegador por segurança. Para usar a IA, acesse o app pelo Claude Artifacts ou configure um proxy. Por enquanto, use a análise automática na aba Balanço.');
+    }else{
+      addAIMessage('bot','⚠️ Erro de conexão. Verifique sua internet e tente novamente.');
+    }
   }
   btn.disabled=false;btn.style.opacity='1';
 };
@@ -1412,6 +1510,7 @@ window.generatePDF = function(){
       </table>` : '<div style="font-size:11px;color:#9ca3af;text-align:center;padding:8px">Sem saídas no período</div>'}
     </div>
 
+    <!-- PRINT HINT (hidden on screen, shown in print dialog) -->
     <!-- FOOTER -->
     <div style="border-top:2px solid #e5e7eb;padding-top:10px;display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;align-items:center;gap:8px">
@@ -1460,6 +1559,9 @@ window.generatePDF = function(){
     <div class="pdf-preview-box" id="pdf-preview-info">
       <strong>📊 Período:</strong> <span id="pdf-period-label">Esta semana</span><br>
       <strong>📁 Conteúdo:</strong> Resumo financeiro, gráficos, top gastos, análise IA e velocímetro de saúde financeira
+    </div>
+    <div style="background:var(--green-bg);border:1px solid rgba(34,197,94,.2);border-radius:10px;padding:10px 12px;font-size:12px;color:var(--muted2);margin-bottom:10px;line-height:1.5">
+      💡 <strong style="color:var(--text)">Dica de impressão colorida:</strong> Na janela de impressão, ative <strong style="color:var(--green)">"Gráficos de fundo"</strong> e <strong style="color:var(--green)">"Cores de fundo"</strong> para garantir todas as cores.
     </div>
     <button class="btn-pdf-gen" onclick="generatePDF()">
       <span>🖨️</span> Gerar e Imprimir Relatório
