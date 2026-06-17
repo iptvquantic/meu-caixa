@@ -553,12 +553,14 @@ select.finput option{background:var(--select-bg);color:var(--text)}
     <div class="sb-bot">
       <div class="month-ctrl"><button class="mnb" onclick="changeMonth(-1)">‹</button><span class="month-lbl" id="ml-s">Jun 2026</span><button class="mnb" onclick="changeMonth(1)">›</button></div>
       <div class="theme-row"><span style="font-size:12px;font-weight:600">Tema</span><div class="tp"><button class="tpo active" id="tp-dark" onclick="setTheme('dark')">🌙</button><button class="tpo" id="tp-light" onclick="setTheme('light')">☀️</button><button class="tpo" id="tp-matrix" onclick="setTheme('matrix')">💻</button></div></div>
+      <button onclick="document.getElementById('import-input').click()" style="width:100%;padding:9px;background:var(--green-bg);border:1px solid rgba(34,197,94,.18);border-radius:10px;color:var(--green);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;margin-bottom:4px">📥 Importar backup</button>
+      <button onclick="exportBackup()" style="width:100%;padding:9px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:10px;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;overflow:hidden;margin-bottom:6px">💾 Exportar backup</button>
       <button class="btn-logout" onclick="doLogout()">🚪 Sair</button>
     </div>
   </aside>
 
   <main class="main" id="main">
-    <div class="topbar-d"><h2 id="page-title-d">Início</h2><div class="tb-acts"><button class="btn-import-d" onclick="openPDFModal()" style="background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(239,68,68,.06));border-color:rgba(239,68,68,.25);color:var(--red)">📄 Exportar PDF</button><button class="btn-add-d" onclick="openModal()">+ Novo lançamento</button></div></div>
+    <div class="topbar-d"><h2 id="page-title-d">Início</h2><div class="tb-acts"><button class="btn-import-d" onclick="document.getElementById('import-input').click()" style="background:var(--green-bg);border-color:rgba(34,197,94,.2);color:var(--green)">📥 Importar backup</button><button class="btn-import-d" onclick="openPDFModal()" style="background:linear-gradient(135deg,rgba(239,68,68,.12),rgba(239,68,68,.06));border-color:rgba(239,68,68,.25);color:var(--red)">📄 Exportar PDF</button><button class="btn-add-d" onclick="openModal()">+ Novo lançamento</button></div></div>
 
     <!-- HOME -->
     <div class="page active" id="page-home">
@@ -955,6 +957,10 @@ async function checkSub(user){
     }
     const d=snap.data();const exp=new Date(d.planExpiry);
     const days=Math.ceil((exp-now)/(864e5));
+    // Admin/master accounts never blocked
+    if(d.plan==='admin'||d.plan==='master'||d.admin===true){
+      return true;
+    }
     if(d.active===false||exp<now){
       document.getElementById('auth-screen').style.display='none';
       document.getElementById('app').style.display='none';
@@ -1183,6 +1189,10 @@ window.sendSuggestion=function(btn){
   sendAI();
 };
 
+// Groq API - FREE tier, embedded key, works transparently for all users (14,400 req/day free, no card needed)
+const GROQ_API_KEY = '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';
+const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+
 window.sendAI=async function(){
   const input=document.getElementById('ai-input');
   const msg=input.value.trim();if(!msg)return;
@@ -1191,36 +1201,54 @@ window.sendAI=async function(){
   addAIMessage('user',msg);
   const typing=addTyping();
   const context=getFinancialContext();
+  
+  // Build OpenAI-compatible history (role: user/assistant)
   aiHistory.push({role:'user',content:msg});
   if(aiHistory.length>20)aiHistory=aiHistory.slice(-20);
+  
   const btn=document.getElementById('ai-send-btn');btn.disabled=true;btn.style.opacity='.5';
+  
   try{
-    // Use Anthropic API via artifact proxy
     const payload = {
-      model:'claude-sonnet-4-6',
-      max_tokens:1000,
-      system:AI_SYSTEM+'\n\n'+context,
-      messages:aiHistory
+      model: 'llama-3.3-70b-versatile',
+      messages: [
+        { role: 'system', content: AI_SYSTEM + '\n\n' + context },
+        ...aiHistory
+      ],
+      temperature: 0.7,
+      max_tokens: 1000
     };
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify(payload)
+    const res = await fetch(GROQ_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + GROQ_API_KEY
+      },
+      body: JSON.stringify(payload)
     });
-    const data=await res.json();
-    const reply=data.content?.[0]?.text||'Desculpe, não consegui processar. Tente novamente.';
+    if(!res.ok){
+      const errData = await res.json().catch(()=>({}));
+      throw new Error(errData?.error?.message || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    const reply = data?.choices?.[0]?.message?.content || 'Desculpe, não consegui gerar uma resposta. Tente reformular sua pergunta.';
     typing.remove();
     aiHistory.push({role:'assistant',content:reply});
     addAIMessage('bot',reply);
   }catch(e){
-    console.error('AI Error:',e);typing.remove();
-    if(e.message&&e.message.includes('CORS')){
-      addAIMessage('bot','⚠️ Erro de CORS: A API Anthropic não permite chamadas diretas do navegador por segurança. Para usar a IA, acesse o app pelo Claude Artifacts ou configure um proxy. Por enquanto, use a análise automática na aba Balanço.');
-    }else{
-      addAIMessage('bot','⚠️ Erro de conexão. Verifique sua internet e tente novamente.');
+    console.error('AI Error:',e);
+    typing.remove();
+    aiHistory.pop(); // remove failed user message from history
+    let errMsg = '⚠️ Erro ao conectar com a IA. Tente novamente em alguns segundos.';
+    if(e.message && e.message.toLowerCase().includes('api key')){
+      errMsg = '⚠️ Chave da API não configurada corretamente. Contate o suporte.';
+    } else if(e.message && e.message.toLowerCase().includes('rate limit')){
+      errMsg = '⚠️ Muitas pessoas usando a IA agora. Tente novamente em 1 minuto.';
     }
+    addAIMessage('bot', errMsg);
   }
   btn.disabled=false;btn.style.opacity='1';
+  document.getElementById('ai-input').focus();
 };
 
 function addAIMessage(role,text){
@@ -1572,5 +1600,6 @@ window.generatePDF = function(){
 
 <!-- PRINT AREA (hidden, revealed on print) -->
 <div id="print-area" style="display:none"></div>
+
 </body>
 </html>
