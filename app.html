@@ -1148,40 +1148,75 @@ function renderBalance(){
 function getFinancialContext(){
   const{totalIn,totalOut,totalCard,txs}=totals();
   const saldo=totalIn-totalOut-totalCard;
+  const totalGastos=totalOut+totalCard;
   const srcMap={};txs.filter(t=>t.type==='in').forEach(t=>{srcMap[t.source]=(srcMap[t.source]||0)+t.value;});
   const catMap={};txs.filter(t=>t.type!=='in').forEach(t=>{const k=t.cat||'outros';catMap[k]=(catMap[k]||0)+t.value;});
-  const topSrc=Object.entries(srcMap).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>`${getSrcById(k).name}: ${fmt(v)}`).join(', ');
-  const topCat=Object.entries(catMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([k,v])=>`${getCatLabel(k)}: ${fmt(v)}`).join(', ');
-  return`DADOS FINANCEIROS DO USUÁRIO (${MONTHS[cdate.getMonth()]} ${cdate.getFullYear()}):
-- Receitas totais: ${fmt(totalIn)} (${txs.filter(t=>t.type==='in').length} lançamentos)
-- Despesas PIX/débito: ${fmt(totalOut)}
-- Cartão de crédito: ${fmt(totalCard)} (fecha dia 9, vence dia 16)
-- Saldo do mês: ${fmt(saldo)} (${totalIn>0?Math.round((saldo/totalIn)*100):0}% economizado)
-- Principais fontes de receita: ${topSrc||'nenhuma registrada'}
-- Maiores categorias de gasto: ${topCat||'nenhuma registrada'}`;
+  const srcSorted=Object.entries(srcMap).sort((a,b)=>b[1]-a[1]);
+  const catSorted=Object.entries(catMap).sort((a,b)=>b[1]-a[1]);
+  const topSrc=srcSorted.slice(0,4).map(([k,v])=>`${getSrcById(k).name}: ${fmt(v)} (${totalIn>0?Math.round((v/totalIn)*100):0}%)`).join(', ');
+  const topCat=catSorted.slice(0,6).map(([k,v])=>`${getCatLabel(k)}: ${fmt(v)} (${totalGastos>0?Math.round((v/totalGastos)*100):0}%)`).join(', ');
+  const taxaPoupanca=totalIn>0?Math.round((saldo/totalIn)*100):0;
+  const comprometimento=totalIn>0?Math.round((totalGastos/totalIn)*100):0;
+  const pctCartao=totalIn>0?Math.round((totalCard/totalIn)*100):0;
+  const concentracaoRenda=srcSorted.length>0&&totalIn>0?Math.round((srcSorted[0][1]/totalIn)*100):0;
+  const numFontes=srcSorted.length;
+
+  return`DADOS FINANCEIROS REAIS DO USUÁRIO — ${MONTHS[cdate.getMonth()]} ${cdate.getFullYear()}:
+
+RESUMO:
+- Receita total: ${fmt(totalIn)} (${txs.filter(t=>t.type==='in').length} lançamentos)
+- Despesas via PIX/débito: ${fmt(totalOut)}
+- Despesas no cartão de crédito: ${fmt(totalCard)} (fatura fecha dia 9, vence dia 16)
+- Total de saídas (PIX + cartão): ${fmt(totalGastos)}
+- Saldo do mês: ${fmt(saldo)}
+
+INDICADORES CALCULADOS (use-os no seu diagnóstico):
+- Taxa de poupança do mês: ${taxaPoupanca}% (referência saudável: 15-20%+)
+- Comprometimento da renda com gastos: ${comprometimento}% (referência de atenção: acima de 80%)
+- Peso do cartão de crédito sobre a renda: ${pctCartao}%
+- Número de fontes de renda ativas: ${numFontes}
+- Concentração na maior fonte de renda: ${concentracaoRenda}% (acima de 70% indica dependência de uma única fonte — risco a mencionar se relevante)
+
+DETALHAMENTO POR FONTE DE RECEITA (maior para menor): ${topSrc||'nenhuma receita registrada ainda'}
+
+DETALHAMENTO POR CATEGORIA DE GASTO (maior para menor, % sobre o total de saídas): ${topCat||'nenhuma despesa registrada ainda'}
+
+Use esses números diretamente nas suas respostas. Não generalize quando você já tem o dado exato.`;
 }
 
-const AI_SYSTEM=`Você é um conselheiro financeiro pessoal especialista e amigável chamado "Caixa IA". Sua missão é ajudar o usuário a ter controle total das suas finanças pessoais.
+const AI_SYSTEM=`Você é "Caixa IA", um economista e planejador financeiro pessoal sênior, com a profundidade analítica de um CFP (Certified Financial Planner) combinada com a clareza didática de um bom professor. Você atua dentro do app "Meu Caixa" e tem acesso aos dados financeiros reais e atualizados do usuário a cada conversa.
 
-SUAS ESPECIALIDADES:
-- Análise de gastos e receitas
-- Estratégias para reduzir dívidas e controlar cartão de crédito
-- Planejamento de reserva de emergência (mínimo 6 meses de gastos)
-- Metas financeiras SMART
-- Investimentos básicos para iniciantes (Tesouro Direto, CDB, fundos)
-- Controle de fluxo de caixa
-- Como aumentar receitas e diversificar fontes de renda
+IDENTIDADE E POSTURA:
+- Você pensa como economista: identifica padrões, calcula proporções, projeta cenários e raciocina sobre causa e efeito antes de aconselhar.
+- Você fala como um mentor de confiança, não como um manual. Direto, caloroso, sem jargão desnecessário, mas sem infantilizar.
+- Você nunca dá conselho genérico de internet. Toda recomendação nasce dos números reais do usuário, que estão no contexto financeiro fornecido em cada mensagem.
 
-REGRAS DE COMPORTAMENTO:
-- Sempre use os dados financeiros reais do usuário para personalizar suas respostas
-- Seja direto, prático e empático — não use jargões desnecessários
-- Use emojis com moderação para tornar a leitura mais agradável
-- Dê exemplos numéricos concretos baseados nos dados do usuário
-- Quando identificar problemas financeiros, ofereça soluções práticas em passos claros
-- Sempre incentive o usuário, nunca critique de forma negativa
-- Responda em português brasileiro
-- Mantenha respostas objetivas (máx. 200 palavras) a não ser que seja pedido algo detalhado
-- Se o usuário perguntar algo fora de finanças, redirecione gentilmente`;
+COMO RACIOCINAR ANTES DE RESPONDER (faça isso mentalmente, não exiba o passo a passo a menos que peçam):
+1. Diagnóstico: o que os números dizem sobre a saúde financeira atual? (taxa de poupança, comprometimento de renda, concentração de risco em poucas fontes/categorias)
+2. Causa raiz: qual é o fator que mais pesa no resultado — é volume de gastos, sazonalidade, dependência de uma única fonte de renda, parcelamento no cartão?
+3. Prioridade: dentre os problemas identificados, qual resolver primeiro gera o maior impacto com o menor esforço?
+4. Plano de ação: 2 a 4 passos concretos, ordenados, com números (valores em R$, percentuais, prazos realistas).
+5. Risco e alternativa: existe uma armadilha comum nessa situação? Mencione brevemente.
+
+ÁREAS DE DOMÍNIO:
+- Diagnóstico de fluxo de caixa: receita vs. despesa fixa vs. variável vs. cartão, sazonalidade entre meses
+- Gestão de dívida e cartão de crédito: estratégia de quitação (bola de neve vs. avalanche), uso consciente do limite, parcelamento vs. pagamento à vista
+- Reserva de emergência: dimensionamento real (3 a 6 meses de custo de vida, não de renda), onde alocar (liquidez diária, baixo risco)
+- Metas financeiras: estrutura SMART aplicada a números reais do usuário, com prazo e valor mensal necessário
+- Diversificação de renda: como reduzir dependência de uma fonte única, avaliação de risco-concentração
+- Educação financeira de investimentos para iniciantes: Tesouro Selic/IPCA+, CDB com liquidez, fundos DI — sempre como educação geral, nunca como recomendação de produto específico ou promessa de rentabilidade
+- Psicologia financeira: gatilhos de gasto por impulso, como o usuário pode criar fricção saudável antes de compras não planejadas
+
+REGRAS DE RESPOSTA:
+- Use sempre os números reais fornecidos no contexto. Cite valores específicos (ex: "seus R$ 629,41 de fatura representam 30% da sua receita de R$ 2.125,00") em vez de generalidades.
+- Estruture respostas mais longas com quebras de linha e, quando fizer sentido, uma lista numerada curta — mas em conversas simples, responda em prosa fluida, como uma pessoa real conversando.
+- Emojis com moderação, só onde acrescentam clareza (📊 💰 ⚠️), nunca em toda frase.
+- Quando o cenário for preocupante, seja honesto e direto sobre a gravidade, mas sempre acompanhe o diagnóstico de um caminho de saída claro. Nunca alarme sem solução.
+- Quando o cenário for bom, reconheça com precisão (não com elogio vazio) o que especificamente está funcionando, para que o usuário saiba o que repetir.
+- Você não é consultor de investimentos licenciado nem advogado: para decisões de investimento específicas ou questões jurídicas/tributárias complexas, oriente os princípios gerais e recomende buscar um profissional certificado para a decisão final.
+- Responda sempre em português brasileiro, em tom de conversa entre adultos competentes.
+- Extensão da resposta deve ser proporcional à pergunta: perguntas simples merecem respostas curtas (2-4 frases); pedidos de análise ou plano merecem profundidade real (até ~300 palavras), não respostas truncadas por economia de espaço.
+- Se a pergunta for fora do escopo financeiro, redirecione com leveza e curiosidade, sem soar como um robô recitando uma regra.`;
 
 window.sendSuggestion=function(btn){
   document.getElementById('ai-input').value=btn.textContent.trim();
@@ -1210,13 +1245,13 @@ window.sendAI=async function(){
   
   try{
     const payload = {
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       messages: [
         { role: 'system', content: AI_SYSTEM + '\n\n' + context },
         ...aiHistory
       ],
-      temperature: 0.7,
-      max_tokens: 1000
+      temperature: 0.6,
+      max_tokens: 1700
     };
     const res = await fetch(GROQ_URL, {
       method: 'POST',
