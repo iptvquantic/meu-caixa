@@ -6,10 +6,15 @@
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
 <title>Meu Caixa</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Meu Caixa">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23e9b949'/%3E%3Cpath d='M18 22h28a4 4 0 0 1 4 4v18a4 4 0 0 1-4 4H18a4 4 0 0 1-4-4V26a4 4 0 0 1 4-4zm0 0 22-8v8' fill='none' stroke='%231b1405' stroke-width='4' stroke-linejoin='round'/%3E%3Ccircle cx='41' cy='35' r='3' fill='%231b1405'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" media="print" data-font>
 <style>
 /* ===== Tokens ===== */
 :root{
@@ -241,6 +246,36 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .swatches button{width:30px;height:30px;border-radius:50%;background:var(--sw);border:2px solid transparent}
 .swatches button[aria-pressed="true"]{border-color:var(--text);box-shadow:0 0 0 2px var(--surface) inset}
 
+/* Contas fixas */
+.bill{display:flex;align-items:center;gap:8px}
+.bill+.bill{border-top:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
+.bill .tx+.tx,.bill .tx{border-top:0}
+.bill .btn.sm{flex:none}
+.bill-act{display:flex;align-items:center;gap:6px;flex:none}
+@media (max-width:560px){
+  .bill{flex-wrap:wrap;gap:0}
+  .bill>.tx{flex-basis:100%}
+  .bill-act{width:100%;justify-content:flex-end;padding:0 6px 10px 58px;margin-top:-4px}
+}
+.st{display:inline-block;font-size:11px;font-weight:800;padding:1px 8px;border-radius:999px;background:var(--surface-3);color:var(--text-2)}
+.st-paid{background:color-mix(in srgb,var(--in) 18%,transparent);color:var(--in)}
+.st-late{background:color-mix(in srgb,var(--out) 18%,transparent);color:var(--out)}
+.st-today{background:color-mix(in srgb,var(--warn) 22%,transparent);color:var(--warn)}
+.receipt .r-lines .r-proj{border-top:1.5px dashed var(--border-strong);padding-top:8px;margin-top:2px;font-weight:800;color:var(--text)}
+.receipt .r-lines b.r-proj.c-in{color:var(--in)}.receipt .r-lines b.r-proj.c-out{color:var(--out)}
+/* Metas */
+.goal{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:10px 4px;border-radius:12px}
+.goal:hover{background:var(--surface-2)}
+.goal+.goal{border-top:1px solid color-mix(in srgb,var(--border) 60%,transparent)}
+.goal-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.goal-main small{font-size:12.5px;font-weight:600}
+.goal.compact{padding:8px 2px}
+.check{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface-2);margin-bottom:6px;cursor:pointer}
+.check input{width:18px;height:18px;margin-top:2px;accent-color:var(--accent);flex:none}
+.check b{display:block;font-size:14px}.check small{display:block;color:var(--muted);font-size:12.5px;font-weight:600}
+.steps{margin:4px 0 6px 20px;display:flex;flex-direction:column;gap:10px;color:var(--text-2)}
+input[type="month"].input{min-height:44px}
+
 /* Ajustes */
 .setlist{display:flex;flex-direction:column}
 .setrow{display:flex;align-items:center;gap:12px;padding:12px 4px;border-top:1px solid var(--border);width:100%;text-align:left}
@@ -382,7 +417,10 @@ canvas{max-width:100%}
 /* ===== CONFIGURAÇÃO (só isto muda entre demonstração e produção) =====
    supabaseUrl / supabaseKey: Supabase > Project Settings > API (URL e chave "anon"/publishable — são públicas por design).
    Em branco = modo demonstração. Nunca coloque aqui chave secreta (service_role, Groq etc.). */
+// Fontes sem travar a abertura (internet lenta ou sem internet)
+for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
+  version: '2.1.0',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -651,13 +689,19 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sem espaço/privado */ } },
   del(k) { try { localStorage.removeItem(k); } catch { } }
 };
-function loadScript(src) {
+// Carrega uma biblioteca sem travar o app (desiste depois de alguns segundos)
+function loadScript(src, ms = 15000) {
   return new Promise((ok, fail) => {
-    if ([...document.scripts].some(s => s.src === src)) return ok();
-    const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => fail(new Error('Falha ao carregar ' + src));
-    document.head.appendChild(s);
+    const old = [...document.scripts].find(s => s.src === src);
+    if (old && old.dataset.loaded) return ok();
+    const s = old || document.createElement('script');
+    const t = setTimeout(() => fail(new Error('Falha ao carregar ' + src)), ms);
+    s.addEventListener('load', () => { clearTimeout(t); s.dataset.loaded = '1'; ok(); });
+    s.addEventListener('error', () => { clearTimeout(t); fail(new Error('Falha ao carregar ' + src)); });
+    if (!old) { s.src = src; document.head.appendChild(s); }
   });
 }
+const CHART_JS = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
 function debounce(fn, ms) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 const TYPE = {
   in: { label: 'Entrada', tone: 'in', sign: '+' },
@@ -670,14 +714,17 @@ const catKindOf = type => type === 'in' ? 'in' : type === 'invest' ? 'invest' : 
 /* ===================== estado ===================== */
 const S = {
   mode: 'demo', user: null, profile: null,
-  cats: [], cards: [], txs: [], catMap: {}, cardMap: {},
+  cats: [], cards: [], txs: [], recs: [], goals: [], catMap: {}, cardMap: {}, recMap: {},
   month: monthKey(new Date()), page: 'home', filter: 'all', q: '', catTab: 'out',
   chat: [], aiBusy: false
 };
-const settings = () => Object.assign({ theme: 'dark', cardMode: 'invoice' }, S.profile?.settings || {});
+const settings = () => Object.assign({ theme: 'dark', cardMode: 'invoice', pixKey: '' }, S.profile?.settings || {});
+// Recursos que o usuário pode ligar/desligar (padrão: ligados). Desligar só esconde; nada é apagado.
+const feat = k => ((settings().features || {})[k] !== false);
 function indexData() {
   S.catMap = Object.fromEntries(S.cats.map(c => [c.id, c]));
   S.cardMap = Object.fromEntries(S.cards.map(c => [c.id, c]));
+  S.recMap = Object.fromEntries(S.recs.map(r => [r.id, r]));
   S.txs.sort((a, b) => b.date.localeCompare(a.date) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
 }
 const normTx = t => ({ ...t, amount: r2(t.amount), installments: +t.installments || 1, date: String(t.date).slice(0, 10) });
@@ -746,6 +793,74 @@ function incomeByCat(mk) {
 const catUsage = () => { const u = {}; for (const t of S.txs.slice(0, 400)) if (t.category_id) u[t.category_id] = (u[t.category_id] || 0) + 1; return u; };
 const catsOfKind = kind => { const u = catUsage(); return S.cats.filter(c => c.kind === kind && !c.archived).sort((a, b) => (u[b.id] || 0) - (u[a.id] || 0) || a.sort - b.sort || a.name.localeCompare(b.name)); };
 
+/* ===================== contas fixas ===================== */
+const dueDate = (mk, day) => { const [y, m] = mk.split('-').map(Number); return `${mk}-${pad(Math.min(day, new Date(y, m, 0).getDate()))}`; };
+const recActiveIn = (r, mk) => r.active && r.start_month <= mk && (!r.end_month || r.end_month >= mk);
+const recPaidTx = (r, mk) => S.txs.find(t => t.recurring_id === r.id && t.recurring_month === mk);
+function recItems(mk) {
+  const t = todayISO();
+  return S.recs.filter(r => recActiveIn(r, mk)).map(r => {
+    const due = dueDate(mk, r.day), tx = recPaidTx(r, mk);
+    return { r, mk, due, tx, status: tx ? 'paid' : due < t ? 'late' : due === t ? 'today' : 'open' };
+  }).sort((a, b) => a.due.localeCompare(b.due) || a.r.name.localeCompare(b.r.name));
+}
+// Quanto ainda vai entrar/sair no mês por causa das contas fixas (cartão conta no mês da fatura)
+function recSummary(mk) {
+  const items = recItems(mk), pend = items.filter(i => !i.tx);
+  const pay = pend.filter(i => i.r.type !== 'in'), recv = pend.filter(i => i.r.type === 'in');
+  const hitsMonth = i => i.r.type !== 'card' || invoiceMonth(i.due, S.cardMap[i.r.card_id] || S.cards.find(c => !c.archived) || DEFAULT_CARD) === mk;
+  return {
+    items, pay, recv,
+    toPay: r2(pay.filter(hitsMonth).reduce((s, i) => s + +i.r.amount, 0)),
+    toReceive: r2(recv.reduce((s, i) => s + +i.r.amount, 0)),
+    late: pend.filter(i => i.status === 'late'),
+    paid: items.filter(i => i.tx)
+  };
+}
+const recTxRow = (r, mk, date) => ({
+  type: r.type, amount: r2(r.amount), date, description: r.name, category_id: r.category_id || null,
+  card_id: r.type === 'card' ? (r.card_id || S.cards.find(c => !c.archived)?.id || null) : null,
+  installments: 1, invest_kind: null, recurring_id: r.id, recurring_month: mk
+});
+// Lança sozinho as contas marcadas como automáticas (até 2 meses para trás). Não duplica.
+async function autoRecurring() {
+  if (!feat('bills') || !S.recs.some(r => r.auto && r.active)) return 0;
+  const t = todayISO(), cur = t.slice(0, 7); let made = 0;
+  for (let i = 2; i >= 0; i--) {
+    for (const it of recItems(addMonths(cur, -i))) {
+      if (!it.r.auto || it.tx || it.due > t) continue;
+      try { S.txs.push(normTx(await api.addTx(recTxRow(it.r, it.mk, it.due)))); made++; }
+      catch (e) { if (!/duplicate|23505|unique/i.test(String(e.message || '') + (e.code || ''))) console.warn('auto', e); }
+    }
+  }
+  if (made) indexData();
+  return made;
+}
+const waNumber = p => { const d = String(p || '').replace(/\D/g, ''); return d.length === 10 || d.length === 11 ? '55' + d : d; };
+function chargeLink(it) {
+  const pix = settings().pixKey;
+  const msg = `Olá! Passando para lembrar do pagamento de ${money(it.r.amount)} (${it.r.name}), com vencimento em ${shortDate(it.due)}.${pix ? ` Pode ser no PIX: ${pix}.` : ''} Obrigado!`;
+  return `https://wa.me/${waNumber(it.r.phone)}?text=${encodeURIComponent(msg)}`;
+}
+
+/* ===================== metas ===================== */
+function monthsBetween(fromMk, toMk) { const [a, b] = fromMk.split('-').map(Number), [c, d] = toMk.split('-').map(Number); return (c - a) * 12 + (d - b); }
+function goalProgress(g, mk) {
+  let v = 0;
+  if (g.kind === 'budget') v = (spendByCat(mk).find(x => x.cat.id === g.category_id) || { v: 0 }).v;
+  else if (g.kind === 'income') v = S.txs.filter(t => t.type === 'in' && t.date.startsWith(mk) && (!g.category_id || t.category_id === g.category_id)).reduce((s, t) => s + t.amount, 0);
+  else v = S.txs.filter(t => t.type === 'invest' && t.date >= g.start_date && (!g.category_id || t.category_id === g.category_id)).reduce((s, t) => s + (t.invest_kind === 'resgate' ? -t.amount : t.amount), 0);
+  v = r2(v);
+  const pct = g.amount > 0 ? v / g.amount : 0, out = { v, pct, left: r2(Math.max(0, g.amount - v)) };
+  if (g.kind === 'save' && g.deadline) {
+    const months = Math.max(1, monthsBetween(monthKey(new Date()), g.deadline.slice(0, 7)) + 1);
+    out.months = months; out.perMonth = r2(out.left / months);
+  }
+  return out;
+}
+const goalTitle = g => g.kind === 'budget' ? (S.catMap[g.category_id]?.name || 'Categoria') : (g.name || (g.kind === 'income' ? (g.category_id ? 'Entradas de ' + (S.catMap[g.category_id]?.name || '') : 'Faturamento do mês') : 'Objetivo'));
+const activeGoals = () => S.goals.filter(g => !g.archived);
+
 /* ===================== análise local (sem custo) ===================== */
 function insights(mk) {
   const T = totals(mk), P = totals(addMonths(mk, -1)), spend = spendByCat(mk), L = [];
@@ -765,6 +880,13 @@ function insights(mk) {
   const next = cardItemsFor(addMonths(mk, 1)).reduce((s, p) => s + p.amount, 0);
   if (next > 0) L.push(`Já há ${money(next)} em parcelas para a fatura de ${monthShort(addMonths(mk, 1))}.`);
   if (T.invest > 0) L.push(`Você investiu ${money(T.invest)} neste mês.`);
+  const RS = recSummary(mk);
+  if (feat('bills')) {
+  if (RS.late.length) L.push(`${RS.late.length} conta${RS.late.length > 1 ? 's' : ''} fixa${RS.late.length > 1 ? 's' : ''} em atraso: ${RS.late.slice(0, 3).map(i => i.r.name).join(', ')}.`);
+  else if (RS.toPay > 0) L.push(`Ainda faltam ${money(RS.toPay)} em contas fixas para pagar neste mês.`);
+  if (RS.toReceive > 0) L.push(`Faltam receber ${money(RS.toReceive)} de ${RS.recv.length} conta${RS.recv.length > 1 ? 's' : ''} fixa${RS.recv.length > 1 ? 's' : ''}.`);
+  }
+  if (feat('goals')) for (const g of activeGoals().filter(g => g.kind === 'budget')) { const p = goalProgress(g, mk); if (p.pct >= 1) L.push(`Limite de ${goalTitle(g)} estourado em ${money(p.v - g.amount)}.`); }
   return L;
 }
 
@@ -794,12 +916,14 @@ const Live = {
       const page = await this.q(sb.from('transactions').select('*').order('date', { ascending: false }).range(from, from + 999));
       txs.push(...page); if (page.length < 1000) break;
     }
-    const [profile, cats, cards] = await Promise.all([
+    const [profile, cats, cards, recs, goals] = await Promise.all([
       this.q(sb.from('profiles').select('*').maybeSingle()),
       this.q(sb.from('categories').select('*').order('sort').order('name')),
-      this.q(sb.from('cards').select('*').order('created_at'))
+      this.q(sb.from('cards').select('*').order('created_at')),
+      this.q(sb.from('recurring').select('*').order('day')),
+      this.q(sb.from('goals').select('*').order('created_at'))
     ]);
-    return { profile, cats, cards, txs };
+    return { profile, cats, cards, txs, recs, goals };
   },
   addTx(row) { return this.q(this.sb.from('transactions').insert(row).select().single()); },
   updateTx(id, row) { return this.q(this.sb.from('transactions').update(row).eq('id', id).select().single()); },
@@ -810,6 +934,12 @@ const Live = {
   addCard(row) { return this.q(this.sb.from('cards').insert(row).select().single()); },
   updateCard(id, row) { return this.q(this.sb.from('cards').update(row).eq('id', id).select().single()); },
   updateProfile(row) { return this.q(this.sb.from('profiles').update(row).eq('id', S.user.id).select().single()); },
+  addRec(row) { return this.q(this.sb.from('recurring').insert(row).select().single()); },
+  updateRec(id, row) { return this.q(this.sb.from('recurring').update(row).eq('id', id).select().single()); },
+  deleteRec(id) { return this.q(this.sb.from('recurring').delete().eq('id', id)); },
+  addGoal(row) { return this.q(this.sb.from('goals').insert(row).select().single()); },
+  updateGoal(id, row) { return this.q(this.sb.from('goals').update(row).eq('id', id).select().single()); },
+  deleteGoal(id) { return this.q(this.sb.from('goals').delete().eq('id', id)); },
   async upsertCats(rows) { if (rows.length) await this.q(this.sb.from('categories').upsert(rows, { onConflict: 'user_id,kind,legacy_key', ignoreDuplicates: true })); return this.q(this.sb.from('categories').select('*')); },
   async upsertCard(row) { await this.q(this.sb.from('cards').upsert(row, { onConflict: 'user_id,legacy_key', ignoreDuplicates: true })); return this.q(this.sb.from('cards').select('*')); },
   async insertTxs(rows, onProgress) {
@@ -879,13 +1009,33 @@ function demoSeed() {
     add(15, 'invest', 300, 'CDB 110%', C('invest', 'renda_fixa'), { invest_kind: 'aporte' });
   }
   T('card', 2399.9, at(1, 19), 'Geladeira nova', C('out', 'outros'), { card_id: card.id, installments: 10 });
+  const mk0 = monthKey(base), startMk = addMonths(mk0, -2);
+  const R = (type, name, amount, day, category_id, extra = {}) => ({ id: uid(), type, name, amount, day, category_id, card_id: null, start_month: startMk, end_month: null, phone: null, auto: false, active: true, created_at: now, ...extra });
+  const recs = [
+    R('out', 'Aluguel', 1200, 5, C('out', 'moradia')), R('out', 'Internet fibra', 99.9, 8, C('out', 'contas')),
+    R('out', 'Conta de luz', 189.45, 7, C('out', 'contas')), R('out', 'DAS MEI', 75.6, 20, C('out', 'impostos')),
+    R('card', 'Netflix', 55.9, 6, C('out', 'assinaturas'), { card_id: card.id, auto: true }),
+    R('in', 'Cliente Rogério', 45, 10, C('in', 'servicos'), { phone: '22999990000' }),
+    R('in', 'Cliente Ana', 60, 15, C('in', 'servicos'), { phone: '22988880000' }),
+    R('in', 'Cliente Breno', 30, 28, C('in', 'servicos'), { phone: '22977770000' })
+  ];
+  // liga os lançamentos de exemplo às contas fixas (aparecem como pagas)
+  for (const t of txs) { const r = recs.find(x => x.name === t.description || (x.name === 'Netflix' && t.description === 'Netflix')); if (r) { t.recurring_id = r.id; t.recurring_month = t.date.slice(0, 7); } }
+  for (let m = 2; m >= 1; m--) for (const n of ['Cliente Rogério', 'Cliente Ana', 'Cliente Breno']) { const r = recs.find(x => x.name === n); T('in', r.amount, at(m, r.day), n, r.category_id, { recurring_id: r.id, recurring_month: addMonths(mk0, -m) }); }
+  { const r = recs.find(x => x.name === 'Cliente Rogério'); if (base.getDate() >= 10) T('in', r.amount, at(0, 10), r.name, r.category_id, { recurring_id: r.id, recurring_month: mk0 }); }
+  const goals = [
+    { id: uid(), kind: 'budget', name: null, amount: 600, category_id: C('out', 'mercado'), deadline: null, start_date: isoOf(new Date(base.getFullYear(), base.getMonth() - 2, 1)), archived: false, created_at: now },
+    { id: uid(), kind: 'budget', name: null, amount: 250, category_id: C('out', 'alimentacao'), deadline: null, start_date: isoOf(new Date(base.getFullYear(), base.getMonth() - 2, 1)), archived: false, created_at: now },
+    { id: uid(), kind: 'income', name: 'Faturamento do mês', amount: 7000, category_id: null, deadline: null, start_date: isoOf(new Date(base.getFullYear(), base.getMonth() - 2, 1)), archived: false, created_at: now },
+    { id: uid(), kind: 'save', name: 'Reserva de emergência', amount: 5000, category_id: null, deadline: isoOf(new Date(base.getFullYear() + 1, 5, 30)), start_date: isoOf(new Date(base.getFullYear(), base.getMonth() - 2, 1)), archived: false, created_at: now }
+  ];
   T('card', 480, at(0, Math.min(2, base.getDate())), 'Tênis de corrida', C('out', 'roupas'), { card_id: card.id, installments: 3 });
-  return { profile: { id: 'demo', email: 'demo@meucaixa.app', name: 'Você', plan: 'master', plan_expiry: '2099-12-31T00:00:00Z', active: true, settings: { cardMode: 'invoice' } }, cats, cards: [card], txs };
+  return { profile: { id: 'demo', email: 'demo@meucaixa.app', name: 'Você', plan: 'master', plan_expiry: '2099-12-31T00:00:00Z', active: true, settings: { cardMode: 'invoice' } }, cats, cards: [card], txs, recs, goals };
 }
 const Demo = {
   db: null,
   save() { store.set(DEMO_KEY, this.db); },
-  async init() { this.db = store.get(DEMO_KEY, null); if (!this.db || !this.db.cats) { this.db = demoSeed(); this.save(); } },
+  async init() { this.db = store.get(DEMO_KEY, null); if (!this.db || !this.db.cats) { this.db = demoSeed(); this.save(); } this.db.recs = this.db.recs || []; this.db.goals = this.db.goals || []; },
   async session() { return { user: { id: 'demo', email: this.db.profile.email } }; },
   onAuth() { },
   async signOut() { },
@@ -894,7 +1044,13 @@ const Demo = {
   _ins(list, row) { const r = { id: uid(), created_at: new Date().toISOString(), ...row }; this.db[list].push(r); this.save(); return JSON.parse(JSON.stringify(r)); },
   _upd(list, id, row) { const r = this.db[list].find(x => x.id === id); if (!r) throw new Error('não encontrado'); Object.assign(r, row); this.save(); return JSON.parse(JSON.stringify(r)); },
   _del(list, id) { this.db[list] = this.db[list].filter(x => x.id !== id); this.save(); },
-  async addTx(row) { return this._ins('txs', row); },
+  async addTx(row) {
+    if (row.recurring_id) {
+      row = { ...row, recurring_month: row.recurring_month || row.date.slice(0, 7) };
+      if (this.db.txs.some(t => t.recurring_id === row.recurring_id && t.recurring_month === row.recurring_month)) { const e = new Error('duplicate key value violates unique constraint "tx_recurring_once"'); e.code = '23505'; throw e; }
+    }
+    return this._ins('txs', row);
+  },
   async updateTx(id, row) { return this._upd('txs', id, row); },
   async deleteTx(id) { this._del('txs', id); },
   async addCat(row) { return this._ins('cats', { archived: false, sort: 50, ...row }); },
@@ -903,6 +1059,12 @@ const Demo = {
   async addCard(row) { return this._ins('cards', { archived: false, ...row }); },
   async updateCard(id, row) { return this._upd('cards', id, row); },
   async updateProfile(row) { Object.assign(this.db.profile, row); this.save(); return JSON.parse(JSON.stringify(this.db.profile)); },
+  async addRec(row) { return this._ins('recs', { active: true, auto: false, ...row }); },
+  async updateRec(id, row) { return this._upd('recs', id, row); },
+  async deleteRec(id) { this._del('recs', id); for (const t of this.db.txs) if (t.recurring_id === id) { t.recurring_id = null; t.recurring_month = null; } this.save(); },
+  async addGoal(row) { return this._ins('goals', { archived: false, start_date: todayISO(), ...row }); },
+  async updateGoal(id, row) { return this._upd('goals', id, row); },
+  async deleteGoal(id) { this._del('goals', id); },
   async upsertCats(rows) { for (const r of rows) if (!this.db.cats.some(c => c.kind === r.kind && c.legacy_key === r.legacy_key)) this._ins('cats', { archived: false, sort: 50, ...r }); return JSON.parse(JSON.stringify(this.db.cats)); },
   async upsertCard(row) { if (!this.db.cards.some(c => c.legacy_key === row.legacy_key)) this._ins('cards', { archived: false, ...row }); return JSON.parse(JSON.stringify(this.db.cards)); },
   async insertTxs(rows, onProgress) {
@@ -917,6 +1079,8 @@ let api = Demo;
 const PAGES = {
   home: { title: 'Início', icon: 'layout-dashboard' },
   txs: { title: 'Extrato', icon: 'list' },
+  bills: { title: 'Contas fixas', icon: 'repeat' },
+  goals: { title: 'Metas', icon: 'target' },
   reports: { title: 'Relatórios', icon: 'chart-column' },
   cards: { title: 'Cartões', icon: 'credit-card' },
   ai: { title: 'Conselheiro IA', icon: 'sparkles' },
@@ -924,17 +1088,18 @@ const PAGES = {
   settings: { title: 'Ajustes', icon: 'settings' },
   more: { title: 'Menu', icon: 'menu' }
 };
-const SIDE_ORDER = ['home', 'txs', 'reports', 'cards', 'ai', 'cats', 'settings'];
+const SIDE_ORDER = ['home', 'txs', 'bills', 'reports', 'goals', 'cards', 'ai', 'cats', 'settings'];
+const pageOn = p => !((p === 'goals' && !feat('goals')) || (p === 'bills' && !feat('bills')));
 function renderShell() {
-  $('#side-nav').innerHTML = SIDE_ORDER.map(p => `<button data-act="go" data-page="${p}"${S.page === p ? ' aria-current="page"' : ''}>${ico(PAGES[p].icon)}<span>${PAGES[p].title}</span></button>`).join('');
+  $('#side-nav').innerHTML = SIDE_ORDER.filter(pageOn).map(p => `<button data-act="go" data-page="${p}"${S.page === p ? ' aria-current="page"' : ''}>${ico(PAGES[p].icon)}<span>${PAGES[p].title}</span></button>`).join('');
   const mobile = [['home', 'Início'], ['txs', 'Extrato'], null, ['reports', 'Relatórios'], ['more', 'Menu']];
-  const inMore = ['cards', 'ai', 'cats', 'settings', 'more'].includes(S.page);
+  const inMore = ['bills', 'goals', 'cards', 'ai', 'cats', 'settings', 'more'].includes(S.page);
   $('#mnav').innerHTML = mobile.map(it => it
     ? `<button data-act="go" data-page="${it[0]}"${(S.page === it[0] || (it[0] === 'more' && inMore)) ? ' aria-current="page"' : ''}>${ico(PAGES[it[0]].icon)}<span>${it[1]}</span></button>`
     : `<button class="fab" data-act="newTx" aria-label="Novo lançamento">${ico('plus')}</button>`).join('');
   const t = PAGES[S.page].title;
   $('#d-title').textContent = t; $('#m-title').textContent = t;
-  const showMonth = ['home', 'txs', 'reports', 'cards'].includes(S.page);
+  const showMonth = ['home', 'txs', 'bills', 'reports', 'goals', 'cards'].includes(S.page);
   $$('.month').forEach(m => { m.hidden = !showMonth; });
   $$('.month-label').forEach(el => { el.textContent = cap(monthLabel(S.month)); });
   const p = S.profile || {}, email = S.user?.email || p.email || '';
@@ -951,7 +1116,7 @@ function planBadge() {
   return `<span class="badge${d <= 3 ? ' gold' : ''}">${p.plan === 'trial' ? 'Teste' : 'Ativo'}, ${d > 0 ? (d === 1 ? '1 dia' : d + ' dias') : 'vencido'}</span>`;
 }
 function go(page) {
-  if (!PAGES[page]) page = 'home';
+  if (!PAGES[page] || !pageOn(page)) page = 'home';
   if (page === 'more' && matchMedia('(min-width:900px)').matches) page = 'settings';
   S.page = page; store.set('mc_page', page);
   render(); window.scrollTo({ top: 0 });
@@ -960,7 +1125,7 @@ function render() {
   renderShell();
   const el = $('#page');
   destroyCharts();
-  el.innerHTML = ({ home: pageHome, txs: pageTxs, reports: pageReports, cards: pageCards, ai: pageAI, cats: pageCats, settings: pageSettings, more: pageMore }[S.page] || pageHome)();
+  el.innerHTML = ({ home: pageHome, txs: pageTxs, bills: pageBills, goals: pageGoals, reports: pageReports, cards: pageCards, ai: pageAI, cats: pageCats, settings: pageSettings, more: pageMore }[S.page] || pageHome)();
   if (S.page === 'reports') drawReportCharts();
   if (S.page === 'ai') afterAI();
 }
@@ -994,35 +1159,44 @@ function barsHTML(list, total, max = 6) {
 function pageHome() {
   const T = totals(S.month), spend = spendByCat(S.month), gastos = T.out + T.card;
   const recent = S.txs.filter(t => t.date.startsWith(S.month)).slice(0, 6);
-  const saldoTone = T.saldo >= 0 ? 'c-in' : 'c-out';
+  const RS = recSummary(S.month), cur = monthKey(new Date());
+  const showProj = feat('bills') && S.recs.length && S.month >= cur && (RS.toPay || RS.toReceive);
+  const proj = r2(T.saldo + RS.toReceive - RS.toPay);
   const warn = S.mode === 'demo' ? `<div class="hint" style="margin-bottom:16px">${ico('info')}<span>Demonstração com dados de exemplo. Nada aqui é salvo na nuvem.</span></div>` : planWarning();
-  return `${warn}<div class="grid g-2">
+  const nCount = T.count + S.txs.filter(t => t.type === 'card' && t.date.startsWith(S.month)).length;
+  const pend = RS.items.filter(i => !i.tx).slice(0, 4);
+  const goals = feat('goals') ? activeGoals().slice(0, 3) : [];
+  return `${warn}${installHint()}<div class="grid g-2">
   <div class="stack">
-    <div>
-      <div class="receipt" aria-label="Saldo do mês">
-        <div class="r-head"><span>Saldo de ${esc(monthLabel(S.month).split(' ')[0])}</span><span>${T.count + S.txs.filter(t => t.type === 'card' && t.date.startsWith(S.month)).length} lançamentos</span></div>
-        <div class="r-val num ${saldoTone}">${money(T.saldo)}</div>
-        <div class="r-sub">${T.in > 0 ? (T.saldo >= 0 ? `Você guardou ${Math.round(T.saldo / T.in * 100)}% do que entrou` : 'Saiu mais do que entrou neste mês') : 'Registre suas entradas para ver o quanto sobra'}</div>
-        <div class="r-cut"></div>
-        <div class="r-lines num">
-          <span>Entradas</span><b class="c-in">${money(T.in)}</b>
-          <span>Saídas (PIX, débito, dinheiro)</span><b class="c-out">${money(T.out)}</b>
-          <span>${settings().cardMode === 'purchase' ? 'Compras no cartão' : 'Fatura do cartão'}</span><b class="c-card">${money(T.card)}</b>
-          <span>Investido no mês</span><b class="c-invest">${money(T.invest)}</b>
-        </div>
+    <div class="receipt" aria-label="Saldo do mês">
+      <div class="r-head"><span>Saldo de ${esc(monthLabel(S.month).split(' ')[0])}</span><span>${nCount} lançamento${nCount === 1 ? '' : 's'}</span></div>
+      <div class="r-val num ${T.saldo >= 0 ? 'c-in' : 'c-out'}">${money(T.saldo)}</div>
+      <div class="r-sub">${T.in > 0 ? (T.saldo >= 0 ? `Você guardou ${Math.round(T.saldo / T.in * 100)}% do que entrou` : 'Saiu mais do que entrou neste mês') : 'Registre suas entradas para ver o quanto sobra'}</div>
+      <div class="r-cut"></div>
+      <div class="r-lines num">
+        <span>Entradas</span><b class="c-in">${money(T.in)}</b>
+        <span>Saídas (PIX, débito, dinheiro)</span><b class="c-out">${money(T.out)}</b>
+        <span>${settings().cardMode === 'purchase' ? 'Compras no cartão' : 'Fatura do cartão'}</span><b class="c-card">${money(T.card)}</b>
+        <span>Investido no mês</span><b class="c-invest">${money(T.invest)}</b>
+        ${showProj ? `<span class="r-proj">Previsto no fim do mês</span><b class="r-proj ${proj >= 0 ? 'c-in' : 'c-out'}">${money(proj)}</b>` : ''}
       </div>
     </div>
+    ${feat('bills') && S.recs.length ? `<div class="panel"><h2>${ico('repeat')}Contas do mês<button class="link" data-act="go" data-page="bills">Ver todas</button></h2>
+      ${pend.length ? `<div class="list">${pend.map(billRow).join('')}</div>` : `<p class="c-muted">Tudo pago e recebido neste mês.</p>`}
+    </div>` : ''}
     <div class="panel"><h2>${ico('sparkles')}Resumo do mês<button class="link" data-act="go" data-page="ai">Perguntar à IA</button></h2>
-      <div class="c-muted" style="color:var(--text-2)">${insights(S.month).slice(0, 3).map(s => `<p style="margin-bottom:6px">${esc(s)}</p>`).join('')}</div>
+      <div style="color:var(--text-2)">${insights(S.month).slice(0, 3).map(t => `<p style="margin-bottom:6px">${esc(t)}</p>`).join('')}</div>
     </div>
   </div>
   <div class="stack">
     <div class="panel"><h2>Últimos lançamentos<button class="link" data-act="go" data-page="txs">Ver extrato</button></h2>
       ${recent.length ? `<div class="list">${recent.map(txRow).join('')}</div>` : emptyState('receipt-text', 'Nada por aqui ainda', 'Registre uma entrada ou saída para começar.', 'Novo lançamento')}
     </div>
+    ${goals.length ? `<div class="panel"><h2>${ico('target')}Metas<button class="link" data-act="go" data-page="goals">Ver metas</button></h2>${goals.map(g => goalRow(g, true)).join('')}</div>` : ''}
     <div class="panel"><h2>Para onde foi o dinheiro</h2>
       ${spend.length ? barsHTML(spend, gastos) : `<p class="c-muted">Sem saídas neste mês.</p>`}
     </div>
+    ${!S.recs.length && !S.goals.length && (feat('bills') || feat('goals')) ? `<div class="panel"><h2>${ico('rocket')}Deixe o caixa no automático</h2><p class="c-muted" style="margin-bottom:12px">${feat('bills') ? 'Cadastre contas fixas (aluguel, internet, clientes mensais)' : ''}${feat('bills') && feat('goals') ? ' e ' : ''}${feat('goals') ? 'metas (limite de gastos, faturamento, reserva)' : ''}.</p><div class="row" style="flex-wrap:wrap">${feat('bills') ? `<button class="btn sm" data-act="recEdit">${ico('repeat')}Conta fixa</button>` : ''}${feat('goals') ? `<button class="btn sm" data-act="goalEdit">${ico('target')}Meta</button>` : ''}</div></div>` : ''}
   </div></div>`;
 }
 function planWarning() {
@@ -1052,6 +1226,72 @@ function pageTxs() {
   </div>`;
 }
 
+/* ===================== Contas fixas ===================== */
+const ST_LABEL = { paid: 'Pago', late: 'Atrasado', today: 'Vence hoje', open: 'A vencer' };
+function billRow(it) {
+  const r = it.r, c = S.catMap[r.category_id] || {}, isIn = r.type === 'in';
+  const st = it.tx ? (isIn ? 'Recebido' : 'Pago') : ST_LABEL[it.status];
+  const tone = isIn ? 'in' : r.type === 'card' ? 'card' : 'out';
+  const action = it.tx ? '' : `<button class="btn sm${it.status === 'late' || it.status === 'today' ? ' primary' : ''}" data-act="recPay" data-id="${esc(r.id)}" data-mk="${it.mk}">${isIn ? 'Recebi' : 'Paguei'}</button>`;
+  const charge = isIn && !it.tx && r.phone && (it.status === 'late' || it.status === 'today' || it.status === 'open') ? `<a class="iconbtn" href="${esc(chargeLink(it))}" target="_blank" rel="noopener" aria-label="Cobrar ${esc(r.name)} no WhatsApp" title="Cobrar no WhatsApp">${ico('message-circle')}</a>` : '';
+  return `<div class="bill">
+    <button class="tx" data-act="recEdit" data-id="${esc(r.id)}" style="flex:1;min-width:0">${tile(c.icon || (isIn ? 'i:banknote-arrow-down' : 'i:repeat'), c.color || '#94a3b8')}
+      <span class="tx-main"><b>${esc(r.name)}</b><small>Dia ${r.day}${r.type === 'card' ? ', no cartão' : ''}${r.auto ? ', automática' : ''}</small></span>
+      <span class="tx-amt num c-${tone}">${money(it.tx ? it.tx.amount : r.amount)}<small><span class="st st-${it.tx ? 'paid' : it.status}">${st}</span></small></span></button>
+    ${charge || action ? `<div class="bill-act">${charge}${action}</div>` : ''}</div>`;
+}
+function pageBills() {
+  if (!S.recs.length) return `<div class="panel">${emptyState('repeat', 'Nenhuma conta fixa ainda', 'Cadastre o que se repete todo mês: aluguel, internet, assinaturas e também clientes que pagam mensalidade. O app avisa o que está pendente e cobra no WhatsApp.', '')}<div style="text-align:center"><button class="btn primary" data-act="recEdit">${ico('plus')}Nova conta fixa</button></div></div>`;
+  const RS = recSummary(S.month);
+  const recv = RS.items.filter(i => i.r.type === 'in'), pay = RS.items.filter(i => i.r.type !== 'in');
+  const paused = S.recs.filter(r => !r.active);
+  const recvDone = r2(recv.filter(i => i.tx).reduce((s, i) => s + i.tx.amount, 0)), payDone = r2(pay.filter(i => i.tx).reduce((s, i) => s + i.tx.amount, 0));
+  return `<div class="stack">
+    <div class="stats">
+      <div class="stat"><small>${ico('banknote-arrow-down')}Falta receber</small><b class="num c-in">${money(RS.toReceive)}</b></div>
+      <div class="stat"><small>${ico('banknote-arrow-up')}Falta pagar</small><b class="num c-out">${money(RS.toPay)}</b></div>
+      <div class="stat"><small>${ico('check')}Recebido</small><b class="num">${money(recvDone)}</b></div>
+      <div class="stat"><small>${ico('check')}Pago</small><b class="num">${money(payDone)}</b></div>
+    </div>
+    ${RS.late.length ? `<div class="hint">${ico('bell')}<span>${RS.late.length} em atraso: ${esc(RS.late.slice(0, 4).map(i => i.r.name).join(', '))}${RS.late.length > 4 ? '…' : ''}</span></div>` : ''}
+    <div class="grid g-2">
+      <div class="panel"><h2>${ico('banknote-arrow-down')}A receber<button class="link" data-act="recEdit" data-type="in">Nova</button></h2>${recv.length ? `<div class="list">${recv.map(billRow).join('')}</div>` : '<p class="c-muted">Nada a receber neste mês.</p>'}</div>
+      <div class="panel"><h2>${ico('banknote-arrow-up')}A pagar<button class="link" data-act="recEdit" data-type="out">Nova</button></h2>${pay.length ? `<div class="list">${pay.map(billRow).join('')}</div>` : '<p class="c-muted">Nada a pagar neste mês.</p>'}</div>
+    </div>
+    ${paused.length ? `<div class="panel"><h2>Pausadas</h2><div class="setlist">${paused.map(r => `<button class="setrow" data-act="recEdit" data-id="${esc(r.id)}">${tile(S.catMap[r.category_id]?.icon || 'i:repeat', '#94a3b8', 'sm')}<span class="tx-main"><b>${esc(r.name)}</b><small>${money(r.amount)}, dia ${r.day}</small></span>${ico('chevron-right')}</button>`).join('')}</div></div>` : ''}
+    <p class="c-muted" style="font-size:13px">Toque em "Paguei" ou "Recebi" para lançar com o valor certo (dá para ajustar). Contas marcadas como automáticas se lançam sozinhas no dia. ${settings().pixKey ? '' : 'Cadastre sua chave PIX em Ajustes para ela ir junto na cobrança.'}</p>
+  </div>`;
+}
+
+/* ===================== Metas ===================== */
+function goalRow(g, compact) {
+  const p = goalProgress(g, S.month), pct = Math.round(p.pct * 100);
+  const c = S.catMap[g.category_id] || {};
+  const icon = g.kind === 'budget' ? (c.icon || 'i:tag') : g.kind === 'income' ? 'i:trending-up' : 'i:piggy-bank';
+  const color = g.kind === 'budget' ? (pct >= 100 ? '#ef4444' : pct >= 80 ? '#f59e0b' : (c.color || '#22c55e')) : g.kind === 'income' ? '#22c55e' : '#3b82f6';
+  let sub;
+  if (g.kind === 'budget') sub = pct >= 100 ? `Estourou ${money(p.v - g.amount)}` : `Restam ${money(p.left)} de ${money(g.amount)}`;
+  else if (g.kind === 'income') sub = pct >= 100 ? 'Meta batida!' : `Faltam ${money(p.left)} de ${money(g.amount)}`;
+  else sub = pct >= 100 ? 'Objetivo alcançado!' : `${money(p.v)} de ${money(g.amount)}${p.perMonth ? `, guardar ${money(p.perMonth)}/mês` : ''}`;
+  return `<button class="goal${compact ? ' compact' : ''}" data-act="goalEdit" data-id="${esc(g.id)}">${tile(icon, color, 'sm')}
+    <span class="goal-main"><span class="bar-t"><span>${esc(goalTitle(g))}</span><span class="num">${pct}%</span></span>
+    <span class="bar-track"><span class="bar-fill" style="display:block;width:${Math.min(100, Math.max(2, pct))}%;--ic:${color}"></span></span>
+    <small class="c-muted">${esc(sub)}</small></span></button>`;
+}
+function pageGoals() {
+  const G = activeGoals();
+  if (!G.length) return `<div class="panel">${emptyState('target', 'Nenhuma meta ainda', 'Crie um limite de gastos por categoria, uma meta de faturamento do mês ou um objetivo para guardar dinheiro.', '')}<div style="text-align:center"><button class="btn primary" data-act="goalEdit">${ico('plus')}Nova meta</button></div></div>`;
+  const sec = (kind, title, icon) => { const list = G.filter(g => g.kind === kind); return list.length ? `<div class="panel"><h2>${ico(icon)}${title}</h2>${list.map(g => goalRow(g)).join('')}</div>` : ''; };
+  return `<div class="stack">
+    <div><button class="btn primary" data-act="goalEdit">${ico('plus')}Nova meta</button></div>
+    <div class="grid g-2">
+      ${sec('income', 'Faturamento', 'trending-up')}
+      ${sec('budget', 'Limites de gastos do mês', 'gauge')}
+      ${sec('save', 'Objetivos', 'piggy-bank')}
+    </div>
+  </div>`;
+}
+
 /* ===================== Relatórios ===================== */
 let CHARTS = [];
 function destroyCharts() { CHARTS.forEach(c => { try { c.destroy(); } catch { } }); CHARTS = []; }
@@ -1077,7 +1317,8 @@ function pageReports() {
 }
 function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 function drawReportCharts() {
-  const el = $('#ch-months'); if (!el || !window.Chart) { if (el) el.parentElement.innerHTML = '<p class="c-muted">Gráfico indisponível sem internet.</p>'; return; }
+  const el = $('#ch-months'); if (!el) return;
+  if (!window.Chart) { loadScript(CHART_JS, 12000).then(() => { if (S.page === 'reports' && window.Chart) drawReportCharts(); }).catch(() => { const e = $('#ch-months'); if (e) e.parentElement.innerHTML = '<p class="c-muted">Gráfico indisponível sem internet.</p>'; }); return; }
   const months = Array.from({ length: 6 }, (_, i) => addMonths(S.month, i - 5));
   const data = months.map(totals);
   const grid = cssVar('--border'), txt = cssVar('--muted');
@@ -1156,6 +1397,11 @@ function pageSettings() {
     <div class="panel"><h2>${ico('palette')}Aparência</h2>
       <div class="themes" role="group" aria-label="Tema">${themes.map(([k, l]) => `<button class="theme-opt t-${k}" data-act="theme" data-t="${k}" aria-pressed="${st.theme === k}"><i></i>${l}</button>`).join('')}</div>
     </div>
+    <div class="panel"><h2>${ico('settings')}Recursos do app</h2>
+      <label class="check"><input type="checkbox" data-act="feature" data-k="goals"${feat('goals') ? ' checked' : ''}><span><b>Metas</b><small>Limite de gastos por categoria, faturamento do mês e objetivos.</small></span></label>
+      <label class="check"><input type="checkbox" data-act="feature" data-k="bills"${feat('bills') ? ' checked' : ''}><span><b>Contas fixas</b><small>A pagar, a receber, cobrança no WhatsApp e lançamento automático.</small></span></label>
+      <p class="c-muted" style="font-size:12.5px;margin-top:6px">Desligar só esconde o recurso. Nada é apagado: ao religar, tudo volta como estava.</p>
+    </div>
     <div class="panel"><h2>${ico('credit-card')}Cartão no saldo do mês</h2>
       <div class="seg" role="group" aria-label="Como o cartão entra no saldo">
         <button data-act="cardMode" data-m="invoice" aria-pressed="${st.cardMode !== 'purchase'}">Pela fatura</button>
@@ -1166,10 +1412,12 @@ function pageSettings() {
     <div class="panel"><h2>${ico('user')}Perfil</h2>
       <label class="field"><span>Seu nome</span><input class="input" id="set-name" maxlength="80" value="${esc(p.name || '')}" placeholder="Como quer ser chamado"></label>
       <label class="field"><span>WhatsApp (para lançar por mensagem, em breve)</span><input class="input" id="set-wa" inputmode="numeric" maxlength="13" value="${esc(p.whatsapp || '')}" placeholder="DDD + número, só números"></label>
+      <label class="field"><span>Sua chave PIX (vai junto nas cobranças)</span><input class="input" id="set-pix" maxlength="77" value="${esc(st.pixKey || '')}" placeholder="E-mail, celular, CPF/CNPJ ou chave aleatória" autocomplete="off"></label>
       <button class="btn sm" data-act="saveProfile">Salvar perfil</button>
     </div>
   </div>
   <div class="stack">
+    ${installRow()}
     <div class="panel"><h2>${ico('download')}Seus dados</h2><div class="setlist">
       <button class="setrow" data-act="exportJSON">${tile('i:download', '#3b82f6', 'sm')}<span class="tx-main"><b>Baixar backup</b><small>Arquivo com todos os lançamentos, categorias e cartões</small></span></button>
       <button class="setrow" data-act="importJSON">${tile('i:upload', '#22c55e', 'sm')}<span class="tx-main"><b>Importar backup</b><small>Aceita backup deste app e do app antigo. Não duplica.</small></span></button>
@@ -1183,11 +1431,14 @@ function pageSettings() {
     </div>
     ${S.mode === 'demo' ? `<div class="panel"><h2>${ico('info')}Demonstração</h2><p class="c-muted" style="margin-bottom:10px">Os dados são de exemplo e ficam só neste aparelho.</p><button class="btn sm" data-act="reseed">Recriar dados de exemplo</button></div>`
       : `<button class="btn danger" data-act="logout">${ico('log-out')}Sair da conta</button>`}
+    <p class="c-muted" style="font-size:12px">Meu Caixa ${esc(CFG.version || '')}</p>
   </div></div>`;
 }
 function pageMore() {
   const row = (page, icon, color, title, sub) => `<button class="setrow" data-act="go" data-page="${page}">${tile('i:' + icon, color)}<span class="tx-main"><b>${title}</b><small>${sub}</small></span>${ico('chevron-right')}</button>`;
   return `<div class="panel"><div class="setlist">
+    ${feat('bills') ? row('bills', 'repeat', '#06b6d4', 'Contas fixas', 'A pagar, a receber e cobrança no WhatsApp') : ''}
+    ${feat('goals') ? row('goals', 'target', '#22c55e', 'Metas', 'Limites de gastos, faturamento e objetivos') : ''}
     ${row('cards', 'credit-card', '#a78bfa', 'Cartões', 'Faturas, parcelas e limite')}
     ${row('ai', 'sparkles', '#e9b949', 'Conselheiro IA', 'Pergunte sobre o seu dinheiro')}
     ${row('cats', 'tags', '#22c55e', 'Categorias e ícones', 'Nomes, ícones e cores')}
@@ -1235,14 +1486,15 @@ function errMsg(e) {
 
 /* ===================== lançamento ===================== */
 let TX = null;
-function openTx(id) {
+function openTx(id, prefill) {
   const t = id ? S.txs.find(x => x.id === id) : null;
   const firstCard = S.cards.find(c => !c.archived);
   TX = t ? { ...t, invest_kind: t.invest_kind || 'aporte', amountText: String(t.amount).replace('.', ','), touchedCat: true }
     : { id: null, type: store.get('mc_last_type', 'out'), amountText: '', date: todayISO(), description: '', category_id: null, card_id: firstCard ? firstCard.id : null, installments: 1, invest_kind: 'aporte', touchedCat: false };
+  if (prefill) Object.assign(TX, prefill, { amountText: prefill.amount ? String(prefill.amount).replace('.', ',') : '', touchedCat: !!prefill.category_id });
   if (TX.type === 'card' && !firstCard && !t) TX.type = 'out';
-  const html = `${sheetHead('tx-title', t ? 'Editar lançamento' : 'Novo lançamento')}
-    ${t ? '' : `<div class="quick">${ico('sparkles')}<label class="sr" for="tx-quick">Lançamento rápido</label><input id="tx-quick" placeholder="Rápido: mercado 52,90 ontem" autocomplete="off" enterkeyhint="go"><button class="btn sm" data-act="txQuick">Preencher</button></div>`}
+  const html = `${sheetHead('tx-title', t ? 'Editar lançamento' : prefill && prefill.recurring_id ? (prefill.type === 'in' ? 'Confirmar recebimento' : 'Confirmar pagamento') : 'Novo lançamento')}
+    ${t || prefill ? '' : `<div class="quick">${ico('sparkles')}<label class="sr" for="tx-quick">Lançamento rápido</label><input id="tx-quick" placeholder="Rápido: mercado 52,90 ontem" autocomplete="off" enterkeyhint="go"><button class="btn sm" data-act="txQuick">Preencher</button></div>`}
     <div class="seg" id="tx-seg" role="group" aria-label="Tipo" style="margin-top:12px"></div>
     <label class="amount" id="tx-amount-wrap"><span>R$</span><input id="tx-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Valor" value="${esc(TX.amountText)}" ${t ? '' : 'data-autofocus'}></label>
     <div id="tx-pay"></div>
@@ -1355,6 +1607,7 @@ async function saveTx() {
     installments: TX.type === 'card' ? (+$('#tx-inst')?.value || 1) : 1,
     invest_kind: TX.type === 'invest' ? (TX.invest_kind || 'aporte') : null
   };
+  if (!TX.id && TX.recurring_id) { row.recurring_id = TX.recurring_id; row.recurring_month = TX.recurring_month; }
   const btn = $('#tx-save'); btn.disabled = true;
   try {
     if (TX.id) {
@@ -1368,8 +1621,18 @@ async function saveTx() {
     const wasEdit = !!TX.id;
     closeSheet(); TX = null;
     if (!date.startsWith(S.month) && !wasEdit) S.month = date.slice(0, 7);
-    render(); toast(wasEdit ? 'Lançamento atualizado' : 'Lançamento salvo');
-  } catch (e) { btn.disabled = false; toast(errMsg(e)); }
+    render(); toast(budgetAlert(row) || (wasEdit ? 'Lançamento atualizado' : row.recurring_id ? 'Conta marcada como ' + (row.type === 'in' ? 'recebida' : 'paga') : 'Lançamento salvo'));
+  } catch (e) { btn.disabled = false; toast(/23505|duplicate|unique/i.test(String(e.message || '') + (e.code || '')) ? 'Essa conta já foi lançada neste mês.' : errMsg(e)); }
+}
+// Aviso quando um gasto encosta no limite da categoria
+function budgetAlert(row) {
+  if (!feat('goals') || !row || (row.type !== 'out' && row.type !== 'card') || !row.category_id) return '';
+  const g = activeGoals().find(x => x.kind === 'budget' && x.category_id === row.category_id); if (!g) return '';
+  const mk = row.type === 'card' && settings().cardMode !== 'purchase' ? invoiceMonth(row.date, S.cardMap[row.card_id] || DEFAULT_CARD) : row.date.slice(0, 7);
+  const p = goalProgress(g, mk), pct = Math.round(p.pct * 100);
+  if (pct >= 100) return `Salvo. Limite de ${goalTitle(g)} estourado: ${pct}%`;
+  if (pct >= 80) return `Salvo. Você já usou ${pct}% do limite de ${goalTitle(g)}`;
+  return '';
 }
 async function deleteTx() {
   const t = S.txs.find(x => x.id === TX.id); if (!t) return;
@@ -1476,6 +1739,104 @@ async function saveCard() {
     toast('Cartão salvo');
   } catch (e) { toast(errMsg(e)); }
 }
+
+/* ===================== conta fixa ===================== */
+let RE = null;
+function openRecEditor(id, type) {
+  const r = id ? S.recs.find(x => x.id === id) : null;
+  const firstCard = S.cards.find(c => !c.archived);
+  RE = r ? { ...r } : { id: null, type: type === 'in' ? 'in' : 'out', name: '', amount: '', day: new Date().getDate(), category_id: null, card_id: firstCard ? firstCard.id : null, start_month: monthKey(new Date()), end_month: null, phone: '', auto: false, active: true };
+  const days = Array.from({ length: 31 }, (_, i) => `<option value="${i + 1}"${i + 1 === RE.day ? ' selected' : ''}>Dia ${i + 1}</option>`).join('');
+  const used = r ? S.txs.some(t => t.recurring_id === r.id) : false;
+  openSheet(`${sheetHead('re-title', r ? 'Editar conta fixa' : 'Nova conta fixa')}
+    <div class="seg" id="re-seg" role="group" aria-label="Tipo" style="margin-bottom:14px"></div>
+    <label class="field"><span>Nome</span><input class="input" id="re-name" maxlength="60" value="${esc(RE.name)}" placeholder="Ex.: Aluguel, Internet, Cliente João" autocomplete="off" data-autofocus></label>
+    <div class="row"><label class="field"><span>Valor</span><input class="input" id="re-amount" inputmode="decimal" value="${RE.amount ? esc(String(RE.amount).replace('.', ',')) : ''}" placeholder="0,00" autocomplete="off"></label>
+      <label class="field"><span>Vence no</span><select class="select" id="re-day">${days}</select></label></div>
+    <div id="re-pay"></div>
+    <div class="field"><span>Categoria</span><div class="catgrid" id="re-cats" role="group" aria-label="Categoria" style="max-height:180px"></div></div>
+    <div id="re-phone"></div>
+    <div class="row"><label class="field"><span>Começa em</span><input class="input" id="re-start" type="month" value="${esc(RE.start_month)}"></label>
+      <label class="field"><span>Termina em (opcional)</span><input class="input" id="re-end" type="month" value="${esc(RE.end_month || '')}"></label></div>
+    <label class="check"><input type="checkbox" id="re-auto"${RE.auto ? ' checked' : ''}><span><b>Lançar sozinho no dia</b><small>Para débitos automáticos e assinaturas. Valores que mudam, deixe desligado.</small></span></label>
+    <div class="sheet-actions">${r ? (used ? `<button class="btn" data-act="recToggle">${r.active ? 'Pausar' : 'Reativar'}</button>` : `<button class="btn danger" data-act="recDelete">${ico('trash-2')}Excluir</button>`) : '<button class="btn" data-act="closeSheet">Cancelar</button>'}<button class="btn primary" data-act="recSave">${ico('check')}Salvar</button></div>`, 're-title');
+  updRe();
+  const n = $('#re-name');
+  n.addEventListener('input', () => { if (!RE.touchedCat) { const c = matchCategory(n.value, RE.type === 'in' ? 'in' : 'out'); if (c) { RE.category_id = c.id; updReCats(); } } });
+}
+function updRe() {
+  $('#re-seg').innerHTML = [['out', 'A pagar'], ['in', 'A receber']].map(([k, l]) => `<button data-act="recType" data-t="${k}" data-tone="${k}" aria-pressed="${(RE.type === 'in') === (k === 'in')}">${l}</button>`).join('');
+  if (RE.type === 'in') $('#re-pay').innerHTML = '';
+  else {
+    const cards = S.cards.filter(c => !c.archived || c.id === RE.card_id);
+    $('#re-pay').innerHTML = `<div class="field"><span>Paga com</span><div class="chips"><button class="chip" data-act="recMethod" data-card="" aria-pressed="${RE.type === 'out'}">${ico('banknote')}PIX, débito ou boleto</button>${cards.map(c => `<button class="chip" data-act="recMethod" data-card="${esc(c.id)}" aria-pressed="${RE.type === 'card' && RE.card_id === c.id}">${ico('credit-card')}${esc(c.name)}</button>`).join('')}</div></div>`;
+  }
+  $('#re-phone').innerHTML = RE.type === 'in' ? `<label class="field"><span>WhatsApp de quem paga (opcional, para cobrar com 1 toque)</span><input class="input" id="re-phone-in" inputmode="numeric" maxlength="13" value="${esc(RE.phone || '')}" placeholder="DDD + número, só números"></label>` : '';
+  updReCats();
+}
+function updReCats() {
+  const kind = RE.type === 'in' ? 'in' : 'out';
+  if (RE.category_id && S.catMap[RE.category_id]?.kind !== kind) RE.category_id = null;
+  $('#re-cats').innerHTML = catsOfKind(kind).map(c => `<button class="cat" data-act="recCat" data-id="${esc(c.id)}" aria-pressed="${RE.category_id === c.id}"${safeColor(c.color) ? ` style="--ic:${c.color}"` : ''}>${tile(c.icon, c.color, 'sm')}<span>${esc(c.name)}</span></button>`).join('');
+}
+async function saveRec() {
+  const name = $('#re-name').value.trim(), amount = parseAmountBR($('#re-amount').value);
+  const start = $('#re-start').value, end = $('#re-end').value || null;
+  const phone = RE.type === 'in' ? ($('#re-phone-in')?.value || '').replace(/\D/g, '') : '';
+  if (!name) { toast('Dê um nome para a conta.'); return; }
+  if (!amount) { toast('Informe o valor.'); return; }
+  if (!/^\d{4}-\d{2}$/.test(start)) { toast('Informe o mês de início.'); return; }
+  if (end && end < start) { toast('O mês final é antes do início.'); return; }
+  if (phone && (phone.length < 10 || phone.length > 13)) { toast('WhatsApp: DDD + número (10 a 13 dígitos).'); return; }
+  const row = { type: RE.type, name: name.slice(0, 60), amount, day: +$('#re-day').value, category_id: RE.category_id || null, card_id: RE.type === 'card' ? RE.card_id : null, start_month: start, end_month: end, phone: phone || null, auto: $('#re-auto').checked };
+  try {
+    if (RE.id) { const v = await api.updateRec(RE.id, row); S.recs = S.recs.map(x => x.id === RE.id ? v : x); }
+    else S.recs.push(await api.addRec(row));
+    indexData(); closeSheet();
+    const made = row.auto ? await autoRecurring() : 0;
+    render(); toast(made ? `Conta salva e ${made} lançamento${made > 1 ? 's' : ''} feito${made > 1 ? 's' : ''} automaticamente` : 'Conta fixa salva');
+  } catch (e) { toast(errMsg(e)); }
+}
+function payRec(id, mk) {
+  const r = S.recMap[id]; if (!r) return;
+  const t = todayISO(), due = dueDate(mk, r.day);
+  openTx(null, { ...recTxRow(r, mk, mk === t.slice(0, 7) || due > t ? t : due), recurring_id: r.id, recurring_month: mk, invest_kind: 'aporte' });
+}
+
+/* ===================== meta ===================== */
+let GE = null;
+function openGoalEditor(id) {
+  const g = id ? S.goals.find(x => x.id === id) : null;
+  GE = g ? { ...g } : { id: null, kind: 'budget', name: '', amount: '', category_id: null, deadline: null };
+  openSheet(`${sheetHead('ge-title', g ? 'Editar meta' : 'Nova meta')}<div id="ge-body"></div>
+    <div class="sheet-actions">${g ? `<button class="btn danger" data-act="goalDelete">${ico('trash-2')}Excluir</button>` : '<button class="btn" data-act="closeSheet">Cancelar</button>'}<button class="btn primary" data-act="goalSave">${ico('check')}Salvar</button></div>`, 'ge-title');
+  updGe();
+}
+function updGe() {
+  const k = GE.kind, catKind = k === 'budget' ? 'out' : k === 'income' ? 'in' : 'invest';
+  const cats = catsOfKind(catKind);
+  const hint = { budget: 'Quanto quer gastar no máximo por mês nessa categoria. O app avisa ao chegar em 80%.', income: 'Quanto quer faturar por mês (todas as entradas ou só uma fonte).', save: 'Quanto quer juntar. Conta os aportes menos resgates em Investir, a partir de hoje.' }[k];
+  $('#ge-body').innerHTML = `<div class="seg" role="group" aria-label="Tipo de meta" style="margin-bottom:10px">${[['budget', 'Limite de gasto'], ['income', 'Faturamento'], ['save', 'Objetivo']].map(([v, l]) => `<button data-act="goalKind" data-k="${v}" aria-pressed="${k === v}">${l}</button>`).join('')}</div>
+    <p class="c-muted" style="font-size:13px;margin-bottom:12px">${hint}</p>
+    ${k !== 'budget' ? `<label class="field"><span>Nome ${k === 'save' ? '' : '(opcional)'}</span><input class="input" id="ge-name" maxlength="60" value="${esc(GE.name || '')}" placeholder="${k === 'save' ? 'Ex.: Reserva de emergência, Moto nova' : 'Ex.: Faturamento do mês'}" autocomplete="off"></label>` : ''}
+    <label class="field"><span>${k === 'budget' ? 'Categoria' : k === 'income' ? 'Fonte (opcional)' : 'Tipo de investimento (opcional)'}</span><select class="select" id="ge-cat">${k === 'budget' ? '' : `<option value="">${k === 'income' ? 'Todas as entradas' : 'Todos os investimentos'}</option>`}${cats.map(c => `<option value="${esc(c.id)}"${GE.category_id === c.id ? ' selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label>
+    <div class="row"><label class="field"><span>${k === 'budget' ? 'Limite por mês' : k === 'income' ? 'Meta por mês' : 'Quanto quer juntar'}</span><input class="input" id="ge-amount" inputmode="decimal" value="${GE.amount ? esc(String(GE.amount).replace('.', ',')) : ''}" placeholder="0,00" autocomplete="off" data-autofocus></label>
+    ${k === 'save' ? `<label class="field"><span>Até quando (opcional)</span><input class="input" id="ge-deadline" type="month" value="${esc(GE.deadline ? GE.deadline.slice(0, 7) : '')}"></label>` : ''}</div>`;
+}
+async function saveGoal() {
+  const amount = parseAmountBR($('#ge-amount').value), cat = $('#ge-cat').value || null;
+  const name = ($('#ge-name')?.value || '').trim();
+  if (!amount) { toast('Informe o valor da meta.'); return; }
+  if (GE.kind === 'budget' && !cat) { toast('Escolha a categoria.'); return; }
+  if (GE.kind === 'save' && !name) { toast('Dê um nome para o objetivo.'); return; }
+  const dl = $('#ge-deadline')?.value;
+  const row = { kind: GE.kind, amount, category_id: cat, name: name || null, deadline: GE.kind === 'save' && dl ? dueDate(dl, 31) : null };
+  try {
+    if (GE.id) { const v = await api.updateGoal(GE.id, row); S.goals = S.goals.map(x => x.id === GE.id ? v : x); }
+    else S.goals.push(await api.addGoal(row));
+    closeSheet(); render(); toast('Meta salva');
+  } catch (e) { toast(errMsg(e)); }
+}
 /* ===================== Conselheiro IA ===================== */
 const AI_SUGG = ['Analise meu mês', 'Onde posso economizar?', 'Quanto posso gastar até o fim do mês?', 'Como está meu cartão?', 'Monte um plano para guardar R$ 500 por mês'];
 function mdLite(s) {
@@ -1550,7 +1911,7 @@ function exportJSON() {
   const strip = ({ user_id, ...r }) => r;
   const data = {
     app: 'meu-caixa', version: 2, exportedAt: new Date().toISOString(),
-    categories: S.cats.map(strip), cards: S.cards.map(strip),
+    categories: S.cats.map(strip), cards: S.cards.map(strip), recurring: S.recs.map(strip), goals: S.goals.map(strip),
     transactions: S.txs.map(t => ({ ...strip(t), ts: t.legacy_ts || Date.parse(t.created_at) || null }))
   };
   download(`meu-caixa-backup-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
@@ -1602,7 +1963,7 @@ async function applyLegacyPlan(plan, onProgress) {
   }
   const rows = plan.txRows.map(({ _kind, _key, ...r }) => ({ ...r, category_id: byKey[_kind + ':' + _key] || byKey[_kind + ':outros'] || null, card_id: r.type === 'card' ? cardId : null }));
   await api.insertTxs(rows, onProgress);
-  const d = await api.loadAll(); S.profile = d.profile; S.cats = d.cats; S.cards = d.cards; S.txs = d.txs.map(normTx); indexData();
+  const d = await api.loadAll(); S.profile = d.profile; S.cats = d.cats; S.cards = d.cards; S.txs = d.txs.map(normTx); S.recs = d.recs || []; S.goals = d.goals || []; indexData();
   const want = new Set(rows.map(r => r.legacy_ts).filter(Boolean));
   const have = S.txs.filter(t => want.has(t.legacy_ts));
   const sum = (list, type) => r2(list.filter(t => t.type === type).reduce((s, t) => s + (+t.amount), 0));
@@ -1618,10 +1979,27 @@ async function importFile(file) {
     else if (data && data.app === 'meu-caixa' && Array.isArray(data.transactions)) plan = planFromV2(data);
     else throw new Error('Arquivo não reconhecido. Use um backup do Meu Caixa.');
     const res = await applyLegacyPlan(plan);
+    if (data && !Array.isArray(data)) await restoreExtras(data);
     render();
     toast(res.ok ? `Importado: ${res.total} lançamentos conferidos (sem duplicar)` : `Importado com diferenças. Confira o extrato.`);
   } catch (e) { toast(errMsg(e)); }
   finally { const f = $('#file-import'); if (f) f.value = ''; }
+}
+// Restaura contas fixas e metas de um backup 2.x (sem duplicar pelo nome/tipo)
+async function restoreExtras(data) {
+  const catKey = {}; for (const c of data.categories || []) catKey[c.id] = c.kind + ':' + (c.legacy_key || 'v2:' + norm(c.name).slice(0, 60));
+  const byKey = {}; for (const c of S.cats) byKey[c.kind + ':' + (c.legacy_key || 'v2:' + norm(c.name).slice(0, 60))] = c.id;
+  const cat = id => (id && byKey[catKey[id]]) || null;
+  for (const r of data.recurring || []) {
+    if (!r || !['in', 'out', 'card'].includes(r.type) || S.recs.some(x => x.type === r.type && norm(x.name) === norm(r.name) && x.day === r.day)) continue;
+    try { S.recs.push(await api.addRec({ type: r.type, name: String(r.name).slice(0, 60), amount: r2(r.amount), day: r.day, category_id: cat(r.category_id), card_id: r.type === 'card' ? (S.cards.find(c => !c.archived)?.id || null) : null, start_month: r.start_month, end_month: r.end_month || null, phone: r.phone || null, auto: !!r.auto, active: r.active !== false })); } catch (e) { console.warn(e); }
+  }
+  for (const g of data.goals || []) {
+    if (!g || !['budget', 'income', 'save'].includes(g.kind) || S.goals.some(x => x.kind === g.kind && x.amount == g.amount && (x.name || '') === (g.name || ''))) continue;
+    const c = cat(g.category_id); if (g.kind === 'budget' && !c) continue;
+    try { S.goals.push(await api.addGoal({ kind: g.kind, name: g.name || null, amount: r2(g.amount), category_id: c, deadline: g.deadline || null })); } catch (e) { console.warn(e); }
+  }
+  indexData();
 }
 function planFromV2(data) {
   const catRows = [], idToKey = {};
@@ -1794,6 +2172,36 @@ function showBlocked() {
     <button class="btn block danger" data-act="logout">${ico('log-out')}Sair</button>`;
 }
 
+/* ===================== app instalável (PWA) ===================== */
+let INSTALL_EVT = null;
+const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+const canInstall = () => !isStandalone() && (INSTALL_EVT || isIOS());
+function installHint() {
+  if (!canInstall() || S.mode === 'demo') return '';
+  const t = store.get('mc_install_dismiss', 0); if (t && Date.now() - t < 14 * 864e5) return '';
+  return `<div class="hint" style="margin-bottom:16px">${ico('smartphone')}<span>Instale o Meu Caixa na tela inicial: abre como app, mais rápido.</span><button class="link" data-act="install">Instalar</button><button class="link" data-act="installLater" style="margin-left:6px;color:var(--muted)">Agora não</button></div>`;
+}
+function installRow() {
+  if (isStandalone()) return '';
+  return `<div class="panel"><h2>${ico('smartphone')}App no celular e no PC</h2><p class="c-muted" style="margin-bottom:10px">Instale para abrir direto da tela inicial, em tela cheia, como um aplicativo.</p><button class="btn sm primary" data-act="install">${ico('download')}Instalar o Meu Caixa</button></div>`;
+}
+async function doInstall() {
+  if (INSTALL_EVT) { INSTALL_EVT.prompt(); const r = await INSTALL_EVT.userChoice.catch(() => null); INSTALL_EVT = null; if (r && r.outcome === 'accepted') toast('Instalado! Procure o ícone do Meu Caixa.'); render(); return; }
+  openSheet(`${sheetHead('inst-title', 'Instalar o Meu Caixa')}
+    ${isIOS() ? `<ol class="steps"><li>Toque em <b>Compartilhar</b> (o quadrado com a seta) na barra do Safari.</li><li>Escolha <b>Adicionar à Tela de Início</b>.</li><li>Toque em <b>Adicionar</b>.</li></ol>`
+      : `<ol class="steps"><li><b>Celular (Chrome):</b> menu ⋮ → <b>Instalar app</b> ou <b>Adicionar à tela inicial</b>.</li><li><b>PC (Chrome/Edge):</b> clique no ícone de instalar na barra de endereço, ou menu → <b>Instalar Meu Caixa</b>.</li></ol>`}
+    <div class="sheet-actions"><button class="btn primary" data-act="closeSheet">Entendi</button></div>`, 'inst-title');
+}
+window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALL_EVT = e; if (!$('#app').hidden && (S.page === 'home' || S.page === 'settings')) render(); });
+window.addEventListener('appinstalled', () => { INSTALL_EVT = null; toast('Meu Caixa instalado'); });
+function registerSW() {
+  if (!('serviceWorker' in navigator) || !(location.protocol === 'https:' || location.hostname === 'localhost') || S.mode === 'demo') return;
+  navigator.serviceWorker.register('sw.js').catch(() => { /* sem SW o app funciona igual, só sem modo offline */ });
+}
+window.addEventListener('offline', () => toast('Sem internet: dá para ver tudo, mas lançar só quando a conexão voltar.'));
+window.addEventListener('online', () => toast('Internet de volta.'));
+
 /* ===================== tema ===================== */
 const THEMES = ['dark', 'light', 'cyber'];
 function setTheme(t, save = true) {
@@ -1821,7 +2229,8 @@ const ACT = {
   saveProfile: async () => {
     const wa = $('#set-wa').value.replace(/\D/g, '');
     if (wa && (wa.length < 10 || wa.length > 13)) { toast('WhatsApp: use DDD + número (10 a 13 dígitos).'); return; }
-    try { S.profile = await api.updateProfile({ name: $('#set-name').value.trim().slice(0, 80) || null, whatsapp: wa || null }); renderShell(); toast('Perfil salvo'); } catch (e) { toast(errMsg(e)); }
+    const pix = ($('#set-pix')?.value || '').trim().slice(0, 77);
+    try { S.profile = await api.updateProfile({ name: $('#set-name').value.trim().slice(0, 80) || null, whatsapp: wa || null, settings: { ...settings(), pixKey: pix } }); renderShell(); toast('Perfil salvo'); } catch (e) { toast(errMsg(e)); }
   },
   exportJSON: () => exportJSON(),
   importJSON: () => $('#file-import').click(),
@@ -1832,7 +2241,7 @@ const ACT = {
   migBackup: () => { download(`meu-caixa-antigo-${todayISO()}.json`, JSON.stringify(MIG.raw.map(({ _id, ...t }) => ({ ...t, id: t.ts })), null, 1), 'application/json'); toast('Cópia do app antigo baixada'); },
   pdf: () => printReport(),
   reseed: () => { Demo.reseed(); startApp(); toast('Dados de exemplo recriados'); },
-  logout: async () => { closeAllSheets(); await api.signOut(); S.user = null; S.txs = []; S.chat = []; if (S.mode === 'demo') location.reload(); },
+  logout: async () => { closeAllSheets(); store.del('mc_snap'); await api.signOut(); S.user = null; S.txs = []; S.recs = []; S.goals = []; S.chat = []; if (S.mode === 'demo') location.reload(); },
   closeSheet: () => closeSheet(),
   toastAction: () => { const fn = TOAST_FN; $('#toast-root').innerHTML = ''; TOAST_FN = null; fn && fn(); },
   authTab: el => showAuth(el.dataset.tab),
@@ -1876,6 +2285,21 @@ const ACT = {
   cdColor: el => { CD.color = el.dataset.c; $$('#cd-sw button').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === CD.color)); },
   cdSave: () => saveCard(),
   cdArchive: async () => { try { const s = await api.updateCard(CD.id, { archived: !CD.archived }); S.cards = S.cards.map(c => c.id === CD.id ? s : c); indexData(); closeSheet(); render(); toast(s.archived ? 'Cartão arquivado' : 'Cartão reativado'); } catch (e) { toast(errMsg(e)); } },
+  recEdit: el => openRecEditor(el.dataset.id, el.dataset.type),
+  recType: el => { const t = el.dataset.t; RE.type = t === 'in' ? 'in' : (RE.type === 'card' ? 'card' : 'out'); RE.touchedCat = false; updRe(); },
+  recMethod: el => { if (el.dataset.card) { RE.type = 'card'; RE.card_id = el.dataset.card; } else RE.type = 'out'; updRe(); },
+  recCat: el => { RE.category_id = RE.category_id === el.dataset.id ? null : el.dataset.id; RE.touchedCat = true; updReCats(); },
+  recSave: () => saveRec(),
+  recToggle: async () => { try { const v = await api.updateRec(RE.id, { active: !RE.active }); S.recs = S.recs.map(x => x.id === RE.id ? v : x); indexData(); closeSheet(); render(); toast(v.active ? 'Conta reativada' : 'Conta pausada (o histórico continua)'); } catch (e) { toast(errMsg(e)); } },
+  recDelete: async () => { try { await api.deleteRec(RE.id); S.recs = S.recs.filter(x => x.id !== RE.id); indexData(); closeSheet(); render(); toast('Conta fixa excluída'); } catch (e) { toast(errMsg(e)); } },
+  recPay: el => payRec(el.dataset.id, el.dataset.mk),
+  goalEdit: el => openGoalEditor(el.dataset.id),
+  goalKind: el => { GE.kind = el.dataset.k; GE.category_id = null; updGe(); },
+  goalSave: () => saveGoal(),
+  goalDelete: async () => { try { await api.deleteGoal(GE.id); S.goals = S.goals.filter(x => x.id !== GE.id); closeSheet(); render(); toast('Meta excluída'); } catch (e) { toast(errMsg(e)); } },
+  feature: el => { if (!S.profile) return; const k = el.dataset.k, f = { ...(settings().features || {}) }; f[k] = !feat(k); S.profile.settings = { ...settings(), features: f }; saveSettings(); render(); toast(`${k === 'goals' ? 'Metas' : 'Contas fixas'} ${f[k] ? 'ligadas' : 'desligadas'}`); },
+  install: () => doInstall(),
+  installLater: () => { store.set('mc_install_dismiss', Date.now()); render(); },
   aiAsk: el => sendAI(el.dataset.q),
   aiSend: () => { const i = $('#ai-in'); if (!i) return; const v = i.value; i.value = ''; i.style.height = ''; sendAI(v); }
 };
@@ -1894,17 +2318,37 @@ function trapFocus(e) {
 }
 
 /* ===================== início ===================== */
+const useData = d => { S.profile = d.profile; S.cats = d.cats || []; S.cards = d.cards || []; S.txs = (d.txs || []).map(normTx); S.recs = d.recs || []; S.goals = d.goals || []; indexData(); };
+function showApp() { $('#boot').hidden = true; $('#auth').hidden = true; $('#blocked').hidden = true; $('#app').hidden = false; }
+// Abre na hora com a última cópia guardada (e atualiza assim que o servidor responder)
+function instantStart() {
+  try {
+    const snap = store.get('mc_snap', null), ref = new URL(CFG.supabaseUrl).hostname.split('.')[0];
+    const tok = store.get(`sb-${ref}-auth-token`, null), uidTok = tok && tok.user && tok.user.id;
+    if (!snap || !uidTok || snap.uid !== uidTok || AUTH_MODE === 'recovery') return;
+    S.user = { id: uidTok, email: tok.user.email || '' }; S.fromCache = true; useData(snap.d);
+    if (S.profile?.settings?.theme) setTheme(S.profile.settings.theme, false);
+    if (isBlocked()) return;
+    showApp(); const p = store.get('mc_page', 'home'); S.page = PAGES[p] && pageOn(p) ? p : 'home'; render();
+  } catch (e) { /* sem cópia: segue o caminho normal */ }
+}
 async function startApp() {
   try {
-    const d = await api.loadAll();
-    S.profile = d.profile; S.cats = d.cats || []; S.cards = d.cards || []; S.txs = (d.txs || []).map(normTx); indexData();
-  } catch (e) { toast(errMsg(e)); }
+    const d = await api.loadAll(); useData(d); S.offline = false;
+    if (S.mode === 'live' && S.user) store.set('mc_snap', { uid: S.user.id, at: Date.now(), d });
+  } catch (e) {
+    const snap = S.mode === 'live' && store.get('mc_snap', null);
+    if (snap && S.user && snap.uid === S.user.id) { useData(snap.d); S.offline = true; toast(`Sem internet: mostrando seus dados de ${new Date(snap.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}. Para lançar, conecte-se.`); }
+    else toast(errMsg(e));
+  }
   if (S.profile?.settings?.theme) setTheme(S.profile.settings.theme, false);
   if (S.mode === 'live' && isBlocked()) { showBlocked(); return; }
-  $('#boot').hidden = true; $('#auth').hidden = true; $('#blocked').hidden = true; $('#app').hidden = false;
-  const p = store.get('mc_page', 'home'); S.page = PAGES[p] ? p : 'home';
+  showApp();
+  const p = store.get('mc_page', 'home'); S.page = PAGES[p] && pageOn(p) ? p : 'home';
   render();
-  if (S.mode === 'live' && !S.txs.some(t => t.legacy_ts) && hasLegacyTraces() && !store.get('mc_mig_dismiss', false)) setTimeout(() => openMigration(true), 700);
+  if (!isBlocked() && !S.offline) { const made = await autoRecurring().catch(() => 0); if (made) { render(); toast(`${made} conta${made > 1 ? 's' : ''} fixa${made > 1 ? 's' : ''} lançada${made > 1 ? 's' : ''} automaticamente`); } }
+  if (/[?&]novo=1\b/.test(location.search)) { history.replaceState(null, '', location.pathname); setTimeout(() => openTx(), 300); }
+  else if (S.mode === 'live' && !S.txs.some(t => t.legacy_ts) && hasLegacyTraces() && !store.get('mc_mig_dismiss', false)) setTimeout(() => openMigration(true), 700);
 }
 async function boot() {
   setTheme(store.get('mc_theme_v2', null) || ({ matrix: 'cyber' }[store.get('mc_theme', '')] || store.get('mc_theme', null)) || 'dark', false);
@@ -1930,14 +2374,16 @@ async function boot() {
   });
   $('#auth-form').addEventListener('submit', onAuthSubmit);
   const live = CFG.supabaseUrl && CFG.supabaseKey && !/[?&]demo=1\b/.test(location.search);
+  setTimeout(registerSW, 2000);
   if (live) {
     S.mode = 'live'; api = Live;
     if (/type=recovery/.test(location.hash)) AUTH_MODE = 'recovery';
+    instantStart();
     try { await Live.init(); } catch (e) { $('#boot').textContent = 'Não foi possível carregar. Confira a internet e recarregue a página.'; return; }
     Live.onAuth((ev, session) => setTimeout(async () => {
       if (ev === 'PASSWORD_RECOVERY') { S.user = session?.user || null; showAuth('recovery'); return; }
       if (ev === 'SIGNED_OUT') { S.user = null; showAuth('login'); return; }
-      if (session && (!S.user || S.user.id !== session.user.id) && AUTH_MODE !== 'recovery') { S.user = session.user; await startApp(); return; }
+      if (session && (!S.user || S.user.id !== session.user.id || S.fromCache) && AUTH_MODE !== 'recovery') { S.user = session.user; S.fromCache = false; await startApp(); return; }
       if (ev === 'INITIAL_SESSION' && !session) showAuth('login');
     }, 0));
   } else {
@@ -1948,7 +2394,7 @@ async function boot() {
 }
 window.addEventListener('DOMContentLoaded', boot);
 
-if (window.__MC_TEST__) window.__mc = { S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, planFromV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory };
+if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, planFromV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory };
 })();
 </script>
 </body>
