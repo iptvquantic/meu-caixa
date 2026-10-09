@@ -1,7 +1,7 @@
 // Meu Caixa — robô do WhatsApp (Supabase Edge Function "whatsapp", verify_jwt=false: quem chama é a Meta,
 // e cada aviso é conferido pela assinatura com a chave secreta do app da Meta).
 // Segredos (Supabase → Edge Functions → Secrets): WHATSAPP_TOKEN, WHATSAPP_APP_SECRET, WHATSAPP_PHONE_ID,
-// WHATSAPP_VERIFY_TOKEN e GROQ_API_KEY. Nenhum deles fica no código.
+// WHATSAPP_VERIFY_TOKEN e GROQ_API_KEY (opcional: WHATSAPP_WABA_ID). Nenhum deles fica no código.
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
 import { answer } from './bot.ts';
 import { todaySP } from './context.ts';
@@ -21,6 +21,8 @@ const cfg: Cfg = {
   token: env('WHATSAPP_TOKEN'),
   apiVersion: env('WHATSAPP_API_VERSION', 'v24.0'),
   allowed: env('ALLOWED_ORIGINS', 'https://iptvquantic.github.io').split(',').map((s) => s.trim()).filter(Boolean),
+  selfUrl: env('SUPABASE_URL') ? `${env('SUPABASE_URL').replace(/\/+$/, '')}/functions/v1/whatsapp` : '',
+  wabaId: env('WHATSAPP_WABA_ID'),
 };
 const APP_URL = env('APP_URL', 'https://iptvquantic.github.io/meu-caixa/app.html');
 
@@ -40,11 +42,31 @@ const housekeeping = async () => {
   const { error } = await sb.from('wa_inbox').delete().lt('received_at', new Date(Date.now() - 30 * 864e5).toISOString());
   if (error) throw new Error(`limpeza: ${error.message}`);
 };
+// o app do dono pede a ativação na Meta: login válido e plano master/admin
+const isAdmin = async (jwt: string) => {
+  const { data, error } = await sb.auth.getUser(jwt);
+  if (error || !data?.user?.id) return false;
+  const { data: p, error: e2 } = await sb.from('profiles').select('plan, active').eq('id', data.user.id).maybeSingle();
+  if (e2) throw new Error(`perfil: ${e2.message}`);
+  return !!p && p.active !== false && ['master', 'admin'].includes(String(p.plan));
+};
 // endereços configuráveis só para o teste local (dev/test-bot-live.mjs); na produção ficam os oficiais
 const GRAPH_URL = env('WHATSAPP_GRAPH_URL', 'https://graph.facebook.com');
-const graph = (path: string, init: RequestInit = {}) => fetch(`${GRAPH_URL}/${cfg.apiVersion}/${path}`, {
-  ...init, headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
-});
+// appsecret_proof em toda chamada: um token vazado não serve sem a chave secreta do app
+const enc = new TextEncoder(), proofs = new Map<string, string>();
+async function proof(token: string) {
+  if (!proofs.has(token)) {
+    const key = await crypto.subtle.importKey('raw', enc.encode(cfg.appSecret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+    proofs.set(token, [...new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(token)))].map((b) => b.toString(16).padStart(2, '0')).join(''));
+  }
+  return proofs.get(token)!;
+}
+const graph = async (path: string, init: RequestInit = {}, token = cfg.token) => {
+  const p = cfg.appSecret && token ? `${path.includes('?') ? '&' : '?'}appsecret_proof=${await proof(token)}` : '';
+  return fetch(`${GRAPH_URL}/${cfg.apiVersion}/${path}${p}`, {
+    ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+  });
+};
 const ai = groq(env('GROQ_API_KEY'), fetch, undefined, env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'));
 
 // áudio do WhatsApp: pega o endereço do arquivo na Meta, baixa e manda transcrever
@@ -62,7 +84,7 @@ async function transcribe(mediaId: string) {
 const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
 
 Deno.serve((req) => handle(req, {
-  cfg, rpc, graph, housekeeping,
+  cfg, rpc, graph, housekeeping, isAdmin,
   bot: (m) => answer(m, { rpc, ask: ai.ask, extract: ai.extract, transcribe, deleteTx, today: todaySP, appUrl: APP_URL }),
   waitUntil: runtime ? (p) => runtime.waitUntil(p) : undefined,
   log: (...a) => console.error('[whatsapp]', ...a),

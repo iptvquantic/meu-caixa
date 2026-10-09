@@ -73,7 +73,12 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 - Segredos (Supabase → Edge Functions → Secrets): `WHATSAPP_TOKEN` (token permanente do usuário do sistema da Meta),
   `WHATSAPP_APP_SECRET`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, além de `GROQ_API_KEY`.
 - Webhook na Meta: URL `https://jgqhtshcuyzytljkmmxd.supabase.co/functions/v1/whatsapp`, token de verificação =
-  `WHATSAPP_VERIFY_TOKEN`, campo assinado: `messages`.
+  `WHATSAPP_VERIFY_TOKEN`, campo assinado: `messages`. **Não precisa mexer no painel da Meta**: quando o dono
+  (plano master/admin) abre Ajustes, o app chama `POST …/whatsapp?setup=1` com o login dele; a função confere o
+  login e o plano, cadastra o webhook do app (`/{app}/subscriptions`, token do app = id|chave secreta), inscreve a
+  conta do WhatsApp no app (`/{waba}/subscribed_apps`, conta descoberta pelo `debug_token` ou `WHATSAPP_WABA_ID`)
+  e devolve o resultado, que aparece só para o dono. Repetir não muda nada se já estiver certo.
+- Toda chamada à Meta leva `appsecret_proof` (HMAC do token com a chave secreta do app).
 - Conferir: `…/functions/v1/whatsapp?health=1` (banco alcançado e segredos presentes) e `?info=1` (o que o app vê).
 - Custo: responder quem escreveu primeiro é grátis na Meta; transcrição e IA pela Groq contam no limite diário de IA do usuário.
 - O usuário conecta em Ajustes → WhatsApp: o app mostra um código de 8 dígitos (vale 15 min, uma vez) e abre o

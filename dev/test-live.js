@@ -15,6 +15,8 @@ const cats = [
 const profile = { id: user.id, email: user.email, plan: 'trial', plan_expiry: new Date(Date.now() + 15 * 864e5).toISOString(), active: true, settings: {} };
 const seen = [];
 let waLinked = false; // o robô conectou o número?
+const setupCalls = []; // pedidos do app para ativar o robô na Meta (só o dono)
+let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: 'ativado', waba: 'ativado', number: '15550100000' };
 
 (async () => {
   const br = await launch();
@@ -45,6 +47,7 @@ let waLinked = false; // o robô conectou o número?
       }
       if (path.startsWith('/functions/v1/ai')) return J({ reply: 'Resposta da IA com seus números.', usage: { count: 1, limit: 40 } });
       if (path.startsWith('/functions/v1/whatsapp?info=1')) return J({ configured: true, number: '15550100000' });
+      if (path.startsWith('/functions/v1/whatsapp?setup=1') && m === 'POST') { setupCalls.push(r.headers().authorization || ''); return J(setupReply); }
       if (path.startsWith('/rest/v1/rpc/wa_link_start')) return J({ code: '12345678', expires_at: new Date(Date.now() + 15 * 60000).toISOString() });
       if (path.startsWith('/rest/v1/wa_links')) {
         if (m === 'DELETE') { waLinked = false; return r.respond({ status: 204, headers: cors, body: '' }); }
@@ -97,6 +100,27 @@ let waLinked = false; // o robô conectou o número?
   ok(await p.$eval('#toast-root', e => /WhatsApp conectado/.test(e.textContent)), 'avisa que conectou');
   await p.click('[data-act="waUnlink"]'); await sleep(400);
   ok(seen.some(s => s.startsWith('DELETE /rest/v1/wa_links')) && await p.$eval('#page', e => !!e.querySelector('[data-act="waStart"]')), 'desconectar apaga a ligação e volta ao botão de conectar');
+  ok(setupCalls.length === 0, 'cliente comum não pede ativação do robô na Meta');
+  // dono: ao abrir Ajustes o app pede à função para ativar/conferir o robô na Meta
+  const openSettings = async () => {
+    await p.evaluate(() => document.querySelector('#mnav [data-page="more"]').click()); await sleep(200);
+    await p.evaluate(() => document.querySelector('#page [data-act="go"][data-page="settings"]').click()); await sleep(700);
+  };
+  profile.plan = 'master';
+  await p.reload({ waitUntil: 'load' }); await sleep(1500);
+  await openSettings();
+  ok(setupCalls.length === 1 && setupCalls[0] === 'Bearer ' + jwt, 'dono: Ajustes pede a ativação do robô com o login dele');
+  ok(await p.$eval('#page .wa-owner.ok', e => /Robô ativado na Meta agora/.test(e.textContent) && /Só você, dono/.test(e.textContent)).catch(() => false), 'dono vê que o robô está ativo na Meta');
+  await openSettings();
+  ok(setupCalls.length === 1, 'confere uma vez por sessão (não a cada visita a Ajustes)');
+  setupReply = { ok: false, message: 'O token do WhatsApp (WHATSAPP_TOKEN) não vale mais: gere outro.' };
+  await p.reload({ waitUntil: 'load' }); await sleep(1500);
+  await openSettings();
+  ok(setupCalls.length === 2, 'reabrindo direto em Ajustes: espera o login carregar e pede uma vez');
+  ok(await p.$eval('#page .wa-owner.bad', e => /WHATSAPP_TOKEN/.test(e.textContent) && !!e.querySelector('[data-act="waSetup"]')).catch(() => false), 'problema na Meta: explica e oferece conferir de novo');
+  setupReply = { ok: true, message: 'Robô ativo na Meta.', webhook: 'ok', waba: 'ok' };
+  await p.click('[data-act="waSetup"]'); await sleep(700);
+  ok(setupCalls.length === 3 && await p.$eval('#page .wa-owner.ok', e => /Robô ativo na Meta/.test(e.textContent)).catch(() => false), 'conferir de novo: chama a função e atualiza');
   ok(errs.length === 0, 'sem erros de JavaScript' + (errs.length ? ': ' + errs.join(' | ').slice(0, 300) : ''));
   await br.close();
   done();

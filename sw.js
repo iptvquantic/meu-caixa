@@ -1,6 +1,6 @@
 // Meu Caixa — service worker: abre rápido e funciona sem internet (só leitura).
 // Dados do Supabase nunca são guardados aqui: sempre vêm da internet.
-const VERSION = 'mc-2.2.0';
+const VERSION = 'mc-2.2.1';
 const SHELL = ['./app.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 // Bibliotecas com versão fixa: guardadas já na instalação para o app abrir sem internet
 const LIBS = ['https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js', 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'];

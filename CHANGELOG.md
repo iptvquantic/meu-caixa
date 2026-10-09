@@ -1,5 +1,12 @@
 # Histórico de versões
 
+## 2.2.1 — 09/10/2026
+- Robô do WhatsApp se ativa sozinho na Meta: quando o dono abre Ajustes, o app pede à função para cadastrar o
+  webhook e ligar a conta do WhatsApp ao app, e mostra o resultado (ou o que falta, em português claro).
+  Clientes não veem esse aviso.
+- Toda chamada do robô à Meta leva a prova da chave secreta do app (token vazado sozinho não serve).
+- Correção: abrir o app direto em Ajustes não dispara mais a conferência antes do login carregar.
+
 ## 2.2.0 — 09/10/2026
 - Robô do WhatsApp: lançar mandando mensagem ou áudio ("mercado 52,90", "recebi 300 pix", "notebook 3.600 12x",
   "uber 23 ontem"), marcar conta fixa ("paguei aluguel"), desfazer, consultar saldo, fatura, contas e metas, e

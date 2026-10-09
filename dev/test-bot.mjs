@@ -373,6 +373,63 @@ function handlerDeps(over = {}) {
   const r = await post(h.d, 'wamid.22');
   ok(r.status === 200 && h.graphCalls.some((c) => c.body?.type === 'text'), 'limpeza que falha não atrapalha a resposta');
 }
+// ---------- ativação na Meta pelo app do dono ----------
+function metaFake(state = {}) {
+  const st = { subs: [], wabaApps: [], expires: 0, valid: true, phoneErr: null, scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555'] }, { scope: 'whatsapp_business_messaging', target_ids: ['555'] }], ...state }, calls = [];
+  const graph = async (path, init = {}, token) => {
+    const method = init.method ?? 'GET'; calls.push({ path, method, token });
+    const [p, qs] = path.split('?'); const q = new URLSearchParams(qs ?? '');
+    const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s });
+    if (p === PHONE_ID) return st.phoneErr ? j({ error: st.phoneErr }, 400) : j({ display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa', quality_rating: 'GREEN' });
+    if (p === 'app') return j({ id: '777', name: 'Meu Caixa' });
+    if (p === 'debug_token') return j({ data: { app_id: '777', is_valid: st.valid, expires_at: st.expires, granular_scopes: st.scopes } });
+    if (p === '777/subscriptions' && method === 'GET') return j({ data: st.subs });
+    if (p === '777/subscriptions' && method === 'POST') {
+      st.verify = q.get('verify_token');
+      st.subs = [{ object: q.get('object'), callback_url: q.get('callback_url'), active: true, fields: [{ name: q.get('fields'), version: 'v24.0' }] }];
+      return j({ success: true });
+    }
+    if (/^(555|556)\/phone_numbers$/.test(p)) return j({ data: p.startsWith('556') ? [{ id: PHONE_ID }] : [{ id: '999' }] });
+    if (/^(555|556)\/subscribed_apps$/.test(p) && method === 'GET') return j({ data: st.wabaApps });
+    if (/^(555|556)\/subscribed_apps$/.test(p) && method === 'POST') { st.subscribedWaba = p.slice(0, 3); st.wabaApps = [{ whatsapp_business_api_data: { id: '777', name: 'Meu Caixa' } }]; return j({ success: true }); }
+    return j({ error: { message: 'não simulado ' + p, code: 100 } }, 400);
+  };
+  return { st, calls, graph };
+}
+{
+  const SELF = 'https://proj.supabase.co/functions/v1/whatsapp';
+  const setupReq = (jwt) => new Request('https://x/functions/v1/whatsapp?setup=1', { method: 'POST', headers: { origin: 'https://iptvquantic.github.io', ...(jwt ? { authorization: 'Bearer ' + jwt } : {}) } });
+  const run = async (m, over = {}) => { const { d } = handlerDeps({ cfg: { ...cfg, selfUrl: SELF }, graph: m.graph, isAdmin: async (t) => t === 'jwt-dono', ...over }); const r = await handle(setupReq('jwt-dono'), d); return { r, rep: await r.json() }; };
+  const m = metaFake();
+  const { d } = handlerDeps({ cfg: { ...cfg, selfUrl: SELF }, graph: m.graph, isAdmin: async (t) => t === 'jwt-dono' });
+  let r = await handle(setupReq(null), d); ok(r.status === 403 && m.calls.length === 0, 'ativação sem login: recusada sem falar com a Meta');
+  r = await handle(setupReq('jwt-cliente'), d); ok(r.status === 403 && m.calls.length === 0, 'ativação por cliente comum: recusada');
+  r = await handle(setupReq('jwt-dono'), d); let rep = await r.json();
+  ok(r.status === 200 && rep.ok && rep.webhook === 'ativado' && rep.waba === 'ativado' && rep.number === '5522999990000' && rep.name === 'Meu Caixa', 'dono ativa: webhook e conta do WhatsApp ligados: ' + JSON.stringify(rep));
+  has(rep.message, 'Robô ativado na Meta agora', 'avisa que ativou agora');
+  ok(m.st.subs[0]?.callback_url === SELF && m.st.verify === 'mc-verifica' && m.st.subs[0].fields[0].name === 'messages' && m.st.subs[0].object === 'whatsapp_business_account',
+    'webhook cadastrado com o endereço da função, o token de verificação e o campo messages');
+  ok(m.calls.filter((c) => /^(777\/|debug_token)/.test(c.path)).every((c) => c.token === '777|' + SECRET), 'chamadas do app usam o token do app (id|chave secreta)');
+  ok(m.calls.filter((c) => /^(555\/|app$|1112223334)/.test(c.path)).every((c) => c.token === undefined), 'chamadas da conta usam o token do robô');
+  ok(r.headers.get('access-control-allow-origin') === 'https://iptvquantic.github.io' && r.headers.get('cache-control') === 'no-store', 'resposta ao app com CORS e sem cache');
+  const posts = m.calls.filter((c) => c.method === 'POST').length;
+  rep = await (await handle(setupReq('jwt-dono'), d)).json();
+  ok(rep.ok && rep.webhook === 'ok' && rep.waba === 'ok' && m.calls.filter((c) => c.method === 'POST').length === posts, 'conferir de novo: nada a mudar, nenhuma escrita na Meta');
+  has(rep.message, 'Robô ativo na Meta.', 'mensagem de robô ativo');
+  const pre = await handle(new Request('https://x/?setup=1', { method: 'OPTIONS', headers: { origin: 'https://iptvquantic.github.io' } }), d);
+  ok(pre.status === 204 && /authorization/.test(pre.headers.get('access-control-allow-headers')) && /POST/.test(pre.headers.get('access-control-allow-methods')), 'pré-checagem do navegador libera o login e o POST');
+
+  const two = metaFake({ scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555', '556'] }] });
+  ok((await run(two)).rep.ok && two.st.subscribedWaba === '556', 'duas contas do WhatsApp no token: escolhe a que tem o número do robô');
+  ({ rep } = await run(metaFake({ expires: Math.floor(Date.parse('2026-12-01T12:00:00Z') / 1000) })));
+  ok(rep.ok, 'token com validade ainda ativa o robô'); has(rep.message, 'o token vence em 01/12/2026', '... mas avisa que o token não é permanente');
+  ({ rep } = await run(metaFake({ phoneErr: { message: 'Invalid appsecret_proof provided in the API argument', code: 100 } })));
+  ok(!rep.ok, 'erro da Meta: não fica como ativo'); has(rep.message, 'WHATSAPP_APP_SECRET', 'chave secreta errada: diz qual segredo conferir');
+  has((await run(metaFake({ phoneErr: { message: 'Error validating access token: Session has expired', code: 190 } }))).rep.message, 'WHATSAPP_TOKEN', 'token vencido: explica');
+  has((await run(metaFake({ phoneErr: { message: 'Unsupported get request.', code: 100 } }))).rep.message, 'WHATSAPP_PHONE_ID', 'número errado: explica');
+  has((await run(metaFake(), { cfg: { ...cfg, selfUrl: SELF, token: '', verifyToken: '' } })).rep.message, 'WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN', 'segredos faltando: diz quais');
+  ok((await run(metaFake(), { isAdmin: async () => { throw new Error('auth fora'); } })).r.status === 403, 'falha ao conferir o login: recusa (não ativa)');
+}
 ok(await signatureOk('', new ArrayBuffer(0), 'sha256=00') === false, 'sem chave secreta: nada é aceito');
 ok(messagesOf({ entry: [{ changes: [{ field: 'messages', value: { messages: [{ from: 'abc', id: '1', type: 'text', text: { body: 'x' } }] } }] }] }, '').length === 0, 'remetente inválido ignorado');
 

@@ -238,6 +238,9 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .wa-ok{display:flex;align-items:center;gap:8px;margin-bottom:8px}.wa-ok .ico{color:var(--in);flex:none}
 .wa-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.wa-actions>:first-child{grid-column:1/-1}.wa-actions.two>:first-child{grid-column:auto}
 a.btn{text-decoration:none}
+.wa-owner{display:flex;align-items:flex-start;flex-wrap:wrap;gap:8px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);font-size:12.5px;color:var(--text-2)}
+.wa-owner>.ico{flex:none;margin-top:1px;color:var(--muted)}.wa-owner.ok>.ico{color:var(--in)}.wa-owner.bad>.ico{color:var(--warn)}
+.wa-owner>span{flex:1 1 220px;min-width:0}.wa-owner small{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}
 .hint .link{margin-left:auto;padding:0}
 .newcat{display:flex;gap:8px;align-items:center;margin-top:8px}
 .newcat .input{flex:1}
@@ -425,7 +428,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.2.0',
+  version: '2.2.1',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -724,7 +727,7 @@ const S = {
   cats: [], cards: [], txs: [], recs: [], goals: [], catMap: {}, cardMap: {}, recMap: {},
   month: monthKey(new Date()), page: 'home', filter: 'all', q: '', catTab: 'out',
   chat: [], aiBusy: false,
-  wa: null, waBot: null, waCode: null, waTimer: null
+  wa: null, waBot: null, waCode: null, waTimer: null, waSetup: null, waSetupBusy: false
 };
 const settings = () => Object.assign({ theme: 'dark', cardMode: 'invoice', pixKey: '' }, S.profile?.settings || {});
 // Recursos que o usuário pode ligar/desligar (padrão: ligados). Desligar só esconde; nada é apagado.
@@ -942,6 +945,15 @@ const Live = {
     try { const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${CFG.waFunction || 'whatsapp'}?info=1`); return r.ok ? await r.json() : { configured: false }; }
     catch { return { configured: false }; }
   },
+  // só o dono: ativa e confere o robô na Meta (webhook e conta do WhatsApp); a função confere o login e o plano
+  async waSetup() {
+    try {
+      const { data } = await this.sb.auth.getSession();
+      const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${CFG.waFunction || 'whatsapp'}?setup=1`, { method: 'POST', headers: { Authorization: `Bearer ${data.session?.access_token}` } });
+      const j = await r.json().catch(() => null);
+      return j && typeof j.ok === 'boolean' ? j : { ok: false, message: 'O robô não respondeu agora. Tente de novo em instantes.' };
+    } catch { return { ok: false, message: 'Não consegui falar com o robô agora (sem internet?).' }; }
+  },
   addTx(row) { return this.q(this.sb.from('transactions').insert(row).select().single()); },
   updateTx(id, row) { return this.q(this.sb.from('transactions').update(row).eq('id', id).select().single()); },
   deleteTx(id) { return this.q(this.sb.from('transactions').delete().eq('id', id)); },
@@ -1062,6 +1074,7 @@ const Demo = {
   async waStart() { return { code: String(10000000 + Math.floor(Math.random() * 90000000)), expires_at: new Date(Date.now() + 15 * 60000).toISOString() }; },
   async waUnlink() { this.db.wa = null; this.save(); },
   async waBot() { return { configured: true, number: null, demo: true }; },
+  async waSetup() { return { ok: true, message: 'Robô ativo na Meta.', demo: true }; },
   waDemoLink() { this.db.wa = { phone: '5522999990000', created_at: new Date().toISOString() }; this.save(); },
   _ins(list, row) { const r = { id: uid(), created_at: new Date().toISOString(), ...row }; this.db[list].push(r); this.save(); return JSON.parse(JSON.stringify(r)); },
   _upd(list, id, row) { const r = this.db[list].find(x => x.id === id); if (!r) throw new Error('não encontrado'); Object.assign(r, row); this.save(); return JSON.parse(JSON.stringify(r)); },
@@ -1410,6 +1423,7 @@ function pageCats() {
 
 /* ===================== Ajustes ===================== */
 function pageSettings() {
+  waSetupCheck();
   const st = settings(), p = S.profile || {};
   const themes = [['dark', 'Escuro'], ['light', 'Claro'], ['cyber', 'Cyber']];
   const plans = (CFG.plans || []).map(pl => `<a class="btn sm" href="${esc(pl.url)}" target="_blank" rel="noopener">${esc(pl.name)} ${esc(pl.price)}</a>`).join('');
@@ -1464,26 +1478,42 @@ function fmtPhone(p) {
   if (/^55\d{10,11}$/.test(d)) { const n = d.slice(4); return `+55 (${d.slice(2, 4)}) ${n.length === 9 ? n.slice(0, 5) + '-' + n.slice(5) : n.slice(0, 4) + '-' + n.slice(4)}`; }
   return d ? '+' + d : '';
 }
+const isOwner = () => ['master', 'admin'].includes(S.profile?.plan);
+// Dono: ao abrir Ajustes o app pede à função para ativar/conferir o robô na Meta (uma vez por sessão)
+function waSetupCheck() {
+  if (S.mode !== 'live' || S.offline || S.fromCache || !isOwner() || !feat('whatsapp') || S.waSetupBusy || S.waSetup) return; // na cópia instantânea o login ainda não carregou
+  S.waSetupBusy = true;
+  api.waSetup().then(r => {
+    S.waSetup = r;
+    if (r.ok && r.number && !S.waBot?.number) S.waBot = { configured: true, number: r.number };
+  }).finally(() => { S.waSetupBusy = false; if (S.page === 'settings') render(); });
+}
+function waOwnerNote() {
+  if (S.mode !== 'live' || !isOwner()) return '';
+  const r = S.waSetup, mine = '<small>Só você, dono, vê este aviso.</small>';
+  if (!r) return `<div class="wa-owner">${ico('refresh-ccw')}<span>Conferindo o robô na Meta… ${mine}</span></div>`;
+  const good = r.ok && !r.tokenExpires && r.waba !== 'desconhecido';
+  return `<div class="wa-owner ${good ? 'ok' : 'bad'}">${ico(good ? 'shield-check' : 'triangle-alert')}<span>${esc(r.message || '')} ${mine}</span>${good ? '' : '<button class="btn sm" data-act="waSetup">Conferir de novo</button>'}</div>`;
+}
 function waPanel() {
   if (!feat('whatsapp') || !S.waBot) return '';
   const bot = S.waBot, head = `<h2>${ico('message-circle')}Lançar pelo WhatsApp</h2>`;
-  if (!bot.configured) return S.mode === 'live' && ['master', 'admin'].includes(S.profile?.plan)
-    ? `<div class="panel">${head}<p class="c-muted" style="font-size:13px">O robô ainda não está no ar: faltam os segredos do WhatsApp no Supabase (só você, dono, vê este aviso).</p></div>` : '';
+  if (!bot.configured) return S.mode === 'live' && isOwner() ? `<div class="panel">${head}<p class="c-muted" style="font-size:13px">O robô ainda não está pronto para os clientes.</p>${waOwnerNote()}</div>` : '';
   if (S.wa) return `<div class="panel">${head}
     <p class="wa-ok">${ico('check')}<span>Conectado ao número <b style="white-space:nowrap">${esc(fmtPhone(S.wa.phone))}</b></span></p>
     <p class="c-muted" style="font-size:13px;margin-bottom:12px">Mande <b>mercado 52,90</b>, <b>recebi 300 pix</b>, <b>notebook 3.600 12x</b>, <b>paguei aluguel</b> ou um <b>áudio</b>. Para consultar: <b>saldo</b>, <b>fatura</b>, <b>contas</b>, <b>metas</b>. Errou? <b>desfazer</b>.</p>
-    <div class="wa-actions${bot.number ? ' two' : ''}">${bot.number ? `<a class="btn sm primary" href="https://wa.me/${esc(bot.number)}" target="_blank" rel="noopener">${ico('message-circle')}Abrir conversa</a>` : ''}<button class="btn sm" data-act="waUnlink">Desconectar</button></div></div>`;
+    <div class="wa-actions${bot.number ? ' two' : ''}">${bot.number ? `<a class="btn sm primary" href="https://wa.me/${esc(bot.number)}" target="_blank" rel="noopener">${ico('message-circle')}Abrir conversa</a>` : ''}<button class="btn sm" data-act="waUnlink">Desconectar</button></div>${waOwnerNote()}</div>`;
   if (S.waCode) {
     const c = S.waCode.code, link = bot.number ? `https://wa.me/${bot.number}?text=${encodeURIComponent('MC ' + c)}` : '';
     return `<div class="panel">${head}
       <ol class="wa-steps"><li>Toque em <b>Abrir WhatsApp</b>: a mensagem com o código já vai escrita.</li><li>Envie. O robô responde e esta tela atualiza sozinha.</li></ol>
       <p class="wa-code num" aria-label="Código MC ${esc(c.split('').join(' '))}">MC ${esc(c.slice(0, 4))} ${esc(c.slice(4))}</p>
       <div class="wa-actions">${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ico('message-circle')}Abrir WhatsApp</a>` : `<button class="btn primary" data-act="waOpen">${ico('message-circle')}Abrir WhatsApp</button>`}<button class="btn sm" data-act="waCopy">${ico('copy')}Copiar código</button><button class="btn sm" data-act="waCheck">Já enviei</button></div>
-      <p class="c-muted" style="font-size:12.5px;margin-top:8px">O código vale 15 minutos e só funciona uma vez.</p></div>`;
+      <p class="c-muted" style="font-size:12.5px;margin-top:8px">O código vale 15 minutos e só funciona uma vez.</p>${waOwnerNote()}</div>`;
   }
   return `<div class="panel">${head}
     <p class="c-muted" style="font-size:13px;margin-bottom:12px">Mande <b>mercado 52,90</b> ou um <b>áudio</b> e o lançamento entra aqui na hora. O robô também responde saldo, fatura, contas e suas perguntas.</p>
-    <button class="btn sm primary" data-act="waStart">${ico('message-circle')}Conectar meu WhatsApp</button></div>`;
+    <button class="btn sm primary" data-act="waStart">${ico('message-circle')}Conectar meu WhatsApp</button>${waOwnerNote()}</div>`;
 }
 const waStop = () => { clearInterval(S.waTimer); S.waTimer = null; };
 async function waRefresh(manual) {
@@ -2435,6 +2465,7 @@ const ACT = {
   waOpen: () => toast('Na versão de verdade, abre o WhatsApp com o código já escrito.'),
   waCopy: async () => { const t = 'MC ' + (S.waCode?.code || ''); try { await navigator.clipboard.writeText(t); toast('Código copiado'); } catch { toast(t); } },
   waCheck: async () => { if (S.mode === 'demo') Demo.waDemoLink(); try { await waRefresh(true); } catch (e) { toast(errMsg(e)); } },
+  waSetup: () => { S.waSetup = null; render(); waSetupCheck(); },
   waUnlink: async () => { try { await api.waUnlink(); S.wa = null; S.waCode = null; waStop(); render(); toast('WhatsApp desconectado'); } catch (e) { toast(errMsg(e)); } },
   install: () => doInstall(),
   installLater: () => { store.set('mc_install_dismiss', Date.now()); render(); },

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 const DEV = path.dirname(fileURLToPath(import.meta.url)), TOOLS = path.join(DEV, '.tools'), SB = path.join(DEV, 'supabase');
 const DB = 'mc_bot_live', PGRST_PORT = 3611, FAKE_PORT = 3612, FN_PORT = 3613, FN = `http://127.0.0.1:${FN_PORT}/`;
 const JWT_SECRET = 'segredo-de-teste-do-postgrest-com-32-caracteres', APP_SECRET = 'segredo-do-app-meta', PHONE_ID = '1112223334';
-const ANA = 'a0000000-0000-4000-8000-000000000001', PHONE = '5522991110001';
+const ANA = 'a0000000-0000-4000-8000-000000000001', DONO = 'd0000000-0000-4000-8000-000000000009', PHONE = '5522991110001';
 let pass = 0, fail = 0;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log('❌', msg); } };
 const has = (txt, part, msg) => ok(String(txt).replace(/ /g, ' ').includes(part), `${msg}\n   esperado conter: ${part}\n   veio: ${JSON.stringify(txt)}`);
@@ -40,6 +40,7 @@ const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 function jwt(payload) { const h = b64({ alg: 'HS256', typ: 'JWT' }) + '.' + b64(payload); return h + '.' + createHmac('sha256', JWT_SECRET).update(h).digest('base64url'); }
 const exp = () => Math.floor(Date.now() / 1000) + 3600;
 const SERVICE = jwt({ role: 'service_role', iss: 'supabase', exp: exp() });
+const DONO_JWT = jwt({ role: 'authenticated', sub: DONO, exp: exp() }), ANA_JWT = jwt({ role: 'authenticated', sub: ANA, exp: exp() });
 const rest = (pathAndQuery, init = {}, key = SERVICE) => fetch(`http://127.0.0.1:${FAKE_PORT}/rest/v1/${pathAndQuery}`, { ...init, headers: { apikey: key, Authorization: 'Bearer ' + key, ...(init.headers ?? {}) } });
 
 // ---------- banco ----------
@@ -51,7 +52,8 @@ function setupDb() {
   psql(`do $$ begin if not exists (select 1 from pg_roles where rolname = 'authenticator') then create role authenticator login noinherit password 'mc-teste'; end if; end $$;
         grant anon, authenticated, service_role to authenticator;`);
   const today = `(now() at time zone 'America/Sao_Paulo')::date`;
-  psql(`insert into auth.users (id, email) values ('${ANA}', 'ana@teste.local');
+  psql(`insert into auth.users (id, email) values ('${ANA}', 'ana@teste.local'), ('${DONO}', 'dono@teste.local');
+        update public.profiles set plan = 'master' where id = '${DONO}';
         update public.profiles set name = 'Ana Souza' where id = '${ANA}';
         insert into public.cards (user_id, name, closing_day, due_day) values ('${ANA}', 'Nubank', 5, 12);
         insert into public.recurring (user_id, type, name, amount, day, start_month, category_id)
@@ -61,8 +63,8 @@ function setupDb() {
 }
 const linkCode = () => psql(`select set_config('request.jwt.claims', '{"sub":"${ANA}","role":"authenticated"}', false); set role authenticated; select public.wa_link_start() ->> 'code';`).split('\n').pop();
 
-// ---------- Meta e Groq simuladas (+ /rest/v1 → PostgREST, como no Supabase) ----------
-const sent = [], groqCalls = [];
+// ---------- Meta e Groq simuladas (+ /rest/v1 → PostgREST e /auth/v1/user, como no Supabase) ----------
+const sent = [], groqCalls = [], proof = { checked: 0, wrong: [] }, meta = { subs: [], wabaApps: [], verified: false };
 const fake = http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   const body = Buffer.concat(chunks), url = new URL(req.url, 'http://x');
@@ -71,8 +73,35 @@ const fake = http.createServer(async (req, res) => {
     const p = http.request({ host: '127.0.0.1', port: PGRST_PORT, path: url.pathname.slice('/rest/v1'.length) + url.search, method: req.method, headers: { ...req.headers, host: `127.0.0.1:${PGRST_PORT}` } }, (pr) => { res.writeHead(pr.statusCode, pr.headers); pr.pipe(res); });
     p.on('error', (e) => json({ message: e.message }, 502)); p.end(body); return;
   }
+  if (url.pathname === '/auth/v1/user') { // o que o Supabase Auth responde para o login do app
+    const t = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    return t === DONO_JWT ? json({ id: DONO, email: 'dono@teste.local' }) : t === ANA_JWT ? json({ id: ANA, email: 'ana@teste.local' }) : json({ msg: 'invalid JWT' }, 401);
+  }
+  if (url.pathname.startsWith('/functions/v1/whatsapp')) { // o endereço público da função (a Meta confirma o webhook nele)
+    const p = http.request({ host: '127.0.0.1', port: FN_PORT, path: '/' + url.search, method: req.method, headers: req.headers }, (pr) => { res.writeHead(pr.statusCode, pr.headers); pr.pipe(res); });
+    p.on('error', (e) => json({ message: e.message }, 502)); p.end(body); return;
+  }
+  if (url.pathname.startsWith('/graph/')) { // a Meta confere o appsecret_proof de cada chamada
+    const tok = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+    proof.checked++; if (url.searchParams.get('appsecret_proof') !== createHmac('sha256', APP_SECRET).update(tok).digest('hex')) proof.wrong.push(url.pathname);
+  }
+  const G = '/graph/v24.0/';
+  if (url.pathname === G + 'app') return json({ id: '777', name: 'Meu Caixa' });
+  if (url.pathname === G + 'debug_token') return json({ data: { app_id: '777', is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555'] }] } });
+  if (url.pathname === G + '777/subscriptions' && req.method === 'GET') return json({ data: meta.subs });
+  if (url.pathname === G + '777/subscriptions' && req.method === 'POST') {
+    const cb = url.searchParams.get('callback_url'), ch = 'desafio-' + Date.now();
+    const got = await fetch(`${cb}?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(url.searchParams.get('verify_token'))}&hub.challenge=${ch}`).then((r) => r.text()).catch(() => '');
+    if (got !== ch) return json({ error: { message: 'The URL couldn\'t be validated. Callback verification failed', code: 2200 } }, 400);
+    meta.verified = true; meta.subs = [{ object: url.searchParams.get('object'), callback_url: cb, active: true, fields: [{ name: url.searchParams.get('fields'), version: 'v24.0' }] }];
+    return json({ success: true });
+  }
+  if (url.pathname === G + '555/subscribed_apps') {
+    if (req.method === 'POST') { meta.wabaApps = [{ whatsapp_business_api_data: { id: '777', name: 'Meu Caixa' } }]; return json({ success: true }); }
+    return json({ data: meta.wabaApps });
+  }
   if (url.pathname === `/graph/v24.0/${PHONE_ID}/messages`) { const j = JSON.parse(body); if (j.type === 'text') sent.push(j); return json({ messages: [{ id: 'wamid.out' }] }); }
-  if (url.pathname === `/graph/v24.0/${PHONE_ID}`) return json({ display_phone_number: '+1 555-010-0000' });
+  if (url.pathname === `/graph/v24.0/${PHONE_ID}`) return json({ display_phone_number: '+1 555-010-0000', verified_name: 'Meu Caixa Teste' });
   if (url.pathname === '/graph/v24.0/media-1') return json({ url: `http://127.0.0.1:${FAKE_PORT}/media/1`, mime_type: 'audio/ogg; codecs=opus', file_size: 9 });
   if (url.pathname === '/media/1') { res.writeHead(200, { 'content-type': 'audio/ogg' }); return res.end(Buffer.from('OggS-fake')); }
   if (url.pathname === '/groq/audio/transcriptions') { groqCalls.push({ audio: true, form: body.toString('latin1') }); return json({ text: 'Gastei 40 reais de Uber ontem.' }); }
@@ -119,6 +148,18 @@ async function main() {
 
   const health = await fetch(FN + '?health=1').then((r) => r.json());
   ok(health.db === true && health.configured === true, 'saúde: a função alcança o banco com a chave de serviço');
+  // ativar na Meta pelo app do dono (webhook + conta do WhatsApp), sem mexer no painel da Meta
+  const setup = (token) => fetch(FN + '?setup=1', { method: 'POST', headers: { authorization: 'Bearer ' + token, origin: 'https://iptvquantic.github.io' } });
+  let s = await setup(ANA_JWT);
+  ok(s.status === 403 && !meta.subs.length, 'cliente comum não ativa o robô');
+  s = await setup('login-falso');
+  ok(s.status === 403 && !meta.subs.length, 'login falso não ativa o robô');
+  const act = await (await setup(DONO_JWT)).json();
+  ok(act.ok && act.webhook === 'ativado' && act.waba === 'ativado' && act.name === 'Meu Caixa Teste', 'dono ativa o robô na Meta: ' + JSON.stringify(act));
+  ok(meta.verified && meta.subs[0]?.callback_url === `http://127.0.0.1:${FAKE_PORT}/functions/v1/whatsapp`, 'a Meta confirmou o webhook chamando a própria função (desafio respondido)');
+  const recheck = await (await setup(DONO_JWT)).json();
+  ok(recheck.ok && recheck.webhook === 'ok' && recheck.waba === 'ok', 'conferir de novo: tudo certo, nada muda');
+
   // conectar
   let r = await send('oi');
   has(r.reply, 'Ajustes → WhatsApp → Conectar', 'número desconhecido recebe o caminho para conectar');
@@ -174,6 +215,7 @@ async function main() {
   ok(dup.reply && !again.reply && psql(`select count(*) from public.transactions where user_id = '${ANA}' and amount = 10`) === '1', 'mensagem repetida pela Meta lança só 1 vez');
   r = await send('mercado 99', { secret: 'outro-segredo' });
   ok(r.status === 401 && !r.reply && psql(`select count(*) from public.transactions where amount = 99`) === '0', 'aviso com assinatura falsa é recusado');
+  ok(proof.checked > 10 && proof.wrong.length === 0, `toda chamada à Meta leva o appsecret_proof certo (${proof.checked} conferidas${proof.wrong.length ? '; erradas: ' + proof.wrong.join(', ') : ''})`);
   psql(`update public.profiles set plan_expiry = now() - interval '1 day' where id = '${ANA}'`);
   r = await send('mercado 77');
   has(r.reply, 'Seu plano venceu', 'plano vencido não lança'); ok(psql(`select count(*) from public.transactions where amount = 77`) === '0', 'nada gravado com plano vencido');
