@@ -11,8 +11,8 @@
     "test:bot": "node --experimental-strip-types --no-warnings test-bot.mjs",
     "test:browser": "node test-live.js && node test-offline.js && node test-pwa.js",
     "test:db": "bash supabase/test-db.sh",
-    "test:bot:live": "node test-bot-live.mjs",
-    "test:all": "npm test && npm run -s test:browser && npm run -s test:db && npm run -s test:bot:live && npm run -s shots",
+    "test:fn:live": "node test-bot-live.mjs && node test-ai-live.mjs",
+    "test:all": "npm test && npm run -s test:browser && npm run -s test:db && npm run -s test:fn:live && npm run -s shots",
     "shots": "node shots.js",
     "demo": "node demo.js",
     "sync": "node sync-bot.js"

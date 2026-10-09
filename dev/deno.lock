@@ -1,6 +1,12 @@
 {
   "version": "5",
   "remote": {
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/ai/context.ts": "2ae29cfdbecb2566b65edc08af32e9436a979cf9e9e39edd097391308ab409bf",
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/whatsapp/bot.ts": "ec11184fe6a950b911e28932bd33c4d5b63dd74e6e6414148d6ce3adad3376c7",
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/whatsapp/context.ts": "8abcb5ca3284b1e2db6c42016d1396ace2111e9ddfa86ea0cb38bcab49604e0f",
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/whatsapp/groq.ts": "613fc6357898aff7a92c87aa2c9085ae543cdf81d77fac8fb22fa71aed37d248",
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/whatsapp/handler.ts": "4ec33c39f65256b88fe244bfecc87a1d807868d04530806bc0ab3045a3fd364c",
+    "https://raw.githubusercontent.com/iptvquantic/meu-caixa/09e1e79f8a169355021369f4c0e484b381f65b37/dev/supabase/functions/whatsapp/smart.ts": "cb75c816b5632368cedf8faa93edfdc9feb96b0d2dc65c466cd28e770d14cf39",
     "https://raw.githubusercontent.com/iptvquantic/meu-caixa/51fc35d5d01c0704414c8f176060be686ccdfb5f/dev/supabase/functions/ai/context.ts": "2ae29cfdbecb2566b65edc08af32e9436a979cf9e9e39edd097391308ab409bf",
     "https://raw.githubusercontent.com/iptvquantic/meu-caixa/51fc35d5d01c0704414c8f176060be686ccdfb5f/dev/supabase/functions/whatsapp/bot.ts": "ec11184fe6a950b911e28932bd33c4d5b63dd74e6e6414148d6ce3adad3376c7",
     "https://raw.githubusercontent.com/iptvquantic/meu-caixa/51fc35d5d01c0704414c8f176060be686ccdfb5f/dev/supabase/functions/whatsapp/context.ts": "8abcb5ca3284b1e2db6c42016d1396ace2111e9ddfa86ea0cb38bcab49604e0f",

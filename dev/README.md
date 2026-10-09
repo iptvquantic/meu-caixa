@@ -22,7 +22,7 @@ Postgres 16 e cria o usuário sozinho.
 | `npm run test:browser` | No Chromium, com o Supabase simulado: login, carga dos dados, gravação, IA pela função, conectar o WhatsApp com código; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho) |
 | `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
 | `npm run test:bot` | Robô do WhatsApp sem internet: conectar, lançar (texto e áudio), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, cópias geradas em dia (entra no `npm test`) |
-| `npm run test:bot:live` | Robô de ponta a ponta: a função rodando no Deno, falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas. Baixa Deno e PostgREST para `dev/.tools` na primeira vez |
+| `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta. IA: chave publicável, login, limite e plano. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
 | `npm run shots` | Prints em 360/390/1280 px nos 3 temas em `dev/shots/` e aviso se algo vaza na horizontal |
 | `npm run demo` | Cópia do app em modo demonstração (dados de exemplo, sem nuvem), usada na prévia |
 | `npm run test:all` | Tudo acima, menos a demonstração |
@@ -36,8 +36,8 @@ Postgres 16 e cria o usuário sozinho.
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
 | `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `migrations/03_v2_2_whatsapp.sql` — robô do WhatsApp (números conectados, códigos, mensagens recebidas) | aplicada (`20261009151422`) |
-| `functions/ai/index.ts` + `context.ts` — função "ai" (Groq) | publicada (ver "Publicar uma função") |
-| `functions/whatsapp/` — robô do WhatsApp (`index.ts` entrada, `handler.ts` Meta, `bot.ts` conversa, `groq.ts` IA/áudio) | publicada (ver "Publicar uma função") |
+| `functions/ai/index.ts` + `context.ts` — função "ai" (Groq) | publicada do commit `09e1e79` (v10) |
+| `functions/whatsapp/` — robô do WhatsApp (`index.ts` entrada, `handler.ts` Meta, `bot.ts` conversa, `groq.ts` IA/áudio) | publicada do commit `09e1e79` (v2) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
@@ -56,11 +56,12 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 
 ### Publicar uma função (`ai` ou `whatsapp`)
 
-1. Testes passando (`npm test`, `npm run test:bot:live`) e commit com push no `main`.
+1. Testes passando (`npm test`, `npm run test:fn:live`) e commit com push no `main`.
 2. `node fn-deploy.js <commit>` gera `out/deploy/<função>/index.ts`: o `index.ts` da função com os imports
    locais apontando para os arquivos daquele commit no GitHub (repositório público). O script recusa se o commit
    não estiver no `main` ou se algum arquivo local estiver diferente dele.
-3. Conferir a entrada gerada rodando de verdade: `WA_FN_DIR=out/deploy/whatsapp npm run test:bot:live`.
+3. Conferir a entrada gerada rodando de verdade: `WA_FN_DIR=out/deploy/whatsapp node test-bot-live.mjs` e
+   `AI_FN_DIR=out/deploy/ai node test-ai-live.mjs`.
 4. Publicar pelo conector (`deploy_edge_function`) só esse `index.ts`, com `verify_jwt=false` (as duas funções
    conferem o acesso por conta própria: login na `ai`, assinatura da Meta na `whatsapp`).
 5. Conferir `?health=1` da função publicada e os logs.

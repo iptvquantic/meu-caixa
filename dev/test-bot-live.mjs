@@ -1,6 +1,6 @@
 // Robô do WhatsApp de ponta a ponta, sem internet: a função roda no Deno de verdade, fala com o banco de verdade
 // (as funções wa_* num Postgres local, pelo PostgREST — o mesmo servidor de API do Supabase) e com Meta/Groq simuladas.
-// Uso: node test-bot-live.mjs   (npm run test:bot:live). Na primeira vez baixa Deno e PostgREST para dev/.tools.
+// Uso: node test-bot-live.mjs   (npm run test:fn:live). Na primeira vez baixa Deno e PostgREST para dev/.tools.
 import { execFileSync, spawn } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 import { existsSync, mkdirSync } from 'node:fs';
