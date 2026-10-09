@@ -103,14 +103,23 @@ const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 const isId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,20}$/.test(v); // só algarismos: seguro mandar para a Meta
 const phoneOf = (n: any, how: Phone['how'], waba?: string): Phone => ({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? ''), waba, how });
 // Números que o token enxerga: contas do WhatsApp liberadas para ele → números de cada conta
-async function phonesOfToken(d: HandlerDeps): Promise<Phone[]> {
+type Waba = { id: string; name: string; numbers: number };
+async function phonesOfToken(d: HandlerDeps): Promise<{ phones: Phone[]; wabas: Waba[] }> {
   const c = d.cfg, appId = String((await gj(d, 'app')).id ?? '');
   const dbg = (await gj(d, `debug_token?input_token=${encodeURIComponent(c.token)}`, undefined, `${appId}|${c.appSecret}`)).data ?? {};
-  const wabas = [...new Set<string>([c.wabaId, ...(dbg.granular_scopes ?? []).filter((g: any) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
-    .flatMap((g: any) => g?.target_ids ?? [])].map(String).filter(isId))];
-  const out = new Map<string, Phone>();
-  for (const w of wabas.slice(0, 5)) for (const n of (await gj(d, `${w}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? []) if (!out.has(String(n.id))) out.set(String(n.id), phoneOf(n, 'token', w));
-  return [...out.values()];
+  const scopes: any[] = dbg.granular_scopes ?? [];
+  const ids = [...new Set<string>([c.wabaId, ...scopes.filter((g) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
+    .flatMap((g) => g?.target_ids ?? [])].map(String).filter(isId))];
+  const out = new Map<string, Phone>(), wabas: Waba[] = [];
+  for (const w of ids.slice(0, 5)) {
+    const name = await gj(d, `${w}?fields=name`).then((r) => String(r.name ?? '')).catch(() => '');
+    const nums: any[] = (await gj(d, `${w}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? [];
+    wabas.push({ id: w, name, numbers: nums.length });
+    for (const n of nums) if (!out.has(String(n.id))) out.set(String(n.id), phoneOf(n, 'token', w));
+  }
+  // o que o token enxerga (só IDs, nomes e permissões; nada secreto) — para o diagnóstico
+  d.log?.('ativação: token', JSON.stringify({ tipo: dbg.type, escopos: scopes.map((g) => `${g?.scope}:${Array.isArray(g?.target_ids) ? g.target_ids.length : 'todos'}`), contas: wabas }));
+  return { phones: [...out.values()], wabas };
 }
 export async function resolvePhone(d: HandlerDeps): Promise<Phone> {
   const c = d.cfg, key = c.phoneId || '-', hit = phoneCache.get(key);
@@ -127,11 +136,11 @@ export async function resolvePhone(d: HandlerDeps): Promise<Phone> {
     }
   }
   if (!ph) {
-    let list: Phone[];
-    try { list = await phonesOfToken(d); }
-    catch (e) { throw Object.assign(new GraphError(`descoberta: ${e instanceof Error ? e.message : e}`, -3), { list: [] }); }
-    if (list.length !== 1) throw Object.assign(new GraphError(list.length ? 'vários números' : 'nenhum número', -2), { list });
-    ph = list[0];
+    let found: { phones: Phone[]; wabas: Waba[] };
+    try { found = await phonesOfToken(d); }
+    catch (e) { throw Object.assign(new GraphError(`descoberta: ${e instanceof Error ? e.message : e}`, -3), { list: [], wabas: [] }); }
+    if (found.phones.length !== 1) throw Object.assign(new GraphError(found.phones.length ? 'vários números' : 'nenhum número', -2), { list: found.phones, wabas: found.wabas });
+    ph = found.phones[0];
   }
   if (ph.how !== 'configurado') d.log?.('WHATSAPP_PHONE_ID não é o ID do número; usando', ph.id, `(${ph.how})`);
   phoneCache.set(key, ph);
@@ -286,13 +295,16 @@ export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
 async function phoneHelp(d: HandlerDeps, e: GraphError): Promise<Pick<SetupReport, 'message' | 'fix' | 'phones'>> {
   const c = d.cfg, fix = { secrets: secretsPage(c) };
   const phones = ((e as any).list ?? []).slice(0, 5).map((p: Phone) => ({ id: p.id, number: p.number, name: p.name }));
+  const wabas: Waba[] = (e as any).wabas ?? [];
   d.log?.('ativação: números encontrados', JSON.stringify(phones)); // IDs e números do robô (nada secreto)
   const list = phones.map((p: any) => `${p.id} (+${p.number}${p.name ? ', ' + p.name : ''})`).join('; ');
-  return {
-    message: `${phoneIdHint(c)} ` + (phones.length > 1 ? `Sua conta tem mais de um número; coloque no WHATSAPP_PHONE_ID o ID do número do robô: ${list}.`
-      : 'Copie a "Identificação do número de telefone" em WhatsApp → Configuração da API, na Meta, e cole no WHATSAPP_PHONE_ID.'),
-    fix, phones,
-  };
+  const named = wabas.map((w) => `"${w.name || w.id}"`).join(', ');
+  let what: string;
+  if (phones.length > 1) what = `Sua conta tem mais de um número; coloque no WHATSAPP_PHONE_ID o ID do número do robô: ${list}.`;
+  else if (e.code === -2 && !wabas.length) what = 'O token do WhatsApp não tem nenhuma conta do WhatsApp liberada. No Meta Business: Configurações → Usuários do sistema → seu usuário → Atribuir ativos → Contas do WhatsApp → marque a conta (controle total) e gere um token novo.';
+  else if (e.code === -2) what = `A conta do WhatsApp ${named} liberada para o token não tem nenhum número. Use a conta que tem o número do robô (no Meta Business, atribua essa conta ao usuário do sistema e gere um token novo) ou cadastre o número nela.`;
+  else what = 'Copie a "Identificação do número de telefone" em WhatsApp → Configuração da API, na Meta, e cole no WHATSAPP_PHONE_ID.';
+  return { message: `${phoneIdHint(c)} ${what}`, fix, phones };
 }
 
 export async function handle(req: Request, d: HandlerDeps): Promise<Response> {
