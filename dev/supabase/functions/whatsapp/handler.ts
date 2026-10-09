@@ -100,7 +100,7 @@ type Phone = { id: string; number: string; name: string; waba?: string; how: 'co
 const phoneCache = new Map<string, Phone>();
 export const resetPhoneCache = () => phoneCache.clear(); // testes
 const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
-const isId = (v: unknown) => /^\d{1,20}$/.test(String(v ?? '')); // só algarismos: seguro mandar para a Meta
+const isId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,20}$/.test(v); // só algarismos: seguro mandar para a Meta
 const phoneOf = (n: any, how: Phone['how'], waba?: string): Phone => ({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? ''), waba, how });
 // Números que o token enxerga: contas do WhatsApp liberadas para ele → números de cada conta
 async function phonesOfToken(d: HandlerDeps): Promise<Phone[]> {

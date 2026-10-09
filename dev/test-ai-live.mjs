@@ -42,6 +42,8 @@ const procs = [];
     ...(existsSync('/root/.ccr/ca-bundle.crt') ? { DENO_CERT: '/root/.ccr/ca-bundle.crt' } : {}),
     SUPABASE_URL: `http://127.0.0.1:${FAKE_PORT}`, SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUB }), SUPABASE_ANON_KEY: 'anon-antiga', GROQ_API_KEY: '',
   };
+  try { execFileSync(deno(), ['check', path.join(dir, 'index.ts')], { env, stdio: ['ignore', 'pipe', 'pipe'] }); ok(true, 'tipos'); }
+  catch (e) { ok(false, 'tipos do TypeScript: ' + String(e.stderr || e.message).replace(/\x1b\[[0-9;]*m/g, '').slice(0, 600)); }
   const p = spawn(deno(), ['run', '--allow-net', '--allow-env', '--allow-read', path.join(dir, 'index.ts')], { env, stdio: ['ignore', 'ignore', 'pipe'] });
   procs.push(p); let errLog = ''; p.stderr.on('data', (d) => { errLog += d; });
   let up = false;

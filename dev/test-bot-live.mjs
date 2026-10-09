@@ -141,7 +141,11 @@ async function main() {
     WHATSAPP_TOKEN: 'token-de-teste', WHATSAPP_APP_SECRET: APP_SECRET, WHATSAPP_PHONE_ID: PHONE_ID, WHATSAPP_VERIFY_TOKEN: 'mc-verifica',
     WHATSAPP_GRAPH_URL: `http://127.0.0.1:${FAKE_PORT}/graph`, GROQ_API_KEY: 'gsk-teste', GROQ_BASE_URL: `http://127.0.0.1:${FAKE_PORT}/groq`,
   };
-  procs.push(spawn(deno, ['run', '--allow-net', '--allow-env', '--allow-read', path.join(process.env.WA_FN_DIR ? path.resolve(process.env.WA_FN_DIR) : path.join(SB, 'functions/whatsapp'), 'index.ts')], { env, stdio: ['ignore', 'ignore', 'pipe'] }));
+  const entry = path.join(process.env.WA_FN_DIR ? path.resolve(process.env.WA_FN_DIR) : path.join(SB, 'functions/whatsapp'), 'index.ts');
+  // tipos conferidos como no Supabase (erro de tipo não pode passar)
+  try { execFileSync(deno, ['check', entry], { env, stdio: ['ignore', 'pipe', 'pipe'] }); ok(true, 'tipos'); }
+  catch (e) { ok(false, 'tipos do TypeScript: ' + String(e.stderr || e.message).replace(/\x1b\[[0-9;]*m/g, '').slice(0, 600)); }
+  procs.push(spawn(deno, ['run', '--allow-net', '--allow-env', '--allow-read', entry], { env, stdio: ['ignore', 'ignore', 'pipe'] }));
   let up = false, errLog = '';
   procs[1].stderr.on('data', (d) => { errLog += d; });
   for (let i = 0; i < 120 && !up; i++) { await sleep(500); up = await fetch(FN).then((r) => r.ok).catch(() => false); }
