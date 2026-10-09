@@ -6,13 +6,16 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "test": "node check.js && node test-smart.js && node test-app.js && node test-app21.js && node test-backup.js && npm run -s test:ai",
+    "test": "node check.js && node test-smart.js && node test-app.js && node test-app21.js && node test-app22.js && node test-backup.js && npm run -s test:ai && npm run -s test:bot",
     "test:ai": "node --experimental-strip-types --no-warnings test-ai.mjs",
+    "test:bot": "node --experimental-strip-types --no-warnings test-bot.mjs",
     "test:browser": "node test-live.js && node test-offline.js && node test-pwa.js",
     "test:db": "bash supabase/test-db.sh",
-    "test:all": "npm test && npm run -s test:browser && npm run -s test:db && npm run -s shots",
+    "test:bot:live": "node test-bot-live.mjs",
+    "test:all": "npm test && npm run -s test:browser && npm run -s test:db && npm run -s test:bot:live && npm run -s shots",
     "shots": "node shots.js",
-    "demo": "node demo.js"
+    "demo": "node demo.js",
+    "sync": "node sync-bot.js"
   },
   "devDependencies": {
     "@fontsource/chakra-petch": "^5.3.0",

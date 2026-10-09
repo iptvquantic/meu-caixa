@@ -1,3 +1,4 @@
+// CÓPIA GERADA por dev/sync-bot.js de ../ai/context.ts. Não edite aqui.
 // Meu Caixa — contas do mês (as mesmas do app) e o resumo financeiro enviado à IA. Funções puras, testáveis.
 // Usado pela função "ai" e (cópia gerada por dev/sync-bot.js) pelo robô do WhatsApp.
 export type Tx = { type: string; amount: number; date: string; description: string; category_id: string | null; card_id: string | null; installments: number; invest_kind: string | null };

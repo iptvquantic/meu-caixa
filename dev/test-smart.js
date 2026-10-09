@@ -57,5 +57,11 @@ eq(q('apliquei 500 tesouro'), { type: 'invest', amount: 500, inst: 1, date: T, d
 eq(q('resgatei 200 cdb'), { type: 'invest', amount: 200, inst: 1, date: T, desc: 'Cdb', kind: 'resgate' }, 'resgate');
 eq(q('farmácia 37,50 05/10'), { type: 'out', amount: 37.5, inst: 1, date: '2026-10-05', desc: 'Farmácia', kind: null }, 'data dd/mm');
 eq(q('sem valor aqui'), null, 'sem valor não lança');
+// frases com pontuação (áudio transcrito, mensagem do WhatsApp)
+eq(q('Gastei 40 reais de Uber ontem.'), { type: 'out', amount: 40, inst: 1, date: '2026-10-07', desc: 'Uber', kind: null }, 'ponto final não atrapalha a data');
+eq(q('Uber, ontem, 23'), { type: 'out', amount: 23, inst: 1, date: '2026-10-07', desc: 'Uber', kind: null }, 'vírgulas entre palavras');
+eq(q('notebook 3.600 12x.'), { type: 'card', amount: 3600, inst: 12, date: T, desc: 'Notebook', kind: null }, 'milhar com ponto + ponto final');
+eq(q('mercado 52,90!'), { type: 'out', amount: 52.9, inst: 1, date: T, desc: 'Mercado', kind: null }, 'centavos + exclamação');
+eq(q('resgatei 200 do tesouro'), { type: 'invest', amount: 200, inst: 1, date: T, desc: 'Tesouro', kind: 'resgate' }, 'preposição no começo da descrição sai');
 
 done();

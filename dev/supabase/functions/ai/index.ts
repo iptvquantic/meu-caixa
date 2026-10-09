@@ -6,6 +6,9 @@ import { addMonths, buildContext, currentMonthSP, type Card, type Cat, type Goal
 
 const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://iptvquantic.github.io').split(',').map((s) => s.trim());
 const MODELS = [Deno.env.get('AI_MODEL') ?? 'openai/gpt-oss-120b', Deno.env.get('AI_MODEL_FALLBACK') ?? 'llama-3.3-70b-versatile'];
+// chave pública do projeto: a nova (sb_publishable_) e, se não houver, a antiga (anon, que o Supabase desliga no fim de 2026)
+const PUBLIC_KEY = (() => { try { const o = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}'); return String(o.default ?? Object.values(o)[0] ?? ''); } catch { return ''; } })()
+  || Deno.env.get('SUPABASE_ANON_KEY')!;
 
 const SYSTEM = `Você é o Conselheiro do Meu Caixa, um planejador financeiro experiente que fala como um mentor de confiança: direto, caloroso e prático.
 Você conversa com autônomos e pequenos negócios no Brasil e recebe, abaixo, os NÚMEROS REAIS do usuário.
@@ -49,11 +52,16 @@ Deno.serve(async (req) => {
   const H = { ...corsHeaders(req.headers.get('origin') ?? ''), 'Content-Type': 'application/json' };
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: H });
   if (req.method === 'OPTIONS') return new Response('ok', { headers: H });
+  // saúde: a chave pública do projeto é aceita pela API do banco? (sem login, não lê dado nenhum)
+  if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) {
+    const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/profiles?select=id&limit=1`, { headers: { apikey: PUBLIC_KEY } }).catch(() => null);
+    return json({ ok: r?.status === 200, key: PUBLIC_KEY.startsWith('sb_publishable_') ? 'publishable' : 'anon' });
+  }
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
   try {
     const auth = req.headers.get('authorization') ?? '';
     if (!auth.startsWith('Bearer ')) return json({ error: 'Faça login' }, 401);
-    const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
+    const sb = createClient(Deno.env.get('SUPABASE_URL')!, PUBLIC_KEY, { global: { headers: { Authorization: auth } }, auth: { persistSession: false } });
     const { data: u, error: ue } = await sb.auth.getUser(auth.slice(7));
     if (ue || !u?.user) return json({ error: 'Sessão inválida, entre de novo' }, 401);
     const { data: quota, error: qe } = await sb.rpc('ai_consume');

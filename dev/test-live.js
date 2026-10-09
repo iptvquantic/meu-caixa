@@ -14,6 +14,7 @@ const cats = [
 ];
 const profile = { id: user.id, email: user.email, plan: 'trial', plan_expiry: new Date(Date.now() + 15 * 864e5).toISOString(), active: true, settings: {} };
 const seen = [];
+let waLinked = false; // o robô conectou o número?
 
 (async () => {
   const br = await launch();
@@ -43,6 +44,12 @@ const seen = [];
         return J([]);
       }
       if (path.startsWith('/functions/v1/ai')) return J({ reply: 'Resposta da IA com seus números.', usage: { count: 1, limit: 40 } });
+      if (path.startsWith('/functions/v1/whatsapp?info=1')) return J({ configured: true, number: '15550100000' });
+      if (path.startsWith('/rest/v1/rpc/wa_link_start')) return J({ code: '12345678', expires_at: new Date(Date.now() + 15 * 60000).toISOString() });
+      if (path.startsWith('/rest/v1/wa_links')) {
+        if (m === 'DELETE') { waLinked = false; return r.respond({ status: 204, headers: cors, body: '' }); }
+        return J(waLinked ? [{ phone: '5522991110001', created_at: new Date().toISOString() }] : []);
+      }
       return J({ message: 'não simulado: ' + path }, 404);
     }
   });
@@ -60,7 +67,7 @@ const seen = [];
   await p.$eval('#auth-pass', e => { e.value = ''; }); await p.type('#auth-pass', 'segredo123');
   await p.click('#auth-submit'); await sleep(1500);
   ok(await p.$eval('#app', e => !e.hidden), 'login abre o app');
-  for (const t of ['transactions', 'profiles', 'categories', 'cards', 'recurring', 'goals']) ok(seen.some(s => s.startsWith('GET /rest/v1/' + t)), 'carrega ' + t + ' do Supabase');
+  for (const t of ['transactions', 'profiles', 'categories', 'cards', 'recurring', 'goals', 'wa_links']) ok(seen.some(s => s.startsWith('GET /rest/v1/' + t)), 'carrega ' + t + ' do Supabase');
   // lançar
   await p.click('#mnav .fab'); await sleep(300);
   await p.type('#tx-amount', '52,90'); await p.click('[data-act="txSave"]'); await sleep(800);
@@ -77,6 +84,19 @@ const seen = [];
   const ai = seen.find(s => s.startsWith('POST /functions/v1/ai'));
   ok(ai && /"messages"/.test(ai), 'IA chamada pela função do Supabase');
   ok(await p.$eval('#chat', e => /Resposta da IA/.test(e.textContent)), 'resposta da IA aparece no chat');
+  // robô do WhatsApp: conectar com código, a tela atualiza sozinha, desconectar
+  await p.evaluate(() => document.querySelector('#mnav [data-page="more"]').click()); await sleep(200);
+  await p.evaluate(() => document.querySelector('#page [data-act="go"][data-page="settings"]').click()); await sleep(300);
+  ok(await p.$eval('#page', e => /Lançar pelo WhatsApp/.test(e.textContent) && !!e.querySelector('[data-act="waStart"]')), 'Ajustes: botão para conectar o WhatsApp (robô no ar)');
+  await p.click('[data-act="waStart"]'); await sleep(400);
+  ok(seen.some(s => s.startsWith('POST /rest/v1/rpc/wa_link_start')), 'código pedido ao banco');
+  ok(await p.$eval('#page', e => /MC 1234 5678/.test(e.textContent)), 'código aparece na tela');
+  ok(await p.$eval('#page a[href^="https://wa.me/15550100000?text=MC%2012345678"]', a => a.target === '_blank').catch(() => false), 'Abrir WhatsApp já leva o código escrito para o número do robô');
+  waLinked = true; await sleep(4600);
+  ok(await p.$eval('#page', e => /Conectado ao número \+55 \(22\) 99111-0001/.test(e.textContent)), 'quando o robô conecta, a tela atualiza sozinha');
+  ok(await p.$eval('#toast-root', e => /WhatsApp conectado/.test(e.textContent)), 'avisa que conectou');
+  await p.click('[data-act="waUnlink"]'); await sleep(400);
+  ok(seen.some(s => s.startsWith('DELETE /rest/v1/wa_links')) && await p.$eval('#page', e => !!e.querySelector('[data-act="waStart"]')), 'desconectar apaga a ligação e volta ao botão de conectar');
   ok(errs.length === 0, 'sem erros de JavaScript' + (errs.length ? ': ' + errs.join(' | ').slice(0, 300) : ''));
   await br.close();
   done();

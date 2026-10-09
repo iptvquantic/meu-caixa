@@ -2,55 +2,7 @@
 -- Roda numa transação e desfaz tudo no fim (não deixa rastro). Uso: ver test-db.sh.
 -- Pessoas do teste:  A = Ana (teste grátis válido)   B = Bia (outra cliente)   E = Edu (plano vencido)
 --                    F = Fabi (conta desativada)      M = dono (master, data de validade passada)
-\set ON_ERROR_STOP 1
-\if :{?fase}
-\else
-  \set fase 'atual'
-\endif
-\o /dev/null
-begin;
-set local client_min_messages = warning;
-
--- ---------- ferramentas do teste ----------
-create schema t;
-grant usage on schema t to anon, authenticated;
-create table t.results (n serial primary key, ok boolean not null, msg text not null);
-create table t.ids (k text primary key, v uuid not null);
-
-create function t.ok(cond boolean, msg text) returns void
-language plpgsql security definer set search_path = pg_catalog as $$
-begin insert into t.results (ok, msg) values (coalesce(cond, false), msg); end $$;
-
-create function t.id(key text) returns uuid
-language sql stable security definer set search_path = pg_catalog as $$ select v from t.ids where k = key $$;
-
-create function t.login(uid uuid) returns void language plpgsql as $$
-begin perform set_config('request.jwt.claims', json_build_object('sub', uid, 'role', 'authenticated')::text, false); end $$;
-
--- o comando tem que funcionar e afetar pelo menos 1 linha
-create function t.allowed(q text, msg text) returns void language plpgsql set search_path = public as $$
-declare n bigint;
-begin
-  execute q;
-  get diagnostics n = row_count;
-  perform t.ok(n > 0, msg || ' — não afetou nenhuma linha');
-exception when others then
-  perform t.ok(false, msg || ' — erro ' || sqlstate || ': ' || sqlerrm);
-end $$;
-
--- o comando tem que ser barrado: erro de permissão/regra/validação, ou não afetar nenhuma linha
-create function t.blocked(q text, msg text) returns void language plpgsql set search_path = public as $$
-declare n bigint;
-begin
-  execute q;
-  get diagnostics n = row_count;
-  perform t.ok(n = 0, msg || ' — passou e afetou ' || n || ' linha(s)');
-exception
-  when insufficient_privilege or check_violation or foreign_key_violation or unique_violation or not_null_violation then
-    perform t.ok(true, msg);
-  when others then
-    perform t.ok(false, msg || ' — erro inesperado ' || sqlstate || ': ' || sqlerrm);
-end $$;
+\ir _inicio.sql
 
 -- ---------- cadastro: perfil, teste grátis e categorias criados pelo servidor ----------
 insert into auth.users (id, email) values
@@ -78,11 +30,11 @@ insert into public.recurring (type, name, amount, day, start_month) values ('out
 insert into public.goals (kind, name, amount) values ('save', 'Reserva da Bia', 5000);
 reset role;
 insert into t.ids
-  select 'b_card', id from public.cards where name = 'Cartão da Bia'
-  union all select 'b_cat', id from public.categories where user_id = 'b0000000-0000-4000-8000-000000000002' and kind = 'out' and legacy_key = 'mercado'
-  union all select 'b_tx', id from public.transactions where description = 'gasto da Bia'
-  union all select 'b_rec', id from public.recurring where name = 'Aluguel da Bia'
-  union all select 'b_goal', id from public.goals where name = 'Reserva da Bia';
+  select 'b_card', id::text from public.cards where name = 'Cartão da Bia'
+  union all select 'b_cat', id::text from public.categories where user_id = 'b0000000-0000-4000-8000-000000000002' and kind = 'out' and legacy_key = 'mercado'
+  union all select 'b_tx', id::text from public.transactions where description = 'gasto da Bia'
+  union all select 'b_rec', id::text from public.recurring where name = 'Aluguel da Bia'
+  union all select 'b_goal', id::text from public.goals where name = 'Reserva da Bia';
 select t.ok((select count(*) from t.ids) = 5, 'dados da Bia prontos para o teste');
 
 -- ---------- visitante sem login ----------
@@ -223,12 +175,5 @@ select t.ok(not exists (select 1 from pg_class c, unnest(array['select', 'insert
 select t.ok(not exists (select 1 from pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef
   and not exists (select 1 from unnest(p.proconfig) c where c like 'search_path=%')), 'funções com privilégio fixam o search_path');
 
--- ---------- resultado ----------
-\o
-\pset tuples_only on
-\pset format unaligned
-select '❌ ' || msg from t.results where not ok order by n;
-select format('%s segurança do banco (%s): %s ok, %s falha(s)', case when bool_and(ok) then '✅' else '❌' end, :'fase',
-  count(*) filter (where ok), count(*) filter (where not ok)) from t.results;
-do $$ begin if exists (select 1 from t.results where not ok) then raise exception 'segurança do banco com falhas'; end if; end $$;
-rollback;
+\set teste 'segurança do banco'
+\ir _fim.sql

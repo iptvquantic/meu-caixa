@@ -8,6 +8,8 @@ const OUT = path.join(__dirname, 'shots');
 fs.mkdirSync(OUT, { recursive: true });
 const html = appHtml({ demo: true });
 const openNew = async p => { const mobile = await p.evaluate(() => innerWidth < 900); await p.click(mobile ? '#mnav .fab' : '.top .btn.primary'); await sleep(300); };
+// mostra o painel do WhatsApp (com o número do robô, como na versão de verdade) e gera o código
+const waCode = async p => { await p.evaluate(() => { const M = window.__mc; M.Demo.db.wa = null; M.S.wa = null; M.S.waBot = { configured: true, number: '15550100000' }; M.render(); }); await sleep(100); await p.click('[data-act="waStart"]'); await sleep(250); await p.evaluate(() => document.querySelector('.wa-code').scrollIntoView({ block: 'center' })); await sleep(100); };
 const SHOTS = [];
 for (const theme of ['dark', 'light', 'cyber']) {
   SHOTS.push([`m360-home-${theme}`, { w: 360, h: 780, theme, page: 'home' }]);
@@ -25,7 +27,13 @@ SHOTS.push(
   ['m360-icone-cyber', { w: 360, h: 780, theme: 'cyber', page: 'cats', setup: async p => { await p.click('[data-act="editCat"][data-id]'); await sleep(250); await p.click('[data-act="ceIcon"]'); await sleep(250); await p.type('#pick-q', 'farm'); } }],
   ['d1280-bills-light', { w: 1280, h: 860, theme: 'light', page: 'bills' }],
   ['d1280-reports-dark', { w: 1280, h: 860, theme: 'dark', page: 'reports' }],
-  ['d1280-novo-light', { w: 1280, h: 860, theme: 'light', page: 'home', setup: async p => { await openNew(p); await p.type('#tx-quick', 'notebook 3.600 12x'); await p.click('[data-act="txQuick"]'); } }]
+  ['d1280-novo-light', { w: 1280, h: 860, theme: 'light', page: 'home', setup: async p => { await openNew(p); await p.type('#tx-quick', 'notebook 3.600 12x'); await p.click('[data-act="txQuick"]'); } }],
+  // robô do WhatsApp nos Ajustes: código para conectar e conectado
+  ['m360-whatsapp-dark', { w: 360, h: 780, theme: 'dark', page: 'settings', setup: waCode }],
+  ['m390-whatsapp-light', { w: 390, h: 844, theme: 'light', page: 'settings', setup: waCode }],
+  ['m390-whatsapp-cyber', { w: 390, h: 844, theme: 'cyber', page: 'settings', setup: async p => { await waCode(p); await p.click('[data-act="waCheck"]'); await sleep(300); } }],
+  ['d1280-whatsapp-dark', { w: 1280, h: 860, theme: 'dark', page: 'settings', setup: waCode }],
+  ['d1280-whatsapp-light', { w: 1280, h: 860, theme: 'light', page: 'settings', setup: async p => { await waCode(p); await p.click('[data-act="waCheck"]'); await sleep(300); } }]
 );
 
 (async () => {

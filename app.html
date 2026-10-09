@@ -233,6 +233,11 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .cat span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .cat.add{border:1px dashed var(--border-strong);color:var(--muted)}
 .hint{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-2);background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:10px;padding:8px 10px;margin-top:8px}
+.wa-steps{margin:0 0 12px;padding-left:20px;display:grid;gap:4px;font-size:13.5px;color:var(--text-2)}
+.wa-code{font-size:clamp(24px,7vw,30px);font-weight:800;letter-spacing:.08em;text-align:center;padding:12px 10px;margin:0 0 12px;border:1px dashed var(--border-strong);border-radius:var(--r-md);background:var(--surface-2);color:var(--accent-ink);overflow-wrap:anywhere}
+.wa-ok{display:flex;align-items:center;gap:8px;margin-bottom:8px}.wa-ok .ico{color:var(--in);flex:none}
+.wa-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.wa-actions>:first-child{grid-column:1/-1}.wa-actions.two>:first-child{grid-column:auto}
+a.btn{text-decoration:none}
 .hint .link{margin-left:auto;padding:0}
 .newcat{display:flex;gap:8px;align-items:center;margin-top:8px}
 .newcat .input{flex:1}
@@ -420,7 +425,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.1.1',
+  version: '2.2.0',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -585,7 +590,8 @@ function parseAmountBR(s) {
   return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
 }
 function parseQuick(text, today) {
-  const raw = String(text || '').trim();
+  // pontuação de frase ("…uber ontem.", "uber, ontem") não atrapalha; "3.600" e "52,90" continuam valores
+  const raw = String(text || '').replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim();
   if (!raw) return null;
   const n = norm(raw);
   const out = { type: 'out', amount: null, installments: 1, date: today, description: '', investKind: null };
@@ -619,7 +625,8 @@ function parseQuick(text, today) {
     .replace(parcRx, ' ')
     .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ')
     .replace(/\b(r\$|reais|real|ontem|anteontem|hoje|no cart[aã]o|cart[aã]o|cr[eé]dito|no cr[eé]dito|parcelado|em|de|no|na|com|gastei|paguei|comprei|recebi|recebido|ganhei|apliquei|investi|resgatei|aporte|resgate|pix)\b/gi, ' ')
-    .replace(/\s+/g, ' ').trim();
+    .replace(/\s+/g, ' ').trim()
+    .replace(/^(do|da|dos|das|pro|pra|pelo|pela)\s+/i, '');
   out.description = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
   return out.amount ? out : null;
 }
@@ -716,7 +723,8 @@ const S = {
   mode: 'demo', user: null, profile: null,
   cats: [], cards: [], txs: [], recs: [], goals: [], catMap: {}, cardMap: {}, recMap: {},
   month: monthKey(new Date()), page: 'home', filter: 'all', q: '', catTab: 'out',
-  chat: [], aiBusy: false
+  chat: [], aiBusy: false,
+  wa: null, waBot: null, waCode: null, waTimer: null
 };
 const settings = () => Object.assign({ theme: 'dark', cardMode: 'invoice', pixKey: '' }, S.profile?.settings || {});
 // Recursos que o usuário pode ligar/desligar (padrão: ligados). Desligar só esconde; nada é apagado.
@@ -923,7 +931,16 @@ const Live = {
       this.q(sb.from('recurring').select('*').order('day')),
       this.q(sb.from('goals').select('*').order('created_at'))
     ]);
-    return { profile, cats, cards, txs, recs, goals };
+    const wa = await this.waLink();
+    return { profile, cats, cards, txs, recs, goals, wa };
+  },
+  // robô do WhatsApp: número conectado, código para conectar e se o robô está no ar
+  async waLink() { try { return await this.q(this.sb.from('wa_links').select('phone,created_at').maybeSingle()); } catch { return null; } },
+  waStart() { return this.q(this.sb.rpc('wa_link_start')); },
+  waUnlink() { return this.q(this.sb.from('wa_links').delete().eq('user_id', S.user.id)); },
+  async waBot() {
+    try { const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${CFG.waFunction || 'whatsapp'}?info=1`); return r.ok ? await r.json() : { configured: false }; }
+    catch { return { configured: false }; }
   },
   addTx(row) { return this.q(this.sb.from('transactions').insert(row).select().single()); },
   updateTx(id, row) { return this.q(this.sb.from('transactions').update(row).eq('id', id).select().single()); },
@@ -1041,6 +1058,11 @@ const Demo = {
   async signOut() { },
   reseed() { this.db = demoSeed(); this.save(); },
   async loadAll() { return JSON.parse(JSON.stringify(this.db)); },
+  async waLink() { return this.db.wa ? JSON.parse(JSON.stringify(this.db.wa)) : null; },
+  async waStart() { return { code: String(10000000 + Math.floor(Math.random() * 90000000)), expires_at: new Date(Date.now() + 15 * 60000).toISOString() }; },
+  async waUnlink() { this.db.wa = null; this.save(); },
+  async waBot() { return { configured: true, number: null, demo: true }; },
+  waDemoLink() { this.db.wa = { phone: '5522999990000', created_at: new Date().toISOString() }; this.save(); },
   _ins(list, row) { const r = { id: uid(), created_at: new Date().toISOString(), ...row }; this.db[list].push(r); this.save(); return JSON.parse(JSON.stringify(r)); },
   _upd(list, id, row) { const r = this.db[list].find(x => x.id === id); if (!r) throw new Error('não encontrado'); Object.assign(r, row); this.save(); return JSON.parse(JSON.stringify(r)); },
   _del(list, id) { this.db[list] = this.db[list].filter(x => x.id !== id); this.save(); },
@@ -1400,6 +1422,7 @@ function pageSettings() {
     <div class="panel"><h2>${ico('settings')}Recursos do app</h2>
       <label class="check"><input type="checkbox" data-act="feature" data-k="goals"${feat('goals') ? ' checked' : ''}><span><b>Metas</b><small>Limite de gastos por categoria, faturamento do mês e objetivos.</small></span></label>
       <label class="check"><input type="checkbox" data-act="feature" data-k="bills"${feat('bills') ? ' checked' : ''}><span><b>Contas fixas</b><small>A pagar, a receber, cobrança no WhatsApp e lançamento automático.</small></span></label>
+      <label class="check"><input type="checkbox" data-act="feature" data-k="whatsapp"${feat('whatsapp') ? ' checked' : ''}><span><b>Robô do WhatsApp</b><small>Lançar e consultar mandando mensagem ou áudio.</small></span></label>
       <p class="c-muted" style="font-size:12.5px;margin-top:6px">Desligar só esconde o recurso. Nada é apagado: ao religar, tudo volta como estava.</p>
     </div>
     <div class="panel"><h2>${ico('credit-card')}Cartão no saldo do mês</h2>
@@ -1411,12 +1434,13 @@ function pageSettings() {
     </div>
     <div class="panel"><h2>${ico('user')}Perfil</h2>
       <label class="field"><span>Seu nome</span><input class="input" id="set-name" maxlength="80" value="${esc(p.name || '')}" placeholder="Como quer ser chamado"></label>
-      <label class="field"><span>WhatsApp (para lançar por mensagem, em breve)</span><input class="input" id="set-wa" inputmode="numeric" maxlength="13" value="${esc(p.whatsapp || '')}" placeholder="DDD + número, só números"></label>
+      <label class="field"><span>Seu WhatsApp (contato)</span><input class="input" id="set-wa" inputmode="numeric" maxlength="13" value="${esc(p.whatsapp || '')}" placeholder="DDD + número, só números"></label>
       <label class="field"><span>Sua chave PIX (vai junto nas cobranças)</span><input class="input" id="set-pix" maxlength="77" value="${esc(st.pixKey || '')}" placeholder="E-mail, celular, CPF/CNPJ ou chave aleatória" autocomplete="off"></label>
       <button class="btn sm" data-act="saveProfile">Salvar perfil</button>
     </div>
   </div>
   <div class="stack">
+    ${waPanel()}
     ${installRow()}
     <div class="panel"><h2>${ico('download')}Seus dados</h2><div class="setlist">
       <button class="setrow" data-act="exportJSON">${tile('i:download', '#3b82f6', 'sm')}<span class="tx-main"><b>Baixar backup</b><small>Arquivo com todos os lançamentos, categorias e cartões</small></span></button>
@@ -1433,6 +1457,46 @@ function pageSettings() {
       : `<button class="btn danger" data-act="logout">${ico('log-out')}Sair da conta</button>`}
     <p class="c-muted" style="font-size:12px">Meu Caixa ${esc(CFG.version || '')}</p>
   </div></div>`;
+}
+// ---------- robô do WhatsApp (Ajustes) ----------
+function fmtPhone(p) {
+  const d = String(p || '').replace(/\D/g, '');
+  if (/^55\d{10,11}$/.test(d)) { const n = d.slice(4); return `+55 (${d.slice(2, 4)}) ${n.length === 9 ? n.slice(0, 5) + '-' + n.slice(5) : n.slice(0, 4) + '-' + n.slice(4)}`; }
+  return d ? '+' + d : '';
+}
+function waPanel() {
+  if (!feat('whatsapp') || !S.waBot) return '';
+  const bot = S.waBot, head = `<h2>${ico('message-circle')}Lançar pelo WhatsApp</h2>`;
+  if (!bot.configured) return S.mode === 'live' && ['master', 'admin'].includes(S.profile?.plan)
+    ? `<div class="panel">${head}<p class="c-muted" style="font-size:13px">O robô ainda não está no ar: faltam os segredos do WhatsApp no Supabase (só você, dono, vê este aviso).</p></div>` : '';
+  if (S.wa) return `<div class="panel">${head}
+    <p class="wa-ok">${ico('check')}<span>Conectado ao número <b style="white-space:nowrap">${esc(fmtPhone(S.wa.phone))}</b></span></p>
+    <p class="c-muted" style="font-size:13px;margin-bottom:12px">Mande <b>mercado 52,90</b>, <b>recebi 300 pix</b>, <b>notebook 3.600 12x</b>, <b>paguei aluguel</b> ou um <b>áudio</b>. Para consultar: <b>saldo</b>, <b>fatura</b>, <b>contas</b>, <b>metas</b>. Errou? <b>desfazer</b>.</p>
+    <div class="wa-actions${bot.number ? ' two' : ''}">${bot.number ? `<a class="btn sm primary" href="https://wa.me/${esc(bot.number)}" target="_blank" rel="noopener">${ico('message-circle')}Abrir conversa</a>` : ''}<button class="btn sm" data-act="waUnlink">Desconectar</button></div></div>`;
+  if (S.waCode) {
+    const c = S.waCode.code, link = bot.number ? `https://wa.me/${bot.number}?text=${encodeURIComponent('MC ' + c)}` : '';
+    return `<div class="panel">${head}
+      <ol class="wa-steps"><li>Toque em <b>Abrir WhatsApp</b>: a mensagem com o código já vai escrita.</li><li>Envie. O robô responde e esta tela atualiza sozinha.</li></ol>
+      <p class="wa-code num" aria-label="Código MC ${esc(c.split('').join(' '))}">MC ${esc(c.slice(0, 4))} ${esc(c.slice(4))}</p>
+      <div class="wa-actions">${link ? `<a class="btn primary" href="${esc(link)}" target="_blank" rel="noopener">${ico('message-circle')}Abrir WhatsApp</a>` : `<button class="btn primary" data-act="waOpen">${ico('message-circle')}Abrir WhatsApp</button>`}<button class="btn sm" data-act="waCopy">${ico('copy')}Copiar código</button><button class="btn sm" data-act="waCheck">Já enviei</button></div>
+      <p class="c-muted" style="font-size:12.5px;margin-top:8px">O código vale 15 minutos e só funciona uma vez.</p></div>`;
+  }
+  return `<div class="panel">${head}
+    <p class="c-muted" style="font-size:13px;margin-bottom:12px">Mande <b>mercado 52,90</b> ou um <b>áudio</b> e o lançamento entra aqui na hora. O robô também responde saldo, fatura, contas e suas perguntas.</p>
+    <button class="btn sm primary" data-act="waStart">${ico('message-circle')}Conectar meu WhatsApp</button></div>`;
+}
+const waStop = () => { clearInterval(S.waTimer); S.waTimer = null; };
+async function waRefresh(manual) {
+  const row = await api.waLink();
+  if (row) { S.wa = row; S.waCode = null; waStop(); if (S.page === 'settings') render(); toast('WhatsApp conectado!'); }
+  else if (manual) toast('Ainda não chegou. Envie a mensagem com o código e espere alguns segundos.');
+}
+function waPoll() {
+  if (S.waTimer) return;
+  S.waTimer = setInterval(() => {
+    if (!S.waCode || Date.now() > Date.parse(S.waCode.expires_at)) { waStop(); if (S.waCode) { S.waCode = null; if (S.page === 'settings') render(); toast('O código venceu. Gere outro quando quiser.'); } return; }
+    if (!document.hidden) waRefresh(false).catch(() => {});
+  }, 4000);
 }
 function pageMore() {
   const row = (page, icon, color, title, sub) => `<button class="setrow" data-act="go" data-page="${page}">${tile('i:' + icon, color)}<span class="tx-main"><b>${title}</b><small>${sub}</small></span>${ico('chevron-right')}</button>`;
@@ -2362,7 +2426,16 @@ const ACT = {
   goalKind: el => { GE.kind = el.dataset.k; GE.category_id = null; updGe(); },
   goalSave: () => saveGoal(),
   goalDelete: async () => { try { await api.deleteGoal(GE.id); S.goals = S.goals.filter(x => x.id !== GE.id); closeSheet(); render(); toast('Meta excluída'); } catch (e) { toast(errMsg(e)); } },
-  feature: el => { if (!S.profile) return; const k = el.dataset.k, f = { ...(settings().features || {}) }; f[k] = !feat(k); S.profile.settings = { ...settings(), features: f }; saveSettings(); render(); toast(`${k === 'goals' ? 'Metas' : 'Contas fixas'} ${f[k] ? 'ligadas' : 'desligadas'}`); },
+  feature: el => {
+    if (!S.profile) return; const k = el.dataset.k, f = { ...(settings().features || {}) }; f[k] = !feat(k); S.profile.settings = { ...settings(), features: f }; saveSettings(); render();
+    const msg = { goals: ['Metas ligadas', 'Metas desligadas'], bills: ['Contas fixas ligadas', 'Contas fixas desligadas'], whatsapp: ['Robô do WhatsApp ligado', 'Robô do WhatsApp desligado'] }[k] || ['Ligado', 'Desligado'];
+    toast(f[k] ? msg[0] : msg[1]);
+  },
+  waStart: async () => { try { S.waCode = await api.waStart(); render(); waPoll(); } catch (e) { toast(errMsg(e)); } },
+  waOpen: () => toast('Na versão de verdade, abre o WhatsApp com o código já escrito.'),
+  waCopy: async () => { const t = 'MC ' + (S.waCode?.code || ''); try { await navigator.clipboard.writeText(t); toast('Código copiado'); } catch { toast(t); } },
+  waCheck: async () => { if (S.mode === 'demo') Demo.waDemoLink(); try { await waRefresh(true); } catch (e) { toast(errMsg(e)); } },
+  waUnlink: async () => { try { await api.waUnlink(); S.wa = null; S.waCode = null; waStop(); render(); toast('WhatsApp desconectado'); } catch (e) { toast(errMsg(e)); } },
   install: () => doInstall(),
   installLater: () => { store.set('mc_install_dismiss', Date.now()); render(); },
   aiAsk: el => sendAI(el.dataset.q),
@@ -2383,7 +2456,7 @@ function trapFocus(e) {
 }
 
 /* ===================== início ===================== */
-const useData = d => { S.profile = d.profile; S.cats = d.cats || []; S.cards = d.cards || []; S.txs = (d.txs || []).map(normTx); S.recs = d.recs || []; S.goals = d.goals || []; indexData(); };
+const useData = d => { S.profile = d.profile; S.cats = d.cats || []; S.cards = d.cards || []; S.txs = (d.txs || []).map(normTx); S.recs = d.recs || []; S.goals = d.goals || []; S.wa = d.wa || null; indexData(); };
 function showApp() { $('#boot').hidden = true; $('#auth').hidden = true; $('#blocked').hidden = true; $('#app').hidden = false; }
 // Abre na hora com a última cópia guardada (e atualiza assim que o servidor responder)
 function instantStart() {
@@ -2411,6 +2484,7 @@ async function startApp() {
   showApp();
   const p = store.get('mc_page', 'home'); S.page = PAGES[p] && pageOn(p) ? p : 'home';
   render();
+  if (!S.offline) api.waBot().then(b => { S.waBot = b; if (S.page === 'settings') render(); });
   if (!isBlocked() && !S.offline) { const made = await autoRecurring().catch(() => 0); if (made) { render(); toast(`${made} conta${made > 1 ? 's' : ''} fixa${made > 1 ? 's' : ''} lançada${made > 1 ? 's' : ''} automaticamente`); } }
   if (/[?&]novo=1\b/.test(location.search)) { history.replaceState(null, '', location.pathname); setTimeout(() => openTx(), 300); }
   else if (S.mode === 'live' && !S.txs.some(t => t.legacy_ts) && hasLegacyTraces() && !store.get('mc_mig_dismiss', false)) setTimeout(() => openMigration(true), 700);

@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PRODUCAO=02   # última migração já aplicada na produção — atualizar ao aplicar uma nova
+PRODUCAO=03   # última migração já aplicada na produção — atualizar ao aplicar uma nova
 DB=${MC_TEST_DB:-meucaixa_test}
 
 # Postgres local: no container da sessão, liga o servidor e cria o usuário se precisar
@@ -25,6 +25,8 @@ fi
 export PGOPTIONS='-c client_min_messages=warning'
 run() { psql -X -q -v ON_ERROR_STOP=1 -d "$DB" "$@"; }
 apply() { run -f "$1" >/dev/null && echo "   aplicado: $1"; }
+# testes de segurança: o geral e os de cada recurso (cada um pula sozinho se a migração dele ainda não entrou)
+seguranca() { run -v fase="$1" -f test/rls.sql; for f in test/rls_*.sql; do run -v fase="$1" -f "$f"; done; }
 
 dropdb --if-exists "$DB" && createdb "$DB"
 echo "1) produção hoje (schema + migrações até $PRODUCAO)"
@@ -35,7 +37,7 @@ for m in migrations/*.sql; do
   n=$(basename "$m" | cut -d_ -f1)
   if [[ "$n" > "$PRODUCAO" ]]; then NOVAS+=("$m"); else apply "$m"; fi
 done
-run -v fase="produção hoje" -f test/rls.sql
+seguranca "produção hoje"
 
 echo "2) cliente com histórico"
 run -f test/dados.sql
@@ -43,7 +45,7 @@ run -f test/dados.sql
 echo "3) migrações novas: ${#NOVAS[@]}"
 for m in "${NOVAS[@]}"; do
   apply "$m"
-  run -v fase="após $(basename "$m" .sql)" -f test/rls.sql
+  seguranca "após $(basename "$m" .sql)"
 done
 run -f test/confere.sql
 run -f test/estrutura.sql
@@ -52,6 +54,6 @@ echo "4) tudo de novo (idempotente)"
 apply schema.sql
 for m in migrations/*.sql; do apply "$m"; done
 run -f test/confere.sql
-run -v fase="rodando tudo de novo" -f test/rls.sql
+seguranca "rodando tudo de novo"
 run -f test/estrutura.sql
 echo "✅ banco: tudo certo"

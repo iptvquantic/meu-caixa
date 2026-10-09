@@ -1,5 +1,14 @@
 # Histórico de versões
 
+## 2.2.0 — 09/10/2026
+- Robô do WhatsApp: lançar mandando mensagem ou áudio ("mercado 52,90", "recebi 300 pix", "notebook 3.600 12x",
+  "uber 23 ontem"), marcar conta fixa ("paguei aluguel"), desfazer, consultar saldo, fatura, contas e metas, e
+  perguntar qualquer coisa à IA. Conecta em Ajustes → WhatsApp com um código; dá para desligar em Ajustes.
+  Um número conectado só passa para outra conta depois de desconectado; "desfazer" vale até 30 minutos.
+- Lançamento rápido entende pontuação ("uber 23 ontem.", "uber, ontem, 23") também no app.
+- Botões que abrem links não aparecem mais sublinhados.
+- IA preparada para a chave nova do Supabase (a chave antiga deixa de funcionar no fim de 2026).
+
 ## 2.1.1 — 09/10/2026
 - Backup corrigido: restaurar na mesma conta não duplica lançamentos; restaurar numa conta nova traz
   tudo — lançamentos, cartões (cada compra no cartão certo), contas fixas, metas, categorias com ícone
