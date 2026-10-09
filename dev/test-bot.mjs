@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';
 import { answer, matchCategory, MSG } from './supabase/functions/whatsapp/bot.ts';
-import { handle, messagesOf, signatureOk } from './supabase/functions/whatsapp/handler.ts';
+import { handle, messagesOf, resetPhoneCache, signatureOk } from './supabase/functions/whatsapp/handler.ts';
 import { groq, toQuick } from './supabase/functions/whatsapp/groq.ts';
 
 const require = createRequire(import.meta.url);
@@ -299,6 +299,7 @@ const cfg = { verifyToken: 'mc-verifica', appSecret: SECRET, phoneId: PHONE_ID, 
 const sign = (body) => 'sha256=' + createHmac('sha256', SECRET).update(body).digest('hex');
 const payload = (msgs, phoneId = PHONE_ID, extra = {}) => JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: 'w', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: phoneId }, messages: msgs, ...extra } }] }] });
 function handlerDeps(over = {}) {
+  resetPhoneCache();
   const graphCalls = [], botCalls = [], seen = new Set();
   const d = {
     cfg, log: () => {},
@@ -339,6 +340,10 @@ function handlerDeps(over = {}) {
   ok(graphCalls.some((c) => c.body?.status === 'read' && c.body.message_id === 'wamid.1'), 'marca como lida');
   r = await handle(new Request('https://x/', { method: 'POST', body, headers: { 'x-hub-signature-256': sign(body) } }), d);
   ok(botCalls.length === 1, 'mesma mensagem reenviada pela Meta não é processada 2x');
+  const viaWaba = handlerDeps({ cfg: { ...cfg, phoneId: 'waba-1' } });
+  const wabaBody = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: 'waba-1', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: PHONE_ID }, messages: [{ from: PHONE, id: 'wamid.w1', type: 'text', text: { body: 'saldo' } }] } }] }] });
+  await handle(new Request('https://x/', { method: 'POST', body: wabaBody, headers: { 'x-hub-signature-256': sign(wabaBody) } }), viaWaba.d);
+  ok(viaWaba.botCalls.length === 1 && viaWaba.graphCalls.some((c) => c.body?.type === 'text' && c.path === `${PHONE_ID}/messages`), 'ID da conta configurado: mensagem aceita e resposta sai pelo número que recebeu');
   const other = payload([{ from: PHONE, id: 'wamid.2', type: 'text', text: { body: 'oi' } }], '999');
   await handle(new Request('https://x/', { method: 'POST', body: other, headers: { 'x-hub-signature-256': sign(other) } }), d);
   ok(botCalls.length === 1, 'aviso de outro número da Meta é ignorado');
@@ -382,7 +387,11 @@ function metaFake(state = {}) {
     const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s });
     // chave secreta errada: a Meta recusa toda chamada com a prova; sem a prova só se o app não exigir
     if (st.proofErr && (proof || st.appNeedsProof)) return j({ error: { message: 'Invalid appsecret_proof provided in the API argument', type: 'GraphMethodException', code: 100 } }, 400);
+    const noField = (f) => j({ error: { message: `(#100) Tried accessing nonexisting field (${f})`, type: 'OAuthException', code: 100 } }, 400);
     if (p === PHONE_ID) return st.phoneErr ? j({ error: st.phoneErr }, 400) : j({ display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa', quality_rating: 'GREEN' });
+    if ((p === '555' || p === '777') && /display_phone_number/.test(q.get('fields') || '')) return noField('display_phone_number'); // conta (WABA) e app não são números
+    if (p === '555/phone_numbers' && /verified_name/.test(q.get('fields') || '')) return j({ data: [{ id: PHONE_ID, display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa' }] });
+    if (p === '777/phone_numbers') return noField('phone_numbers');
     if (p === 'app') return j({ id: '777', name: 'Meu Caixa' });
     if (p === '777' && method === 'GET') return st.secretOk ? j({ id: '777' }) : j({ error: { message: 'Error validating client secret.', type: 'OAuthException', code: 1 } }, 400);
     if (p === 'debug_token') return j({ data: { app_id: '777', is_valid: st.valid, expires_at: st.expires, granular_scopes: st.scopes } });
@@ -403,6 +412,14 @@ function metaFake(state = {}) {
   const SELF = 'https://proj.supabase.co/functions/v1/whatsapp';
   const setupReq = (jwt) => new Request('https://x/functions/v1/whatsapp?setup=1', { method: 'POST', headers: { origin: 'https://iptvquantic.github.io', ...(jwt ? { authorization: 'Bearer ' + jwt } : {}) } });
   const run = async (m, over = {}) => { const { d } = handlerDeps({ cfg: { ...cfg, selfUrl: SELF }, graph: m.graph, isAdmin: async (t) => t === 'jwt-dono', ...over }); const r = await handle(setupReq('jwt-dono'), d); return { r, rep: await r.json() }; };
+  // WHATSAPP_PHONE_ID com o ID da conta (WABA) no lugar do número — o caso do dono em 09/10: funciona e avisa
+  const wabaCase = metaFake(), w1 = (await run(wabaCase, { cfg: { ...cfg, selfUrl: SELF, phoneId: '555' } })).rep;
+  ok(w1.ok && w1.number === '5522999990000' && w1.phoneId === PHONE_ID && wabaCase.st.subscribedWaba === '555', 'ID da conta no lugar do número: descobre o número, ativa e inscreve a conta: ' + JSON.stringify(w1));
+  has(w1.message, `troque esse segredo pelo ID do número: ${PHONE_ID}`, '... e diz qual ID colocar');
+  const w2 = (await run(metaFake(), { cfg: { ...cfg, selfUrl: SELF, phoneId: '777' } })).rep;
+  ok(!w2.ok && w2.phones?.[0]?.id === PHONE_ID, 'ID de outra coisa (app): procura os números do token: ' + JSON.stringify(w2.phones));
+  has(w2.message, `Troque esse segredo por: ${PHONE_ID} (número +5522999990000)`, '... e diz o ID certo');
+  ok(w2.fix?.secrets?.endsWith('/functions/secrets'), '... com o link dos segredos');
   const m = metaFake();
   const { d } = handlerDeps({ cfg: { ...cfg, selfUrl: SELF }, graph: m.graph, isAdmin: async (t) => t === 'jwt-dono' });
   let r = await handle(setupReq(null), d); ok(r.status === 403 && m.calls.length === 0, 'ativação sem login: recusada sem falar com a Meta');
