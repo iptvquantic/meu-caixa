@@ -20,7 +20,7 @@ export type HandlerDeps = {
   random?: () => number;                                        // só para o teste forçar a limpeza
   log?: (...a: unknown[]) => void;
 };
-export type WaMsg = { id: string; from: string; type: string; text?: string; audioId?: string; to?: string }; // to = ID do número que recebeu
+export type WaMsg = { id: string; from: string; type: string; text?: string; audioId?: string; to?: string; waba?: string }; // to = número que recebeu; waba = conta
 
 const enc = new TextEncoder();
 const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16).padStart(2, '0')).join('');
@@ -50,7 +50,7 @@ export function messagesOf(payload: any, phoneId: string): WaMsg[] {
       const text = m.type === 'text' ? m.text?.body
         : m.type === 'button' ? m.button?.text
         : m.type === 'interactive' ? (m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title) : undefined;
-      out.push({ id: String(m.id), from, type: String(m.type), text: typeof text === 'string' ? text.slice(0, 2000) : undefined, audioId: m.type === 'audio' ? m.audio?.id : undefined, to });
+      out.push({ id: String(m.id), from, type: String(m.type), text: typeof text === 'string' ? text.slice(0, 2000) : undefined, audioId: m.type === 'audio' ? m.audio?.id : undefined, to, waba: e?.id ? String(e.id) : undefined });
     }
   }
   return out;
@@ -58,9 +58,11 @@ export function messagesOf(payload: any, phoneId: string): WaMsg[] {
 const kindOf = (t: string): Incoming['kind'] =>
   t === 'audio' ? 'audio' : t === 'text' || t === 'button' || t === 'interactive' ? 'text' : t === 'image' || t === 'document' || t === 'video' ? 'image' : 'other';
 
-// Responde pelo mesmo número que recebeu (from); sem ele, pelo número configurado
+// Responde pelo mesmo número que recebeu (from); sem ele, pelo número do robô
 export async function sendText(d: HandlerDeps, to: string, body: string, from?: string) {
-  const r = await d.graph(`${from || (await resolvePhone(d).catch(() => null))?.id || d.cfg.phoneId}/messages`, {
+  const via = from || (await resolvePhone(d).catch(() => null))?.id || (isId(d.cfg.phoneId) ? d.cfg.phoneId : '');
+  if (!via) { d.log?.('envio: número do robô desconhecido'); return false; }
+  const r = await d.graph(`${via}/messages`, {
     method: 'POST',
     body: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to, type: 'text', text: { body: body.slice(0, 4096), preview_url: false } }),
   });
@@ -70,7 +72,8 @@ export async function sendText(d: HandlerDeps, to: string, body: string, from?: 
 // "visto" + "digitando…" enquanto o robô pensa (se a Meta recusar o "digitando", fica só o visto)
 async function markRead(d: HandlerDeps, id: string, from?: string) {
   try {
-    const base = { messaging_product: 'whatsapp', status: 'read', message_id: id }, via = from || d.cfg.phoneId;
+    const base = { messaging_product: 'whatsapp', status: 'read', message_id: id }, via = from || (isId(d.cfg.phoneId) ? d.cfg.phoneId : '');
+    if (!via) return;
     const r = await d.graph(`${via}/messages`, { method: 'POST', body: JSON.stringify({ ...base, typing_indicator: { type: 'text' } }) });
     if (!r.ok) await d.graph(`${via}/messages`, { method: 'POST', body: JSON.stringify(base) });
   } catch { /* não impede a resposta */ }
@@ -90,30 +93,63 @@ async function processOne(d: HandlerDeps, m: WaMsg) {
   if (reply) await sendText(d, m.from, reply, m.to);
 }
 
-// Número do robô. O WHATSAPP_PHONE_ID salvo às vezes é o ID da conta do WhatsApp (WABA), e não o do número
-// (os dois aparecem lado a lado na Meta): nesse caso descobre o número da conta, uma vez por instância.
-type Phone = { id: string; number: string; name: string; fromWaba: boolean };
+// Número do robô. O WHATSAPP_PHONE_ID salvo pode estar errado (é comum colar o ID da conta do WhatsApp ou outro valor
+// da Meta): o robô descobre o número pela conta ou pelo próprio token, uma vez por instância, e funciona assim mesmo;
+// a ativação diz ao dono qual ID colocar. Valor que não é ID (só algarismos) nunca vai para a Meta nem para os registros.
+type Phone = { id: string; number: string; name: string; waba?: string; how: 'configurado' | 'conta' | 'token' };
 const phoneCache = new Map<string, Phone>();
 export const resetPhoneCache = () => phoneCache.clear(); // testes
 const digits = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+const isId = (v: unknown) => /^\d{1,20}$/.test(String(v ?? '')); // só algarismos: seguro mandar para a Meta
+const phoneOf = (n: any, how: Phone['how'], waba?: string): Phone => ({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? ''), waba, how });
+// Números que o token enxerga: contas do WhatsApp liberadas para ele → números de cada conta
+async function phonesOfToken(d: HandlerDeps): Promise<Phone[]> {
+  const c = d.cfg, appId = String((await gj(d, 'app')).id ?? '');
+  const dbg = (await gj(d, `debug_token?input_token=${encodeURIComponent(c.token)}`, undefined, `${appId}|${c.appSecret}`)).data ?? {};
+  const wabas = [...new Set<string>([c.wabaId, ...(dbg.granular_scopes ?? []).filter((g: any) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
+    .flatMap((g: any) => g?.target_ids ?? [])].map(String).filter(isId))];
+  const out = new Map<string, Phone>();
+  for (const w of wabas.slice(0, 5)) for (const n of (await gj(d, `${w}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? []) if (!out.has(String(n.id))) out.set(String(n.id), phoneOf(n, 'token', w));
+  return [...out.values()];
+}
 export async function resolvePhone(d: HandlerDeps): Promise<Phone> {
-  const c = d.cfg, hit = phoneCache.get(c.phoneId);
+  const c = d.cfg, key = c.phoneId || '-', hit = phoneCache.get(key);
   if (hit) return hit;
-  let ph: Phone;
-  try {
-    const r = await gj(d, `${c.phoneId}?fields=display_phone_number,verified_name`);
-    ph = { id: c.phoneId, number: digits(r.display_phone_number), name: String(r.verified_name ?? ''), fromWaba: false };
-  } catch (e) {
-    if (!(e instanceof GraphError) || !/nonexisting field/i.test(e.message)) throw e;
-    let list: any[];
-    try { list = (await gj(d, `${c.phoneId}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? []; }
-    catch { throw new GraphError('O WHATSAPP_PHONE_ID salvo não é o ID de um número nem de uma conta do WhatsApp.', -1); }
-    if (list.length !== 1) throw Object.assign(new GraphError(list.length ? 'várias' : 'nenhum número na conta', -2), { list });
-    ph = { id: String(list[0].id), number: digits(list[0].display_phone_number), name: String(list[0].verified_name ?? ''), fromWaba: true };
-    d.log?.('WHATSAPP_PHONE_ID é o ID da conta do WhatsApp; usando o número', ph.id);
+  let ph: Phone | null = null;
+  if (isId(c.phoneId)) {
+    try { ph = phoneOf({ ...(await gj(d, `${c.phoneId}?fields=display_phone_number,verified_name`)), id: c.phoneId }, 'configurado', c.wabaId || undefined); }
+    catch (e) {
+      if (e instanceof GraphError && (/appsecret_proof/i.test(e.message) || e.code === 190)) throw e; // chave ou token: o problema é outro
+      if (e instanceof GraphError && /nonexisting field/i.test(e.message)) { // o ID salvo é o da conta do WhatsApp?
+        const list: any[] = await gj(d, `${c.phoneId}/phone_numbers?fields=id,display_phone_number,verified_name`).then((r) => r.data ?? []).catch(() => []);
+        if (list.length === 1) ph = phoneOf(list[0], 'conta', c.phoneId);
+      }
+    }
   }
-  phoneCache.set(c.phoneId, ph);
+  if (!ph) {
+    let list: Phone[];
+    try { list = await phonesOfToken(d); }
+    catch (e) { throw Object.assign(new GraphError(`descoberta: ${e instanceof Error ? e.message : e}`, -3), { list: [] }); }
+    if (list.length !== 1) throw Object.assign(new GraphError(list.length ? 'vários números' : 'nenhum número', -2), { list });
+    ph = list[0];
+  }
+  if (ph.how !== 'configurado') d.log?.('WHATSAPP_PHONE_ID não é o ID do número; usando', ph.id, `(${ph.how})`);
+  phoneCache.set(key, ph);
   return ph;
+}
+// Que tipo de valor está no WHATSAPP_PHONE_ID (para o aviso do dono; nunca mostra o valor)
+const phoneIdHint = (c: Cfg) => !c.phoneId ? 'O WHATSAPP_PHONE_ID está vazio.'
+  : c.phoneId === c.appSecret ? 'No WHATSAPP_PHONE_ID foi colada a chave secreta do app, e não o ID do número.'
+  : c.phoneId === c.token ? 'No WHATSAPP_PHONE_ID foi colado o token, e não o ID do número.'
+  : c.phoneId === c.verifyToken ? 'No WHATSAPP_PHONE_ID foi colado o token de verificação, e não o ID do número.'
+  : !isId(c.phoneId) ? 'O WHATSAPP_PHONE_ID salvo não é um ID (o ID do número só tem algarismos).'
+  : 'O WHATSAPP_PHONE_ID salvo não é o ID do número.';
+// Quais números/contas este robô atende (vazio = não deu para conferir: aceita, a assinatura já garante que é do nosso app)
+async function allowedIds(d: HandlerDeps) {
+  const ids = new Set<string>();
+  for (const v of [d.cfg.phoneId, d.cfg.wabaId]) if (isId(v)) ids.add(v);
+  try { const ph = await resolvePhone(d); ids.add(ph.id); if (ph.waba) ids.add(ph.waba); } catch { return new Set<string>(); }
+  return ids;
 }
 async function botNumber(d: HandlerDeps) {
   try { return (await resolvePhone(d)).number; } catch { return ''; }
@@ -182,7 +218,7 @@ async function secretHelp(d: HandlerDeps): Promise<Pick<SetupReport, 'message' |
 
 export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
   const c = d.cfg;
-  const missing = ([['WHATSAPP_TOKEN', c.token], ['WHATSAPP_PHONE_ID', c.phoneId], ['WHATSAPP_APP_SECRET', c.appSecret], ['WHATSAPP_VERIFY_TOKEN', c.verifyToken]] as const)
+  const missing = ([['WHATSAPP_TOKEN', c.token], ['WHATSAPP_APP_SECRET', c.appSecret], ['WHATSAPP_VERIFY_TOKEN', c.verifyToken]] as const)
     .filter(([, v]) => !v).map(([k]) => k);
   if (missing.length) return { ok: false, message: `Faltam segredos no Supabase (Edge Functions → Secrets): ${missing.join(', ')}.` };
   if (!c.selfUrl) return { ok: false, message: 'A função não sabe o próprio endereço (SUPABASE_URL).' };
@@ -216,7 +252,7 @@ export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
     step = 'ligar a conta do WhatsApp ao app';
     const ids = [...new Set<string>((dbg.granular_scopes ?? []).filter((g: any) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
       .flatMap((g: any) => g?.target_ids ?? []).map(String))];
-    let waba = c.wabaId || (ph.fromWaba ? c.phoneId : '') || (ids.length === 1 ? ids[0] : '');
+    let waba = c.wabaId || ph.waba || (ids.length === 1 ? ids[0] : '');
     for (const w of waba ? [] : ids) {
       const nums: any[] = (await gj(d, `${w}/phone_numbers?fields=id`)).data ?? [];
       if (nums.some((n) => String(n?.id) === ph!.id)) { waba = w; break; }
@@ -234,37 +270,27 @@ export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
     rep.message = rep.webhook === 'ativado' || rep.waba === 'ativado' ? 'Robô ativado na Meta agora.' : 'Robô ativo na Meta.';
     if (rep.waba === 'desconhecido') rep.message += ' Não consegui conferir a conta do WhatsApp (defina WHATSAPP_WABA_ID se as mensagens não chegarem).';
     if (rep.tokenExpires) rep.message += ` Atenção: o token vence em ${ddmmyyyy(rep.tokenExpires)}; gere um que não vence (usuário do sistema).`;
-    if (ph.fromWaba) {
+    if (ph.how !== 'configurado') {
       rep.phoneId = ph.id; rep.fix = { secrets: secretsPage(c) };
-      rep.message += ` O WHATSAPP_PHONE_ID salvo é o ID da conta do WhatsApp: já estou usando o número dela. Para deixar definitivo, troque esse segredo pelo ID do número: ${ph.id}.`;
+      rep.message += ` ${phoneIdHint(c)} Já estou usando o número da sua conta (+${ph.number}); para deixar definitivo, troque esse segredo pelo ID do número: ${ph.id}.`;
     }
   } catch (e) {
     d.log?.('ativação na Meta', step, e instanceof Error ? e.message : e);
     if (e instanceof GraphError && /appsecret_proof/i.test(e.message)) Object.assign(rep, await secretHelp(d));
-    else if (e instanceof GraphError && (e.code === -1 || e.code === -2)) Object.assign(rep, await phoneHelp(d, e));
+    else if (e instanceof GraphError && (e.code === -2 || e.code === -3)) Object.assign(rep, await phoneHelp(d, e));
     else rep.message = explain(e, step);
   }
   return rep;
 }
-// O ID salvo não leva a um número: procura os números que o token enxerga para dizer qual ID usar
+// Não deu para escolher o número sozinho: diz quais existem (ou onde copiar) e o tipo de valor que está salvo
 async function phoneHelp(d: HandlerDeps, e: GraphError): Promise<Pick<SetupReport, 'message' | 'fix' | 'phones'>> {
   const c = d.cfg, fix = { secrets: secretsPage(c) };
-  let phones: { id: string; number: string; name: string }[] = ((e as any).list ?? []).map((n: any) => ({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? '') }));
-  if (!phones.length) {
-    try {
-      const appId = String((await gj(d, 'app')).id ?? '');
-      const dbg = (await gj(d, `debug_token?input_token=${encodeURIComponent(c.token)}`, undefined, `${appId}|${c.appSecret}`)).data ?? {};
-      const wabas = [...new Set<string>((dbg.granular_scopes ?? []).filter((g: any) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope))).flatMap((g: any) => g?.target_ids ?? []).map(String))];
-      for (const w of wabas.slice(0, 5)) for (const n of (await gj(d, `${w}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? []) phones.push({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? '') });
-    } catch { /* sem permissão para listar: fica só a orientação */ }
-  }
-  phones = phones.slice(0, 5);
+  const phones = ((e as any).list ?? []).slice(0, 5).map((p: Phone) => ({ id: p.id, number: p.number, name: p.name }));
   d.log?.('ativação: números encontrados', JSON.stringify(phones)); // IDs e números do robô (nada secreto)
-  const list = phones.map((p) => `${p.id} (+${p.number}${p.name ? ', ' + p.name : ''})`).join('; ');
+  const list = phones.map((p: any) => `${p.id} (+${p.number}${p.name ? ', ' + p.name : ''})`).join('; ');
   return {
-    message: phones.length === 1 ? `O WHATSAPP_PHONE_ID salvo não é o ID do número. Troque esse segredo por: ${phones[0].id} (número +${phones[0].number}).`
-      : phones.length ? `O WHATSAPP_PHONE_ID salvo não é o ID do número. Troque esse segredo pelo ID do número do robô: ${list}.`
-      : 'O WHATSAPP_PHONE_ID salvo não é o ID do número: copie a "Identificação do número de telefone" em WhatsApp → Configuração da API, na Meta.',
+    message: `${phoneIdHint(c)} ` + (phones.length > 1 ? `Sua conta tem mais de um número; coloque no WHATSAPP_PHONE_ID o ID do número do robô: ${list}.`
+      : 'Copie a "Identificação do número de telefone" em WhatsApp → Configuração da API, na Meta, e cole no WHATSAPP_PHONE_ID.'),
     fix, phones,
   };
 }
@@ -283,11 +309,11 @@ export async function handle(req: Request, d: HandlerDeps): Promise<Response> {
     if (url.searchParams.has('health')) {
       let db = false;
       try { await d.rpc('wa_user', { p_phone: '0000000000' }); db = true; } catch (e) { d.log?.('saúde: banco', e instanceof Error ? e.message : e); }
-      return new Response(JSON.stringify({ db, configured: !!(c.token && c.phoneId && c.appSecret && c.verifyToken) }), { headers: { 'Content-Type': 'application/json' } });
+      return new Response(JSON.stringify({ db, configured: !!(c.token && c.appSecret && c.verifyToken) }), { headers: { 'Content-Type': 'application/json' } });
     }
     // o app pergunta se o robô está pronto e qual número abrir
     if (url.searchParams.has('info')) {
-      const ready = !!(c.token && c.phoneId && c.appSecret && c.verifyToken);
+      const ready = !!(c.token && c.appSecret && c.verifyToken);
       const number = ready ? await botNumber(d) : '';
       return new Response(JSON.stringify({ configured: ready && !!number, number: number || null }), {
         headers: { ...cors(req, c), 'Content-Type': 'application/json', 'Cache-Control': 'max-age=300' },
@@ -310,9 +336,12 @@ export async function handle(req: Request, d: HandlerDeps): Promise<Response> {
   if (!(await signatureOk(c.appSecret, raw, req.headers.get('x-hub-signature-256')))) return new Response('assinatura inválida', { status: 401 });
   let payload: unknown;
   try { payload = JSON.parse(new TextDecoder().decode(raw)); } catch { return new Response('json inválido', { status: 400 }); }
-  const msgs = messagesOf(payload, c.phoneId);
+  const msgs = messagesOf(payload, '');
   const work = (async () => {
+    let allow: Set<string> | null = null;
     for (const m of msgs) {
+      const direct = (!!m.to && m.to === c.phoneId) || (!!m.waba && (m.waba === c.phoneId || m.waba === c.wabaId));
+      if (!direct) { allow ??= await allowedIds(d); if (allow.size && !allow.has(m.to ?? '') && !allow.has(m.waba ?? '')) continue; } // outro número da Meta
       try { await processOne(d, m); } catch (e) { d.log?.('mensagem falhou', m.id, e instanceof Error ? e.message : e); }
     }
     if (msgs.length && d.housekeeping && (d.random ?? Math.random)() < 0.02) {

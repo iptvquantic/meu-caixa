@@ -344,6 +344,10 @@ function handlerDeps(over = {}) {
   const wabaBody = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: 'waba-1', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { phone_number_id: PHONE_ID }, messages: [{ from: PHONE, id: 'wamid.w1', type: 'text', text: { body: 'saldo' } }] } }] }] });
   await handle(new Request('https://x/', { method: 'POST', body: wabaBody, headers: { 'x-hub-signature-256': sign(wabaBody) } }), viaWaba.d);
   ok(viaWaba.botCalls.length === 1 && viaWaba.graphCalls.some((c) => c.body?.type === 'text' && c.path === `${PHONE_ID}/messages`), 'ID da conta configurado: mensagem aceita e resposta sai pelo número que recebeu');
+  const lixo = handlerDeps({ cfg: { ...cfg, phoneId: 'abc-errado' } });
+  await handle(new Request('https://x/', { method: 'POST', body: wabaBody, headers: { 'x-hub-signature-256': sign(wabaBody) } }), lixo.d);
+  ok(lixo.botCalls.length === 1 && lixo.graphCalls.some((c) => c.body?.type === 'text' && c.path === `${PHONE_ID}/messages`) && !lixo.graphCalls.some((c) => c.path.includes('abc-errado')),
+    'ID salvo errado (não é número): a mensagem é atendida e respondida pelo número que recebeu');
   const other = payload([{ from: PHONE, id: 'wamid.2', type: 'text', text: { body: 'oi' } }], '999');
   await handle(new Request('https://x/', { method: 'POST', body: other, headers: { 'x-hub-signature-256': sign(other) } }), d);
   ok(botCalls.length === 1, 'aviso de outro número da Meta é ignorado');
@@ -390,7 +394,7 @@ function metaFake(state = {}) {
     const noField = (f) => j({ error: { message: `(#100) Tried accessing nonexisting field (${f})`, type: 'OAuthException', code: 100 } }, 400);
     if (p === PHONE_ID) return st.phoneErr ? j({ error: st.phoneErr }, 400) : j({ display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa', quality_rating: 'GREEN' });
     if ((p === '555' || p === '777') && /display_phone_number/.test(q.get('fields') || '')) return noField('display_phone_number'); // conta (WABA) e app não são números
-    if (p === '555/phone_numbers' && /verified_name/.test(q.get('fields') || '')) return j({ data: [{ id: PHONE_ID, display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa' }] });
+    if (p === '555/phone_numbers' && /verified_name/.test(q.get('fields') || '')) return j({ data: [{ id: PHONE_ID, display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa' }].concat(st.twoNumbers ? [{ id: '2223334445', display_phone_number: '+1 555-010-0000', verified_name: 'Test Number' }] : []) });
     if (p === '777/phone_numbers') return noField('phone_numbers');
     if (p === 'app') return j({ id: '777', name: 'Meu Caixa' });
     if (p === '777' && method === 'GET') return st.secretOk ? j({ id: '777' }) : j({ error: { message: 'Error validating client secret.', type: 'OAuthException', code: 1 } }, 400);
@@ -417,9 +421,17 @@ function metaFake(state = {}) {
   ok(w1.ok && w1.number === '5522999990000' && w1.phoneId === PHONE_ID && wabaCase.st.subscribedWaba === '555', 'ID da conta no lugar do número: descobre o número, ativa e inscreve a conta: ' + JSON.stringify(w1));
   has(w1.message, `troque esse segredo pelo ID do número: ${PHONE_ID}`, '... e diz qual ID colocar');
   const w2 = (await run(metaFake(), { cfg: { ...cfg, selfUrl: SELF, phoneId: '777' } })).rep;
-  ok(!w2.ok && w2.phones?.[0]?.id === PHONE_ID, 'ID de outra coisa (app): procura os números do token: ' + JSON.stringify(w2.phones));
-  has(w2.message, `Troque esse segredo por: ${PHONE_ID} (número +5522999990000)`, '... e diz o ID certo');
+  ok(w2.ok && w2.phoneId === PHONE_ID, 'ID de outra coisa (app): descobre o número pelo token e ativa: ' + JSON.stringify(w2));
+  has(w2.message, `não é o ID do número. Já estou usando o número da sua conta (+5522999990000); para deixar definitivo, troque esse segredo pelo ID do número: ${PHONE_ID}`, '... e diz o ID certo');
   ok(w2.fix?.secrets?.endsWith('/functions/secrets'), '... com o link dos segredos');
+  // a chave secreta colada no lugar do ID (o caso do dono em 09/10 13h20): descobre o número e nunca manda a chave para a Meta
+  const HEX2 = '0123456789abcdef0123456789abcdef', w3m = metaFake(), w3 = (await run(w3m, { cfg: { ...cfg, selfUrl: SELF, phoneId: HEX2, appSecret: HEX2 } })).rep;
+  ok(w3.ok && w3.phoneId === PHONE_ID && w3m.st.subscribedWaba === '555', 'chave secreta no lugar do ID: robô ativa com o número descoberto: ' + JSON.stringify(w3));
+  has(w3.message, 'No WHATSAPP_PHONE_ID foi colada a chave secreta do app', '... avisa o que foi colado (sem mostrar)'); ok(!w3.message.includes(HEX2), '... e a chave não aparece');
+  ok(!w3m.calls.some((x) => x.path.includes(HEX2)), 'o valor errado nunca vai para a Meta (nem para os registros)');
+  const w4 = (await run(metaFake({ twoNumbers: true }), { cfg: { ...cfg, selfUrl: SELF, phoneId: '' } })).rep;
+  ok(!w4.ok && w4.phones?.length === 2, 'dois números na conta e nenhum ID: pede para escolher');
+  has(w4.message, `mais de um número; coloque no WHATSAPP_PHONE_ID o ID do número do robô: ${PHONE_ID} (+5522999990000, Meu Caixa); 2223334445`, '... listando os dois');
   const m = metaFake();
   const { d } = handlerDeps({ cfg: { ...cfg, selfUrl: SELF }, graph: m.graph, isAdmin: async (t) => t === 'jwt-dono' });
   let r = await handle(setupReq(null), d); ok(r.status === 403 && m.calls.length === 0, 'ativação sem login: recusada sem falar com a Meta');
