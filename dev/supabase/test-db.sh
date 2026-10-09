@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-PRODUCAO=01   # última migração já aplicada na produção — atualizar ao aplicar uma nova
+PRODUCAO=02   # última migração já aplicada na produção — atualizar ao aplicar uma nova
 DB=${MC_TEST_DB:-meucaixa_test}
 
 # Postgres local: no container da sessão, liga o servidor e cria o usuário se precisar

@@ -31,12 +31,12 @@ Postgres 16 e cria o usuário sozinho.
 |---|---|
 | `schema.sql` — base 2.0: tabelas, funções, gatilhos, RLS | aplicado (migrações `20261008204728` e `20261008204747`) |
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
-| `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | **pendente** |
+| `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `functions/ai/index.ts` + `context.ts` — função "ai" (Groq) | publicada (versão 5) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
-(conferido em 09/10/2026: 10 de 10 iguais).
+(conferido em 09/10/2026, antes e depois da migração 02: 10 de 10 iguais).
 
 ### Mudar o banco
 

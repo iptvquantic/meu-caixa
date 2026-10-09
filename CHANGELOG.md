@@ -6,7 +6,8 @@
   e as marcações de "pago". Backup da versão antiga (1.x) continua aceito.
 - `novo.html` (endereço usado na troca de versão) agora leva direto ao app.
 - Testes, banco (schema e migrações) e a função da IA guardados no repositório em `dev/`.
-- Preparada a otimização do banco (índices e regras de acesso mais baratas); aplicação na produção pendente.
+- Banco otimizado: índices nas chaves estrangeiras, regras de acesso calculadas uma vez por consulta
+  e só as permissões que o app usa. Nenhum dado alterado.
 
 ## 2.1 — 08/10/2026
 - App instalável (celular e PC), abre sem internet com os últimos dados e tem atalho "Novo lançamento".

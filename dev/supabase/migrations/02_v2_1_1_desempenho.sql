@@ -1,6 +1,6 @@
 -- =====================================================================
 -- Meu Caixa 2.1.1 — desempenho e endurecimento (Supabase Performance/Security Advisor)
--- PENDENTE na produção até ser aplicada (ver dev/README.md).
+-- Na produção: migração 20261009112340 (meu_caixa_v2_1_1_desempenho), aplicada em 09/10/2026.
 -- 1) Índices nas chaves estrangeiras: apagar categoria/cartão/conta fixa sem varrer a tabela.
 -- 2) Regras de acesso (RLS) com a MESMA lógica, mas auth.uid() e has_access() calculados
 --    1x por consulta (não 1x por linha). Usa ALTER POLICY: troca a expressão no lugar,
