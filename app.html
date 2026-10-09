@@ -420,7 +420,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.1.0',
+  version: '2.1.1',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -1907,14 +1907,17 @@ function download(name, text, type) {
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000);
 }
-function exportJSON() {
+// Backup completo da conta (o "ts" de cada lançamento é a chave que evita duplicar ao restaurar)
+function buildBackup() {
   const strip = ({ user_id, ...r }) => r;
-  const data = {
-    app: 'meu-caixa', version: 2, exportedAt: new Date().toISOString(),
+  return {
+    app: 'meu-caixa', version: 2, appVersion: CFG.version || '', exportedAt: new Date().toISOString(),
     categories: S.cats.map(strip), cards: S.cards.map(strip), recurring: S.recs.map(strip), goals: S.goals.map(strip),
-    transactions: S.txs.map(t => ({ ...strip(t), ts: t.legacy_ts || Date.parse(t.created_at) || null }))
+    transactions: S.txs.map(t => ({ ...strip(t), ts: Number(t.legacy_ts) || Date.parse(t.created_at) || null }))
   };
-  download(`meu-caixa-backup-${todayISO()}.json`, JSON.stringify(data, null, 1), 'application/json');
+}
+function exportJSON() {
+  download(`meu-caixa-backup-${todayISO()}.json`, JSON.stringify(buildBackup(), null, 1), 'application/json');
   toast(`Backup baixado: ${S.txs.length} lançamentos`);
 }
 const V1_SOURCES = [{ id: 'iptv', emoji: '📺', name: 'Venda de IPTV' }, { id: 'apostas', emoji: '🎰', name: 'Banca de Apostas' }, { id: 'agiota', emoji: '💵', name: 'Juros Agiota' }, { id: 'outros', emoji: '➕', name: 'Outros' }];
@@ -1973,47 +1976,109 @@ async function applyLegacyPlan(plan, onProgress) {
 async function importFile(file) {
   if (!file) return;
   try {
-    const data = JSON.parse(await file.text());
-    let plan;
-    if (Array.isArray(data)) plan = buildLegacyPlan(data, { sources: store.get('mc_sources', null), customCats: store.get('mc_custom_cats', []), customInvest: store.get('mc_custom_invest_cats', []) });
-    else if (data && data.app === 'meu-caixa' && Array.isArray(data.transactions)) plan = planFromV2(data);
-    else throw new Error('Arquivo não reconhecido. Use um backup do Meu Caixa.');
-    const res = await applyLegacyPlan(plan);
-    if (data && !Array.isArray(data)) await restoreExtras(data);
-    render();
-    toast(res.ok ? `Importado: ${res.total} lançamentos conferidos (sem duplicar)` : `Importado com diferenças. Confira o extrato.`);
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { throw new Error('Arquivo não reconhecido. Use um backup do Meu Caixa.'); }
+    if (Array.isArray(data)) {
+      const res = await applyLegacyPlan(buildLegacyPlan(data, { sources: store.get('mc_sources', null), customCats: store.get('mc_custom_cats', []), customInvest: store.get('mc_custom_invest_cats', []) }));
+      render();
+      toast(res.ok ? `Importado: ${res.total} lançamentos conferidos (sem duplicar)` : 'Importado com diferenças. Confira o extrato.');
+    } else if (data && data.app === 'meu-caixa' && Array.isArray(data.transactions)) {
+      const res = await restoreV2(data);
+      render();
+      const plural = n => n === 1 ? '' : 's';
+      toast(!res.ok ? 'Backup restaurado com diferenças. Confira o extrato.'
+        : res.total ? `Backup restaurado: ${res.total} lançamento${plural(res.total)} novo${plural(res.total)}${res.already ? `, ${res.already} já estava${res.already === 1 ? '' : 'm'} aqui` : ''}`
+          : `Nada novo: os ${res.already} lançamentos do backup já estavam aqui`);
+    } else throw new Error('Arquivo não reconhecido. Use um backup do Meu Caixa.');
   } catch (e) { toast(errMsg(e)); }
   finally { const f = $('#file-import'); if (f) f.value = ''; }
 }
-// Restaura contas fixas e metas de um backup 2.x (sem duplicar pelo nome/tipo)
-async function restoreExtras(data) {
-  const catKey = {}; for (const c of data.categories || []) catKey[c.id] = c.kind + ':' + (c.legacy_key || 'v2:' + norm(c.name).slice(0, 60));
-  const byKey = {}; for (const c of S.cats) byKey[c.kind + ':' + (c.legacy_key || 'v2:' + norm(c.name).slice(0, 60))] = c.id;
-  const cat = id => (id && byKey[catKey[id]]) || null;
-  for (const r of data.recurring || []) {
-    if (!r || !['in', 'out', 'card'].includes(r.type) || S.recs.some(x => x.type === r.type && norm(x.name) === norm(r.name) && x.day === r.day)) continue;
-    try { S.recs.push(await api.addRec({ type: r.type, name: String(r.name).slice(0, 60), amount: r2(r.amount), day: r.day, category_id: cat(r.category_id), card_id: r.type === 'card' ? (S.cards.find(c => !c.archived)?.id || null) : null, start_month: r.start_month, end_month: r.end_month || null, phone: r.phone || null, auto: !!r.auto, active: r.active !== false })); } catch (e) { console.warn(e); }
-  }
-  for (const g of data.goals || []) {
-    if (!g || !['budget', 'income', 'save'].includes(g.kind) || S.goals.some(x => x.kind === g.kind && x.amount == g.amount && (x.name || '') === (g.name || ''))) continue;
-    const c = cat(g.category_id); if (g.kind === 'budget' && !c) continue;
-    try { S.goals.push(await api.addGoal({ kind: g.kind, name: g.name || null, amount: r2(g.amount), category_id: c, deadline: g.deadline || null })); } catch (e) { console.warn(e); }
+// Restaura um backup 2.x. Reaproveita o que já existe na conta e só cria o que falta:
+// na mesma conta não duplica nada; numa conta nova recria tudo igual (cartões, contas fixas pagas, metas).
+async function restoreV2(data) {
+  const key = s => norm(s).slice(0, 60);
+  const day = (v, d) => Math.min(31, Math.max(1, parseInt(v, 10) || d));
+  const okMonth = m => /^\d{4}-(0[1-9]|1[0-2])$/.test(m || '');
+  const okDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').slice(0, 10));
+  const catMap = {}, cardMap = {}, recMap = {};
+  // 1) categorias: mesma chave antiga ou mesmo nome = a mesma
+  for (const c of data.categories || []) {
+    if (!c || !['in', 'out', 'invest'].includes(c.kind) || !String(c.name || '').trim()) continue;
+    const found = S.cats.find(x => x.kind === c.kind && ((c.legacy_key && x.legacy_key === c.legacy_key) || key(x.name) === key(c.name)));
+    if (found) { catMap[c.id] = found.id; continue; }
+    const made = await api.addCat({ kind: c.kind, name: String(c.name).trim().slice(0, 60), icon: String(c.icon || 'i:tag').slice(0, 40), color: safeColor(c.color) || null, legacy_key: c.legacy_key || null, archived: !!c.archived, sort: Number.isFinite(+c.sort) ? +c.sort : 50 });
+    S.cats.push(made); catMap[c.id] = made.id;
   }
   indexData();
-}
-function planFromV2(data) {
-  const catRows = [], idToKey = {};
-  for (const c of data.categories || []) {
-    if (!c || !['in', 'out', 'invest'].includes(c.kind)) continue;
-    const key = c.legacy_key || 'v2:' + norm(c.name).slice(0, 60);
-    idToKey[c.id] = c.kind + ':' + key;
-    catRows.push({ kind: c.kind, legacy_key: key, name: String(c.name).slice(0, 60), icon: c.icon || 'i:tag', color: safeColor(c.color) || null });
+  // 2) cartões: mesma chave antiga ou mesmo nome
+  for (const c of data.cards || []) {
+    if (!c || !String(c.name || '').trim()) continue;
+    const found = S.cards.find(x => (c.legacy_key && x.legacy_key === c.legacy_key) || key(x.name) === key(c.name));
+    if (found) { cardMap[c.id] = found.id; continue; }
+    const made = await api.addCard({ name: String(c.name).trim().slice(0, 40), closing_day: day(c.closing_day, 9), due_day: day(c.due_day, 16), color: safeColor(c.color) || '#8b5cf6', limit_amount: +c.limit_amount > 0 ? r2(c.limit_amount) : null, archived: !!c.archived, legacy_key: c.legacy_key || null });
+    S.cards.push(made); cardMap[c.id] = made.id;
   }
-  const txRows = (data.transactions || []).filter(t => t && ['in', 'out', 'card', 'invest'].includes(t.type) && +t.amount > 0 && /^\d{4}-\d{2}-\d{2}/.test(t.date)).map(t => {
-    const k = (idToKey[t.category_id] || (catKindOf(t.type) + ':outros')).split(':');
-    return { type: t.type, amount: r2(t.amount), date: String(t.date).slice(0, 10), description: String(t.description || '').slice(0, 140), _kind: k[0], _key: k.slice(1).join(':'), installments: t.type === 'card' ? Math.min(48, Math.max(1, +t.installments || 1)) : 1, invest_kind: t.type === 'invest' ? (t.invest_kind === 'resgate' ? 'resgate' : 'aporte') : null, legacy_ts: Number(t.ts) || null, legacy_id: t.legacy_id || null };
-  });
-  return { catRows, txRows, skipped: [] };
+  indexData();
+  const anyCard = () => S.cards.find(c => !c.archived)?.id || null;
+  // 3) contas fixas (antes dos lançamentos, para manter o que já foi pago/recebido)
+  for (const r of data.recurring || []) {
+    if (!r || !['in', 'out', 'card'].includes(r.type) || !String(r.name || '').trim() || !(+r.amount > 0) || !okMonth(r.start_month)) continue;
+    const found = S.recs.find(x => x.type === r.type && key(x.name) === key(r.name) && +x.day === day(r.day, 1));
+    if (found) { recMap[r.id] = found.id; continue; }
+    const cid = catMap[r.category_id];
+    const made = await api.addRec({
+      type: r.type, name: String(r.name).trim().slice(0, 60), amount: r2(r.amount), day: day(r.day, 1),
+      category_id: cid && S.catMap[cid]?.kind === (r.type === 'in' ? 'in' : 'out') ? cid : null,
+      card_id: r.type === 'card' ? (cardMap[r.card_id] || anyCard()) : null,
+      start_month: r.start_month, end_month: okMonth(r.end_month) && r.end_month >= r.start_month ? r.end_month : null,
+      phone: r.type === 'in' && /^\d{10,13}$/.test(r.phone || '') ? r.phone : null, auto: !!r.auto, active: r.active !== false
+    });
+    S.recs.push(made); recMap[r.id] = made.id;
+  }
+  indexData();
+  // 4) metas
+  for (const g of data.goals || []) {
+    if (!g || !['budget', 'income', 'save'].includes(g.kind) || !(+g.amount > 0)) continue;
+    let cid = g.category_id ? catMap[g.category_id] || null : null;
+    if (cid && S.catMap[cid]?.kind !== { budget: 'out', income: 'in', save: 'invest' }[g.kind]) cid = null;
+    if (g.kind === 'budget' && !cid) continue;
+    if (S.goals.some(x => x.kind === g.kind && r2(x.amount) === r2(g.amount) && (x.category_id || null) === cid && key(x.name || '') === key(g.name || ''))) continue;
+    const row = { kind: g.kind, name: g.name ? String(g.name).slice(0, 60) : null, amount: r2(g.amount), category_id: cid, deadline: okDate(g.deadline) ? String(g.deadline).slice(0, 10) : null, archived: !!g.archived };
+    if (okDate(g.start_date)) row.start_date = String(g.start_date).slice(0, 10);
+    S.goals.push(await api.addGoal(row));
+  }
+  // 5) lançamentos: o que já está na conta (mesmo id ou mesma chave) fica como está
+  const haveIds = new Set(S.txs.map(t => t.id)), haveKeys = new Set();
+  for (const t of S.txs) { if (t.legacy_ts) haveKeys.add(Number(t.legacy_ts)); const c = Date.parse(t.created_at); if (c) haveKeys.add(c); }
+  const used = new Set(haveKeys), paid = new Set(S.txs.filter(t => t.recurring_id).map(t => t.recurring_id + '|' + t.recurring_month));
+  const rows = []; let already = 0, skipped = 0;
+  for (const t of data.transactions || []) {
+    if (!t || !['in', 'out', 'card', 'invest'].includes(t.type) || !(+t.amount > 0) || !okDate(t.date)) { skipped++; continue; }
+    const k0 = Number(t.ts) || Number(t.legacy_ts) || Date.parse(t.created_at) || null;
+    if (haveIds.has(t.id) || (k0 && haveKeys.has(k0))) { already++; continue; }
+    let k = k0 || Date.now();
+    while (used.has(k)) k++; // dois lançamentos com o mesmo horário: nenhum se perde
+    used.add(k);
+    const cid = catMap[t.category_id];
+    let rid = t.recurring_id ? recMap[t.recurring_id] || null : null;
+    const rmonth = rid ? (okMonth(t.recurring_month) ? t.recurring_month : String(t.date).slice(0, 7)) : null;
+    if (rid && paid.has(rid + '|' + rmonth)) rid = null;
+    if (rid) paid.add(rid + '|' + rmonth);
+    rows.push({
+      type: t.type, amount: r2(t.amount), date: String(t.date).slice(0, 10), description: String(t.description || '').slice(0, 140),
+      category_id: cid && S.catMap[cid]?.kind === catKindOf(t.type) ? cid : null,
+      card_id: t.type === 'card' ? (cardMap[t.card_id] || anyCard()) : null,
+      installments: t.type === 'card' ? Math.min(48, Math.max(1, parseInt(t.installments, 10) || 1)) : 1,
+      invest_kind: t.type === 'invest' ? (t.invest_kind === 'resgate' ? 'resgate' : 'aporte') : null,
+      legacy_ts: k, legacy_id: t.legacy_id ? String(t.legacy_id).slice(0, 100) : null,
+      recurring_id: rid, recurring_month: rid ? rmonth : null
+    });
+  }
+  if (rows.length) await api.insertTxs(rows);
+  useData(await api.loadAll());
+  const want = new Set(rows.map(r => r.legacy_ts)), got = S.txs.filter(t => want.has(Number(t.legacy_ts)));
+  const sum = (list, type) => r2(list.filter(t => t.type === type).reduce((s, t) => s + (+t.amount), 0));
+  return { total: rows.length, already, skipped, ok: got.length === rows.length && ['in', 'out', 'card', 'invest'].every(k => sum(rows, k) === sum(got, k)) };
 }
 
 /* ===================== trazer do app antigo (Firebase) ===================== */
@@ -2394,7 +2459,7 @@ async function boot() {
 }
 window.addEventListener('DOMContentLoaded', boot);
 
-if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, planFromV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory };
+if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, buildBackup, restoreV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory };
 })();
 </script>
 </body>
