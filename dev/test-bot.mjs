@@ -395,6 +395,7 @@ function metaFake(state = {}) {
     if (p === PHONE_ID) return st.phoneErr ? j({ error: st.phoneErr }, 400) : j({ display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa', quality_rating: 'GREEN' });
     if ((p === '555' || p === '777') && /display_phone_number/.test(q.get('fields') || '')) return noField('display_phone_number'); // conta (WABA) e app não são números
     if (p === '555' && q.get('fields') === 'name') return j({ id: '555', name: 'Jogo Quântico' });
+    if (p === 'me/assigned_whatsapp_business_accounts') return st.assignedErr ? j({ error: { message: '(#100) Missing permission', code: 100 } }, 400) : j({ data: st.assigned ?? [] });
     if (p === '555/phone_numbers' && st.emptyWaba) return j({ data: [] });
     if (p === '555/phone_numbers' && /verified_name/.test(q.get('fields') || '')) return j({ data: [{ id: PHONE_ID, display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa' }].concat(st.twoNumbers ? [{ id: '2223334445', display_phone_number: '+1 555-010-0000', verified_name: 'Test Number' }] : []) });
     if (p === '777/phone_numbers') return noField('phone_numbers');
@@ -435,6 +436,13 @@ function metaFake(state = {}) {
   has(w5.message, 'A conta do WhatsApp "Jogo Quântico" liberada para o token não tem nenhum número', 'conta liberada sem número: diz qual conta e o que fazer');
   const w6 = (await run(metaFake({ scopes: [{ scope: 'whatsapp_business_messaging' }] }), { cfg: { ...cfg, selfUrl: SELF, phoneId: '' } })).rep;
   has(w6.message, 'não tem nenhuma conta do WhatsApp liberada', 'token sem conta do WhatsApp: explica como liberar');
+  // permissão sem lista de contas (o caso do dono, 13h34): pergunta as contas atribuídas ao usuário do sistema
+  const allScopes = [{ scope: 'whatsapp_business_management' }, { scope: 'whatsapp_business_messaging' }];
+  const w7m = metaFake({ scopes: allScopes, assigned: [{ id: '555', name: 'Jogo Quântico' }] }), w7 = (await run(w7m, { cfg: { ...cfg, selfUrl: SELF, phoneId: 'abc' } })).rep;
+  ok(w7.ok && w7.phoneId === PHONE_ID && w7m.st.subscribedWaba === '555', 'permissão sem lista: acha a conta atribuída e o número, e ativa: ' + JSON.stringify(w7));
+  const w8 = (await run(metaFake({ scopes: allScopes, assignedErr: true }), { cfg: { ...cfg, selfUrl: SELF, phoneId: 'abc' } })).rep;
+  ok(!w8.ok && !w8.message.includes('não tem nenhuma conta'), 'sem conseguir listar as contas: não afirma que não há conta');
+  has(w8.message, 'Identificação do número de telefone', '... e orienta copiar o ID do número');
   const w4 = (await run(metaFake({ twoNumbers: true }), { cfg: { ...cfg, selfUrl: SELF, phoneId: '' } })).rep;
   ok(!w4.ok && w4.phones?.length === 2, 'dois números na conta e nenhum ID: pede para escolher');
   has(w4.message, `mais de um número; coloque no WHATSAPP_PHONE_ID o ID do número do robô: ${PHONE_ID} (+5522999990000, Meu Caixa); 2223334445`, '... listando os dois');

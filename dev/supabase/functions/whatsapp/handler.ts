@@ -104,22 +104,30 @@ const isId = (v: unknown): v is string => typeof v === 'string' && /^\d{1,20}$/.
 const phoneOf = (n: any, how: Phone['how'], waba?: string): Phone => ({ id: String(n.id), number: digits(n.display_phone_number), name: String(n.verified_name ?? ''), waba, how });
 // Números que o token enxerga: contas do WhatsApp liberadas para ele → números de cada conta
 type Waba = { id: string; name: string; numbers: number };
-async function phonesOfToken(d: HandlerDeps): Promise<{ phones: Phone[]; wabas: Waba[] }> {
+async function phonesOfToken(d: HandlerDeps): Promise<{ phones: Phone[]; wabas: Waba[]; listed: boolean }> {
   const c = d.cfg, appId = String((await gj(d, 'app')).id ?? '');
   const dbg = (await gj(d, `debug_token?input_token=${encodeURIComponent(c.token)}`, undefined, `${appId}|${c.appSecret}`)).data ?? {};
   const scopes: any[] = dbg.granular_scopes ?? [];
-  const ids = [...new Set<string>([c.wabaId, ...scopes.filter((g) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
+  let ids = [...new Set<string>([c.wabaId, ...scopes.filter((g) => /^whatsapp_business_(management|messaging)$/.test(String(g?.scope)))
     .flatMap((g) => g?.target_ids ?? [])].map(String).filter(isId))];
+  const names = new Map<string, string>();
+  let listed = true;
+  if (!ids.length) {
+    // permissão sem lista de contas (vale para as contas atribuídas ao usuário do sistema): pergunta quais são
+    const got: any[] | null = await gj(d, 'me/assigned_whatsapp_business_accounts?fields=id,name').then((r) => r.data ?? []).catch(() => null);
+    if (got === null) listed = false;
+    for (const w of got ?? []) if (isId(String(w?.id))) { ids.push(String(w.id)); names.set(String(w.id), String(w.name ?? '')); }
+  }
   const out = new Map<string, Phone>(), wabas: Waba[] = [];
   for (const w of ids.slice(0, 5)) {
-    const name = await gj(d, `${w}?fields=name`).then((r) => String(r.name ?? '')).catch(() => '');
+    const name = names.get(w) || await gj(d, `${w}?fields=name`).then((r) => String(r.name ?? '')).catch(() => '');
     const nums: any[] = (await gj(d, `${w}/phone_numbers?fields=id,display_phone_number,verified_name`)).data ?? [];
     wabas.push({ id: w, name, numbers: nums.length });
     for (const n of nums) if (!out.has(String(n.id))) out.set(String(n.id), phoneOf(n, 'token', w));
   }
   // o que o token enxerga (só IDs, nomes e permissões; nada secreto) — para o diagnóstico
-  d.log?.('ativação: token', JSON.stringify({ tipo: dbg.type, escopos: scopes.map((g) => `${g?.scope}:${Array.isArray(g?.target_ids) ? g.target_ids.length : 'todos'}`), contas: wabas }));
-  return { phones: [...out.values()], wabas };
+  d.log?.('ativação: token', JSON.stringify({ tipo: dbg.type, escopos: scopes.map((g) => `${g?.scope}:${Array.isArray(g?.target_ids) ? g.target_ids.length : 'todos'}`), contas: wabas, listou: listed }));
+  return { phones: [...out.values()], wabas, listed };
 }
 export async function resolvePhone(d: HandlerDeps): Promise<Phone> {
   const c = d.cfg, key = c.phoneId || '-', hit = phoneCache.get(key);
@@ -136,10 +144,10 @@ export async function resolvePhone(d: HandlerDeps): Promise<Phone> {
     }
   }
   if (!ph) {
-    let found: { phones: Phone[]; wabas: Waba[] };
+    let found: { phones: Phone[]; wabas: Waba[]; listed: boolean };
     try { found = await phonesOfToken(d); }
     catch (e) { throw Object.assign(new GraphError(`descoberta: ${e instanceof Error ? e.message : e}`, -3), { list: [], wabas: [] }); }
-    if (found.phones.length !== 1) throw Object.assign(new GraphError(found.phones.length ? 'vários números' : 'nenhum número', -2), { list: found.phones, wabas: found.wabas });
+    if (found.phones.length !== 1) throw Object.assign(new GraphError(found.phones.length ? 'vários números' : 'nenhum número', found.listed ? -2 : -3), { list: found.phones, wabas: found.wabas });
     ph = found.phones[0];
   }
   if (ph.how !== 'configurado') d.log?.('WHATSAPP_PHONE_ID não é o ID do número; usando', ph.id, `(${ph.how})`);
