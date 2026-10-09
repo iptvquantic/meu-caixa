@@ -375,13 +375,16 @@ function handlerDeps(over = {}) {
 }
 // ---------- ativação na Meta pelo app do dono ----------
 function metaFake(state = {}) {
-  const st = { subs: [], wabaApps: [], expires: 0, valid: true, phoneErr: null, scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555'] }, { scope: 'whatsapp_business_messaging', target_ids: ['555'] }], ...state }, calls = [];
-  const graph = async (path, init = {}, token) => {
-    const method = init.method ?? 'GET'; calls.push({ path, method, token });
+  const st = { subs: [], wabaApps: [], expires: 0, valid: true, phoneErr: null, proofErr: false, appNeedsProof: false, secretOk: true, scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555'] }, { scope: 'whatsapp_business_messaging', target_ids: ['555'] }], ...state }, calls = [];
+  const graph = async (path, init = {}, token, proof = true) => {
+    const method = init.method ?? 'GET'; calls.push({ path, method, token, proof });
     const [p, qs] = path.split('?'); const q = new URLSearchParams(qs ?? '');
     const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s });
+    // chave secreta errada: a Meta recusa toda chamada com a prova; sem a prova só se o app não exigir
+    if (st.proofErr && (proof || st.appNeedsProof)) return j({ error: { message: 'Invalid appsecret_proof provided in the API argument', type: 'GraphMethodException', code: 100 } }, 400);
     if (p === PHONE_ID) return st.phoneErr ? j({ error: st.phoneErr }, 400) : j({ display_phone_number: '+55 22 99999-0000', verified_name: 'Meu Caixa', quality_rating: 'GREEN' });
     if (p === 'app') return j({ id: '777', name: 'Meu Caixa' });
+    if (p === '777' && method === 'GET') return st.secretOk ? j({ id: '777' }) : j({ error: { message: 'Error validating client secret.', type: 'OAuthException', code: 1 } }, 400);
     if (p === 'debug_token') return j({ data: { app_id: '777', is_valid: st.valid, expires_at: st.expires, granular_scopes: st.scopes } });
     if (p === '777/subscriptions' && method === 'GET') return j({ data: st.subs });
     if (p === '777/subscriptions' && method === 'POST') {
@@ -428,6 +431,18 @@ function metaFake(state = {}) {
   has((await run(metaFake({ phoneErr: { message: 'Error validating access token: Session has expired', code: 190 } }))).rep.message, 'WHATSAPP_TOKEN', 'token vencido: explica');
   has((await run(metaFake({ phoneErr: { message: 'Unsupported get request.', code: 100 } }))).rep.message, 'WHATSAPP_PHONE_ID', 'número errado: explica');
   has((await run(metaFake(), { cfg: { ...cfg, selfUrl: SELF, token: '', verifyToken: '' } })).rep.message, 'WHATSAPP_TOKEN, WHATSAPP_VERIFY_TOKEN', 'segredos faltando: diz quais');
+  // chave secreta de outro app: diz qual app e onde corrigir, com links diretos (sem mostrar a chave)
+  const SELF2 = 'https://jgqhtshcuyzytljkmmxd.supabase.co/functions/v1/whatsapp', HEX = '0123456789abcdef0123456789abcdef';
+  let wrong = metaFake({ proofErr: true, secretOk: false });
+  ({ rep } = await run(wrong, { cfg: { ...cfg, selfUrl: SELF2, appSecret: HEX } }));
+  ok(!rep.ok && rep.fix?.meta === 'https://developers.facebook.com/apps/777/settings/basic/' && rep.fix?.secrets === 'https://supabase.com/dashboard/project/jgqhtshcuyzytljkmmxd/functions/secrets',
+    'chave secreta errada: links diretos para copiar na Meta e trocar no Supabase: ' + JSON.stringify(rep.fix));
+  has(rep.message, 'não é a do app "Meu Caixa"', 'diz de qual app tem que ser a chave'); ok(!rep.message.includes(HEX), 'a chave nunca aparece na mensagem');
+  ok(wrong.calls.filter((c) => c.path.startsWith('app') || c.path.startsWith('777?')).every((c) => c.proof === false), 'diagnóstico só lê, e sem a prova');
+  ok(!wrong.calls.some((c) => c.method === 'POST'), 'diagnóstico não escreve nada na Meta');
+  has((await run(metaFake({ proofErr: true, secretOk: false }), { cfg: { ...cfg, selfUrl: SELF2, appSecret: '1234567890123456' } })).rep.message, 'parece o ID do app', 'ID do app no lugar da chave: avisa');
+  ({ rep } = await run(metaFake({ proofErr: true, appNeedsProof: true }), { cfg: { ...cfg, selfUrl: SELF2, appSecret: HEX } }));
+  has(rep.message, 'não confere com o token do WhatsApp', 'app que exige a prova em tudo: explica que os dois têm que ser do mesmo app'); ok(!rep.fix?.meta && !!rep.fix?.secrets, '... e leva aos segredos do Supabase');
   ok((await run(metaFake(), { isAdmin: async () => { throw new Error('auth fora'); } })).r.status === 403, 'falha ao conferir o login: recusa (não ativa)');
 }
 ok(await signatureOk('', new ArrayBuffer(0), 'sha256=00') === false, 'sem chave secreta: nada é aceito');

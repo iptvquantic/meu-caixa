@@ -8,7 +8,7 @@ import { todaySP } from './context.ts';
 import { groq } from './groq.ts';
 import { type Cfg, handle } from './handler.ts';
 
-const env = (k: string, d = '') => Deno.env.get(k) ?? d;
+const env = (k: string, d = '') => (Deno.env.get(k) ?? d).trim(); // espaço ou quebra de linha colados junto não atrapalham
 const named = (k: string) => { try { const o = JSON.parse(env(k) || '{}'); return String(o.default ?? Object.values(o)[0] ?? ''); } catch { return ''; } };
 // chave de serviço: a nova (sb_secret_) e, se não houver, a antiga
 const SECRET = named('SUPABASE_SECRET_KEYS') || env('SUPABASE_SERVICE_ROLE_KEY');
@@ -61,8 +61,8 @@ async function proof(token: string) {
   }
   return proofs.get(token)!;
 }
-const graph = async (path: string, init: RequestInit = {}, token = cfg.token) => {
-  const p = cfg.appSecret && token ? `${path.includes('?') ? '&' : '?'}appsecret_proof=${await proof(token)}` : '';
+const graph = async (path: string, init: RequestInit = {}, token = cfg.token, withProof = true) => {
+  const p = withProof && cfg.appSecret && token ? `${path.includes('?') ? '&' : '?'}appsecret_proof=${await proof(token)}` : '';
   return fetch(`${GRAPH_URL}/${cfg.apiVersion}/${path}${p}`, {
     ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
   });

@@ -64,7 +64,7 @@ function setupDb() {
 const linkCode = () => psql(`select set_config('request.jwt.claims', '{"sub":"${ANA}","role":"authenticated"}', false); set role authenticated; select public.wa_link_start() ->> 'code';`).split('\n').pop();
 
 // ---------- Meta e Groq simuladas (+ /rest/v1 → PostgREST e /auth/v1/user, como no Supabase) ----------
-const sent = [], groqCalls = [], proof = { checked: 0, wrong: [] }, meta = { subs: [], wabaApps: [], verified: false };
+const sent = [], groqCalls = [], proof = { checked: 0, wrong: [], missing: [] }, meta = { subs: [], wabaApps: [], verified: false, secret: APP_SECRET };
 const fake = http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   const body = Buffer.concat(chunks), url = new URL(req.url, 'http://x');
@@ -81,12 +81,18 @@ const fake = http.createServer(async (req, res) => {
     const p = http.request({ host: '127.0.0.1', port: FN_PORT, path: '/' + url.search, method: req.method, headers: req.headers }, (pr) => { res.writeHead(pr.statusCode, pr.headers); pr.pipe(res); });
     p.on('error', (e) => json({ message: e.message }, 502)); p.end(body); return;
   }
-  if (url.pathname.startsWith('/graph/')) { // a Meta confere o appsecret_proof de cada chamada
-    const tok = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
-    proof.checked++; if (url.searchParams.get('appsecret_proof') !== createHmac('sha256', APP_SECRET).update(tok).digest('hex')) proof.wrong.push(url.pathname);
+  if (url.pathname.startsWith('/graph/')) { // como a Meta: token do app (id|chave) ou prova da chave em cada chamada com o token do robô
+    const tok = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, ''), appTok = /^(\d+)\|(.+)$/.exec(tok), given = url.searchParams.get('appsecret_proof');
+    if (appTok) { if (appTok[2] !== meta.secret) return json({ error: { message: 'Error validating client secret.', type: 'OAuthException', code: 1 } }, 400); }
+    else if (given === null) proof.missing.push(url.pathname);
+    else {
+      proof.checked++;
+      if (given !== createHmac('sha256', meta.secret).update(tok).digest('hex')) { proof.wrong.push(url.pathname); return json({ error: { message: 'Invalid appsecret_proof provided in the API argument', type: 'GraphMethodException', code: 100 } }, 400); }
+    }
   }
   const G = '/graph/v24.0/';
   if (url.pathname === G + 'app') return json({ id: '777', name: 'Meu Caixa' });
+  if (url.pathname === G + '777' && req.method === 'GET') return json({ id: '777' });
   if (url.pathname === G + 'debug_token') return json({ data: { app_id: '777', is_valid: true, expires_at: 0, granular_scopes: [{ scope: 'whatsapp_business_management', target_ids: ['555'] }] } });
   if (url.pathname === G + '777/subscriptions' && req.method === 'GET') return json({ data: meta.subs });
   if (url.pathname === G + '777/subscriptions' && req.method === 'POST') {
@@ -215,7 +221,15 @@ async function main() {
   ok(dup.reply && !again.reply && psql(`select count(*) from public.transactions where user_id = '${ANA}' and amount = 10`) === '1', 'mensagem repetida pela Meta lança só 1 vez');
   r = await send('mercado 99', { secret: 'outro-segredo' });
   ok(r.status === 401 && !r.reply && psql(`select count(*) from public.transactions where amount = 99`) === '0', 'aviso com assinatura falsa é recusado');
-  ok(proof.checked > 10 && proof.wrong.length === 0, `toda chamada à Meta leva o appsecret_proof certo (${proof.checked} conferidas${proof.wrong.length ? '; erradas: ' + proof.wrong.join(', ') : ''})`);
+  ok(proof.checked > 10 && !proof.wrong.length && !proof.missing.length, `toda chamada à Meta leva o appsecret_proof certo (${proof.checked} conferidas${proof.wrong.length ? '; erradas: ' + proof.wrong.join(', ') : ''}${proof.missing.length ? '; sem prova: ' + proof.missing.join(', ') : ''})`);
+
+  // chave secreta que não é a do app (o caso do dono em 09/10): a ativação diz o que trocar e onde
+  meta.secret = 'outra-chave-do-app';
+  const bad = await (await setup(DONO_JWT)).json();
+  ok(!bad.ok && bad.message.includes('não é a do app "Meu Caixa"') && bad.fix?.meta === 'https://developers.facebook.com/apps/777/settings/basic/' && /\/functions\/secrets$/.test(bad.fix?.secrets || ''),
+    'chave secreta errada: explica e dá os links diretos: ' + JSON.stringify(bad));
+  ok(!bad.message.includes(APP_SECRET), 'a chave nunca aparece na resposta');
+  meta.secret = APP_SECRET;
   psql(`update public.profiles set plan_expiry = now() - interval '1 day' where id = '${ANA}'`);
   r = await send('mercado 77');
   has(r.reply, 'Seu plano venceu', 'plano vencido não lança'); ok(psql(`select count(*) from public.transactions where amount = 77`) === '0', 'nada gravado com plano vencido');

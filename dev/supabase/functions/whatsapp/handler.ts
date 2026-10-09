@@ -13,7 +13,7 @@ export type HandlerDeps = {
   cfg: Cfg;
   rpc: (fn: string, args: Record<string, unknown>) => Promise<any>;
   bot: (m: Incoming) => Promise<string | null>;
-  graph: (path: string, init?: RequestInit, token?: string) => Promise<Response>; // API da Meta (token do robô ou outro)
+  graph: (path: string, init?: RequestInit, token?: string, proof?: boolean) => Promise<Response>; // API da Meta (token do robô ou outro; proof=false só no diagnóstico)
   isAdmin?: (jwt: string) => Promise<boolean>;                  // login do app é do dono/admin?
   waitUntil?: (p: Promise<unknown>) => void;                    // termina o trabalho depois de responder 200 à Meta
   housekeeping?: () => Promise<unknown>;                        // limpeza leve, de vez em quando (1 a cada 50 avisos)
@@ -112,10 +112,11 @@ function cors(req: Request, cfg: Cfg) {
 export type SetupReport = {
   ok: boolean; message: string; number?: string | null; name?: string | null;
   webhook?: 'ok' | 'ativado'; waba?: 'ok' | 'ativado' | 'desconhecido'; tokenExpires?: string | null;
+  fix?: { meta?: string; secrets?: string }; // onde o dono corrige (links diretos)
 };
 class GraphError extends Error { code?: number; constructor(msg: string, code?: number) { super(msg); this.code = code; } }
-async function gj(d: HandlerDeps, path: string, init?: RequestInit, token?: string) {
-  const r = await d.graph(path, init, token);
+async function gj(d: HandlerDeps, path: string, init?: RequestInit, token?: string, proof = true) {
+  const r = await d.graph(path, init, token, proof);
   const j = await r.json().catch(() => ({}));
   if (!r.ok || j?.error) throw new GraphError(String(j?.error?.message ?? 'HTTP ' + r.status), Number(j?.error?.code) || undefined);
   return j;
@@ -123,13 +124,40 @@ async function gj(d: HandlerDeps, path: string, init?: RequestInit, token?: stri
 function explain(e: unknown, step: string) {
   if (!(e instanceof GraphError)) return `Não consegui falar com a Meta (${step}). Tente de novo em instantes.`;
   const m = e.message.toLowerCase();
-  if (m.includes('appsecret_proof') || m.includes('app secret')) return 'A chave secreta do app (WHATSAPP_APP_SECRET) não confere com o app da Meta.';
+  if (m.includes('appsecret_proof') || m.includes('client secret')) return 'A chave secreta do app (WHATSAPP_APP_SECRET) não confere com o app da Meta.';
   if (e.code === 190) return 'O token do WhatsApp (WHATSAPP_TOKEN) não vale mais: gere outro no usuário do sistema da Meta e troque no Supabase.';
   if (e.code === 10 || (e.code ?? 0) >= 200 && (e.code ?? 0) < 300) return `O token não tem permissão para ${step} (precisa de whatsapp_business_management e whatsapp_business_messaging).`;
   if (step === 'ler o número') return 'O WHATSAPP_PHONE_ID não é um número desta conta do WhatsApp: confira o "Identificação do número de telefone" na Meta.';
   return `A Meta recusou ${step}: ${e.message}`;
 }
 const ddmmyyyy = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+const secretsPage = (c: Cfg) => {
+  try { return `https://supabase.com/dashboard/project/${new URL(c.selfUrl ?? '').hostname.split('.')[0]}/functions/secrets`; } catch { return undefined; }
+};
+// A Meta recusou a prova da chave secreta: descobre de qual app é o token (sem a prova, só leitura) e se a chave
+// salva é desse app — para dizer ao dono exatamente o que trocar e onde. Nunca mostra a chave.
+async function secretHelp(d: HandlerDeps): Promise<Pick<SetupReport, 'message' | 'fix'>> {
+  const c = d.cfg, s = c.appSecret;
+  const shape = /^\d{10,20}$/.test(s) ? ' O valor salvo parece o ID do app, não a chave secreta.'
+    : !/^[0-9a-f]{32}$/i.test(s) ? ' O valor salvo não tem o formato da chave secreta (32 letras e números).' : '';
+  let app: { id?: string; name?: string } | null = null;
+  try { app = await gj(d, 'app?fields=id,name', undefined, undefined, false); } catch { /* o app exige a prova em toda chamada */ }
+  const fix = { secrets: secretsPage(c) } as SetupReport['fix'] & object;
+  if (!app?.id || !/^\d+$/.test(String(app.id))) {
+    return { message: `A chave secreta do app (WHATSAPP_APP_SECRET) não confere com o token do WhatsApp (WHATSAPP_TOKEN).${shape} Os dois precisam ser do mesmo app na Meta.`, fix };
+  }
+  const id = String(app.id), name = String(app.name ?? 'Meu Caixa').slice(0, 60);
+  fix.meta = `https://developers.facebook.com/apps/${id}/settings/basic/`;
+  let mine = false;
+  try { await gj(d, `${id}?fields=id`, undefined, `${id}|${s}`, false); mine = true; } catch { /* chave de outro app ou errada */ }
+  d.log?.('ativação: chave secreta', JSON.stringify({ app: id, name, mesmoApp: mine, formato: shape ? 'estranho' : 'ok' })); // sem a chave
+  if (mine) return { message: `A chave secreta (WHATSAPP_APP_SECRET) é do app "${name}", mas a Meta recusou a prova feita com o token (WHATSAPP_TOKEN). Gere um token novo no usuário do sistema para esse app e troque no Supabase.`, fix };
+  return {
+    message: `A chave secreta salva no Supabase (WHATSAPP_APP_SECRET) não é a do app "${name}" na Meta.${shape} `
+      + 'Copie a "Chave secreta do aplicativo" (Configurações do app → Básico → Mostrar) e cole no lugar dela nos segredos do Supabase.',
+    fix,
+  };
+}
 
 export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
   const c = d.cfg;
@@ -186,8 +214,9 @@ export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
     if (rep.waba === 'desconhecido') rep.message += ' Não consegui conferir a conta do WhatsApp (defina WHATSAPP_WABA_ID se as mensagens não chegarem).';
     if (rep.tokenExpires) rep.message += ` Atenção: o token vence em ${ddmmyyyy(rep.tokenExpires)}; gere um que não vence (usuário do sistema).`;
   } catch (e) {
-    rep.message = explain(e, step);
     d.log?.('ativação na Meta', step, e instanceof Error ? e.message : e);
+    if (e instanceof GraphError && /appsecret_proof/i.test(e.message)) Object.assign(rep, await secretHelp(d));
+    else rep.message = explain(e, step);
   }
   return rep;
 }
