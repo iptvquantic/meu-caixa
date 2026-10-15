@@ -51,12 +51,23 @@ SHOTS.push(
   ['m390-assist-cyber', { w: 390, h: 844, theme: 'cyber', page: 'home', setup: async p => { await openNew(p); await p.type('#as-text', 'recebi 300 pix'); } }],
   ['m390-ai-dark', { w: 390, h: 844, theme: 'dark', page: 'ai', full: true, setup: async p => { await p.evaluate(async () => { const M = window.__mc; await M.sendAI('mercado 47,30'); await M.sendAI('Onde posso economizar?'); }); await sleep(300); } }],
   ['d1280-ai-light', { w: 1280, h: 860, theme: 'light', page: 'ai', setup: async p => { await p.evaluate(async () => { const M = window.__mc; await M.sendAI('saldo'); await M.aiRun({ image: { mime: 'image/jpeg', data: 'QUJD' } }, '📷 Foto do comprovante'); }); await sleep(300); } }],
-  ['m390-home-passos-dark', { w: 390, h: 844, theme: 'dark', page: 'home', full: true, setup: async p => { await p.evaluate(() => { const M = window.__mc; M.S.recs = []; M.S.goals = []; M.S.cards = []; M.S.wa = null; M.S.waBot = { configured: true, number: '15550100000' }; M.render(); }); } }]
+  ['m390-home-passos-dark', { w: 390, h: 844, theme: 'dark', page: 'home', full: true, setup: async p => { await p.evaluate(() => { const M = window.__mc; M.S.recs = []; M.S.goals = []; M.S.cards = []; M.S.wa = null; M.S.waBot = { configured: true, number: '15550100000' }; M.render(); }); } }],
+  // 2.3.2: "Lançar com IA" em destaque (Novo lançamento), lendo a foto, gravando e a câmera no computador
+  ['m360-ia-novo-dark', { w: 360, h: 780, theme: 'dark', page: 'home', setup: openNew }],
+  ['m390-ia-novo-light', { w: 390, h: 844, theme: 'light', page: 'home', setup: openNew }],
+  ['m390-ia-novo-cyber', { w: 390, h: 844, theme: 'cyber', page: 'home', setup: openNew }],
+  ['d1280-ia-novo-dark', { w: 1280, h: 860, theme: 'dark', page: 'home', setup: openNew }],
+  ['d1280-ia-novo-cyber', { w: 1280, h: 860, theme: 'cyber', page: 'home', setup: async p => { await openNew(p); await p.type('#as-text', 'iptv vanessa 30'); } }],
+  ['m360-ia-lendo-light', { w: 360, h: 780, theme: 'light', page: 'home', setup: async p => { await openNew(p); await p.evaluate(() => { window.__mc.Demo.assist = () => new Promise(() => { }); window.__mc.asRun({ image: { mime: 'image/jpeg', data: 'QUJD' } }, 'Lendo o comprovante…'); }); } }],
+  ['m390-ia-gravando-dark', { w: 390, h: 844, theme: 'dark', page: 'home', setup: async p => { await openNew(p); await p.evaluate(() => { const M = window.__mc; Object.assign(M.REC, { mr: { state: 'recording' }, where: 'tx', t0: Date.now() - 4000 }); M.asRow(); }); } }],
+  ['m390-ia-lancado-dark', { w: 390, h: 844, theme: 'dark', page: 'home', setup: async p => { await openNew(p); await p.evaluate(() => window.__mc.asRun({ image: { mime: 'image/jpeg', data: 'QUJD' } }, 'Lendo o comprovante…')); await sleep(700); } }],
+  ['d1280-camera-dark', { w: 1280, h: 860, theme: 'dark', page: 'home', setup: async p => { await p.click('[data-act="homeCamera"]'); await sleep(1500); } }],
+  ['m390-ai-tools-light', { w: 390, h: 844, theme: 'light', page: 'ai' }]
 );
 
 (async () => {
   const filter = process.argv[2];
-  const br = await launch();
+  const br = await launch(['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream']);
   let problems = 0;
   for (const [name, o] of SHOTS) {
     if (filter && !name.includes(filter)) continue;

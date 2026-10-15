@@ -78,12 +78,17 @@ export function start(createClient: CreateClient) {
         const m = /^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(body.receipt.image ?? ''));
         if (!m || !IMAGE_TYPES.includes(m[1])) return json({ error: 'Imagem inválida: use foto ou print (JPG, PNG ou WebP)' }, 400);
         if (m[2].length * 0.75 > MAX_IMAGE) return json({ error: 'Imagem grande demais' }, 413);
-        const { data: cats, error: ce } = await sb.from('categories').select('name,kind,archived').eq('kind', 'out');
-        if (ce) throw ce;
+        const [ca, pr] = await Promise.all([
+          sb.from('categories').select('name,kind,archived').in('kind', ['out', 'in']),
+          sb.from('profiles').select('name').maybeSingle(),
+        ]);
+        if (ca.error) throw ca.error;
+        const live = (ca.data ?? []).filter((c: { archived?: boolean }) => !c.archived) as { name: string; kind: string }[];
+        const names = (kind: string) => live.filter((c) => c.kind === kind).map((c) => c.name);
         const vision = (Deno.env.get('GROQ_VISION_MODELS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
         const receipt = await readReceipt({
           key: Deno.env.get('GROQ_API_KEY') ?? '', base: Deno.env.get('GROQ_BASE_URL') || undefined, mime: m[1], data: m[2], today: todaySP(), models: vision.length ? vision : VISION_MODELS,
-          categories: (cats ?? []).filter((c: { archived?: boolean }) => !c.archived).map((c: { name: string }) => c.name), note: String(body.receipt.note ?? '').slice(0, 200),
+          categories: { out: names('out'), in: names('in') }, userName: String(pr.data?.name ?? ''), note: String(body.receipt.note ?? '').slice(0, 200),
         });
         return json({ receipt, usage: { count: quota.count, limit: quota.limit } });
       }

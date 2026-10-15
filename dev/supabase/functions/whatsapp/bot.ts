@@ -1,27 +1,29 @@
 // Meu Caixa — robô do WhatsApp: entende a mensagem e devolve a resposta (lançar, pagar conta fixa,
 // ler comprovante por foto, consultar, desfazer, perguntar à IA). Tudo que fala com o mundo (banco, IA,
 // áudio, imagem) chega por "deps", então dá para testar sem internet (dev/test-bot.mjs).
-import { familyOf, iconIsSpecific, norm, parseQuick, suggestIcon } from './smart.ts';
+import { explicitType, familyOf, guessType, iconIsSpecific, norm, parseQuick, suggestIcon } from './smart.ts';
 import {
   addMonths, billsOfMonth, brl, buildContext, cardParts, goalValue, invoiceMonth, monthByCat, monthSums, r2, splitInstallments,
   type Card, type Cat, type Goal, type Rec, type TxR,
 } from './context.ts';
-import type { Receipt } from './receipt.ts';
+import type { Receipt, ReceiptCats } from './receipt.ts';
 
 export type Category = Cat & { icon?: string; legacy_key?: string | null; archived?: boolean; sort?: number };
 export type RecX = Rec & { category_id?: string | null; card_id?: string | null };
 export type Data = { transactions: (TxR & { id?: string })[]; categories: Category[]; cards: Card[]; recurring: RecX[]; goals: Goal[] };
 export type WaUser = { user_id: string; name: string; access: boolean; plan: string; settings: Record<string, any> | null };
 export type Quick = { type: string; amount: number; installments: number; date: string; description: string; investKind: string | null };
-// image = foto ou imagem enviada como documento (text = legenda); doc = outro documento (PDF…)
-export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'doc' | 'other'; text?: string; audioId?: string; mediaId?: string; lastHour?: number };
+// O que a tela do app diz sobre o tipo: a aba (sure = a pessoa tocou nela; pay = escolheu como pagou; card = qual cartão)
+export type Hint = { type: 'in' | 'out' | 'card' | 'invest'; sure?: boolean; pay?: boolean; card?: string };
+// image = foto ou imagem enviada como documento (text = legenda); doc = outro documento (PDF…); hint = só pelo app
+export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'doc' | 'other'; text?: string; audioId?: string; mediaId?: string; lastHour?: number; hint?: Hint };
 export type BotDeps = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<any>;
   ask: (system: string, question: string) => Promise<string>;            // pergunta livre (Groq)
   extract: (text: string, today: string) => Promise<Quick | null>;       // frase sem número ("gastei quarenta no uber")
   transcribe: (audioId: string) => Promise<string>;                      // áudio → texto (Groq Whisper)
-  // foto do comprovante → valor, data, loja e categoria (null: não é comprovante legível; 'grande'/'tipo': imagem recusada)
-  readReceipt: (mediaId: string, today: string, categories: string[], note: string) => Promise<Receipt | null | 'grande' | 'tipo'>;
+  // foto do comprovante → tipo, valor, data, quem e categoria (null: não é comprovante legível; 'grande'/'tipo': imagem recusada)
+  readReceipt: (mediaId: string, today: string, cats: ReceiptCats, note: string, userName: string) => Promise<Receipt | null | 'grande' | 'tipo'>;
   deleteTx: (uid: string, id: string) => Promise<boolean>;               // "desfazer": apaga o lançamento (id + dono)
   today: () => string;                                                   // AAAA-MM-DD em São Paulo
   appUrl: string;
@@ -54,8 +56,9 @@ export const MSG = {
   noAudio: 'Não consegui entender o áudio. Pode repetir mais devagar ou escrever? Ex.: _uber 23 ontem_',
   limit: (n: number) => `Você já usou as ${n} perguntas/áudios de hoje. Amanhã libera de novo.\nLançar por texto e consultar (*saldo*, *fatura*, *contas*) continuam funcionando.`,
   fail: 'Tive um problema agora e não consegui terminar. Tente de novo em instantes.',
+  invoicePaid: '💳 Pagar a fatura não precisa de lançamento: as compras do cartão já contam no saldo (cada parcela no mês da fatura). Para conferir, mande *fatura*.',
 };
-const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n📷 Mande a *foto ou o print de um comprovante* e eu lanço o gasto.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
+const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n📷 Mande a *foto ou o print de um comprovante* (compra, PIX enviado ou recebido) e eu lanço.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
 
 const SYSTEM = `Você é o Conselheiro do Meu Caixa respondendo pelo WhatsApp: um planejador financeiro experiente, direto, caloroso e prático.
 Você conversa com autônomos e pequenos negócios no Brasil e recebe, abaixo, os NÚMEROS REAIS do usuário.
@@ -77,6 +80,7 @@ Regras:
 const QUESTION = /^(quanto|quanta|quantos|quantas|qual|quais|como|quando|onde|por ?que|pq|posso|devo|consigo|da pra|vale a pena|o que|me (diga|fala|mostra|ajuda|explica)|sera|tem como|e se)\b/;
 const ENTRY_VERB = /\b(gastei|paguei|comprei|recebi|vendi|ganhei|investi|apliquei|resgatei|guardei|transferi|depositei)\b/;
 const PAY_VERB = /^(paguei|pago|quitei|recebi|recebido)\b/;
+const INVOICE_PAY = /(^| )(paguei|pagamento|pagar|quitei|paga|pago|quitada|quitado)( |$)/;
 const ACK = /^(ok|okay|obrigad[oa]|muito obrigad[oa]|valeu|vlw|blz|beleza|show|top|certo|entendi|perfeito|tks|thanks|tmj|joia|otimo|massa)$/;
 const isQuestion = (text: string) => /\?\s*$/.test(text) || QUESTION.test(norm(text));
 
@@ -158,12 +162,14 @@ export async function serve(m: Incoming, u: WaUser, d: BotDeps, o: { noAI?: bool
     heard = `🎙️ _"${text.length > 200 ? text.slice(0, 200) + '…' : text}"_\n\n`;
   }
   if (!text) return null;
-  const reply = await route(text, u, d, m.kind === 'audio', !!o.noAI);
+  const reply = await route(text, u, d, m.kind === 'audio', !!o.noAI, m.hint);
   return reply ? heard + reply : null;
 }
 
-async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, noAI = false): Promise<string | null> {
+async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, noAI = false, hint?: Hint): Promise<string | null> {
   const n = norm(text).replace(/[!.?…]+$/g, '').trim(), today = d.today();
+  let loaded: Data | undefined;
+  const load = async () => loaded ??= await d.rpc('wa_data', { p_uid: u.user_id }) as Data;
   if (!/[\p{L}\p{N}]/u.test(n) || ACK.test(n)) return null; // "ok", "obrigado", só emoji: não precisa responder
   if (/^(oi|ola|ola robo|bom dia|boa tarde|boa noite|ajuda|menu|comandos|help|inicio)$/.test(n)) return MSG.help(u.name);
   if (/^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/.test(n)) return undo(u, d);
@@ -177,11 +183,16 @@ async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, no
     let q = parseQuick(text, today) as Quick | null;
     // "paguei aluguel" / "recebi mensalidade rogério": conta fixa do mês, sem precisar do valor
     if (!q && PAY_VERB.test(n) && feats(u).bills !== false) {
-      const data: Data = await d.rpc('wa_data', { p_uid: u.user_id });
+      const data = await load();
       const bill = findBill(text, /^(recebi|recebido)/.test(n) ? 'in' : 'out', data, today);
       if (bill) return addEntry(u, d, { type: bill.rec.type, amount: Number(bill.rec.amount), installments: 1, date: today, description: bill.rec.name, investKind: null }, text, data);
       const done = findBill(text, /^(recebi|recebido)/.test(n) ? 'in' : 'out', data, today, true);
       if (done) return `✅ *${done.rec.name}* já estava marcada como ${done.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
+    }
+    // "paguei a fatura": as compras do cartão já contam (a não ser que a fatura seja uma conta fixa cadastrada)
+    if (/(^| )faturas?( |$)/.test(n) && INVOICE_PAY.test(n)) {
+      const data = await load();
+      if (feats(u).bills === false || !(findBill(text, 'out', data, today) || findBill(text, 'out', data, today, true))) return MSG.invoicePaid;
     }
     // frase de lançamento sem número ("gastei quarenta no uber", comum em áudio): a IA extrai
     if (!q && (fromAudio || ENTRY_VERB.test(n))) {
@@ -192,13 +203,19 @@ async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, no
       }
       q = await d.extract(text, today);
     }
-    if (q && q.amount > 0) return addEntry(u, d, q, text);
+    if (q && q.amount > 0) {
+      // tipo automático: a frase, o histórico da pessoa, as categorias dela e a aba do app (guessType, igual no app)
+      const data = await load(), g = guessType(q, text, data, hint);
+      const cat = g.category_id ? data.categories.find((c) => c.id === g.category_id) ?? null : null;
+      const card = g.card_id ? data.cards.find((c) => c.id === g.card_id) ?? null : null;
+      return addEntry(u, d, { ...q, type: g.type, investKind: g.investKind }, text, data, { cat, card });
+    }
   }
   return noAI ? null : askAI(text, u, d, today, counted);
 }
 
 // ---------------- lançar ----------------
-type EntryOpts = { cat?: Category | null; head?: string; tail?: string };
+type EntryOpts = { cat?: Category | null; card?: Card | null; head?: string; tail?: string };
 async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loaded?: Data, o: EntryOpts = {}): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
   const data: Data = loaded ?? await d.rpc('wa_data', { p_uid: u.user_id });
@@ -210,7 +227,7 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
   if (bill && !(PAY_VERB.test(norm(original)) || Math.abs(Number(bill.rec.amount) - q.amount) < 0.005)) bill = null;
   if (bill) type = bill.rec.type;
   const billCard = bill?.rec.card_id ? data.cards.find((c) => c.id === bill!.rec.card_id && !c.archived) : null;
-  const card = type === 'card' ? billCard || defaultCard(data) : null;
+  const card = type === 'card' ? billCard || (o.card && !o.card.archived ? o.card : null) || defaultCard(data) : null;
   if (type === 'card' && !card) { type = 'out'; note = '\n_Você não tem cartão cadastrado: lancei como saída à vista. Cadastre o cartão no app._'; }
   const kind = type === 'in' ? 'in' : type === 'invest' ? 'invest' : 'out';
   const billCat = bill?.rec.category_id ? data.categories.find((c) => c.id === bill!.rec.category_id && c.kind === kind) : null;
@@ -261,7 +278,9 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
 }
 
 // ---------------- comprovante por foto ----------------
-// Foto é gasto (saída; no crédito vai para o cartão). Só vira entrada se a legenda disser (ex.: "recebi").
+// O tipo vem do comprovante: compra ou PIX enviado = saída (no crédito vai para o cartão), PIX recebido = entrada,
+// aplicação = investimento. A legenda ("recebi") e a aba tocada no app mandam mais. Num PIX sem o nome da pessoa,
+// quem costuma pagar a ela (histórico) vira entrada. A foto não é guardada: só o lançamento.
 const PAY_LABEL: Record<string, string> = { credito: 'crédito', debito: 'débito', pix: 'PIX', dinheiro: 'dinheiro', boleto: 'boleto', outro: '' };
 async function receipt(m: Incoming, u: WaUser, d: BotDeps): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
@@ -269,26 +288,44 @@ async function receipt(m: Incoming, u: WaUser, d: BotDeps): Promise<string> {
   const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
   if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
   const data: Data = await d.rpc('wa_data', { p_uid: u.user_id });
-  const today = d.today(), caption = (m.text ?? '').trim().slice(0, 300);
-  const income = /\b(recebi|recebido|recebimento|entrada|vendi|venda|ganhei)\b/.test(norm(caption));
-  const kind = income ? 'in' : 'out';
-  const r = await d.readReceipt(m.mediaId, today, catsOfKind(kind, data).map((c) => c.name), caption);
+  const today = d.today(), caption = (m.text ?? '').trim().slice(0, 300), hint = m.hint;
+  const names = (kind: string) => catsOfKind(kind, data).map((c) => c.name);
+  const r = await d.readReceipt(m.mediaId, today, { out: names('out'), in: names('in') }, caption, u.name || '');
   if (r === 'grande') return MSG.bigImage;
   if (r === 'tipo') return MSG.unsupported;
   if (!r) return MSG.noReceipt;
-  // a legenda manda: "uber", "no cartão", "almoço com cliente"…
+  // a legenda manda: "recebi", "uber", "no cartão", "almoço com cliente"…
   const fromCaption = caption ? parseQuick(caption, today) as Quick | null : null;
-  const card = !income && (r.payment === 'credito' || /\b(cartao|credito)\b/.test(norm(caption)));
+  const exp = caption ? explicitType(caption) : null;
+  const ev = guessType({ type: 'out', amount: r.amount, installments: 1, date: r.date, description: r.description, investKind: null }, r.description, data, null);
+  let dir: 'in' | 'out' | 'invest' = r.kind === 'entrada' ? 'in' : r.kind === 'investimento' ? 'invest' : 'out';
+  if (exp) dir = (exp === 'card' ? 'out' : exp) as 'in' | 'out' | 'invest';
+  else if (hint?.sure) dir = hint.type === 'card' ? 'out' : hint.type;
+  else if (dir === 'out' && r.payment === 'pix') {
+    const v = ev.votes, tot = v.in + v.out + v.invest;
+    if (v.in >= 0.75 && v.in >= 0.8 * tot) dir = 'in';
+  }
+  let type: string = dir;
+  if (dir === 'out') {
+    const cash = /(^| )(pix|debito|dinheiro|especie|boleto)( |$)/.test(norm(caption));
+    if (exp === 'card' || (hint?.sure && hint.type === 'card') || (r.payment === 'credito' && !cash)) type = 'card';
+    else if (r.payment === 'outro' && !cash && !(hint?.sure && hint.pay) && ev.type === 'card') type = 'card';
+  }
+  const cardOf = (id?: string | null) => id ? data.cards.find((c) => c.id === id && !c.archived) ?? null : null;
+  const card = type === 'card' ? cardOf(hint?.type === 'card' ? hint.card : null) || cardOf(ev.card_id) : null;
   const q: Quick = {
-    type: income ? 'in' : card ? 'card' : 'out', amount: r.amount, installments: card ? Math.max(r.installments, fromCaption?.installments ?? 1) : 1,
-    date: r.date, description: (r.description || fromCaption?.description || '').slice(0, 60), investKind: null,
+    type, amount: r.amount, installments: type === 'card' ? Math.max(r.installments, fromCaption?.installments ?? 1) : 1,
+    date: r.date, description: (r.description || fromCaption?.description || '').slice(0, 60),
+    investKind: dir === 'invest' ? (/(^| )(resgate|resgatei)( |$)/.test(norm(caption + ' ' + r.description)) ? 'resgate' : 'aporte') : null,
   };
-  const named = r.category ? data.categories.find((c) => c.kind === kind && !c.archived && norm(c.name) === norm(r.category)) ?? null : null;
-  const byCaption = caption ? matchCategory(caption, kind, data) : null;
+  // categoria: a da legenda > a que a pessoa costuma usar para esse nome > a que a IA escolheu da lista > a do nome
+  const byId = (id: string | null) => id ? data.categories.find((c) => c.id === id) ?? null : null;
+  const named = r.category ? data.categories.find((c) => c.kind === dir && !c.archived && norm(c.name) === norm(r.category)) ?? null : null;
+  const cat = (caption ? matchCategory(caption, dir, data) : null) || byId(ev.catFor(dir, 1)) || named || byId(ev.catFor(dir));
   const how = PAY_LABEL[r.payment] ? ` (${PAY_LABEL[r.payment]})` : '';
-  const dup = data.transactions.some((t) => t.date === q.date && Math.abs(Number(t.amount) - q.amount) < 0.005 && (t.type === q.type || (q.type !== 'in' && t.type !== 'in' && t.type !== 'invest')));
+  const dup = data.transactions.some((t) => t.date === q.date && Math.abs(Number(t.amount) - q.amount) < 0.005 && (t.type === q.type || (q.type !== 'in' && q.type !== 'invest' && t.type !== 'in' && t.type !== 'invest')));
   return addEntry(u, d, q, caption || q.description, data, {
-    cat: byCaption || named, head: `🧾 Li o comprovante${how}:`,
+    cat, card, head: `🧾 Li o comprovante${how}:`,
     tail: dup ? '⚠️ Já havia um lançamento com esse valor nesse dia. Se foi o mesmo comprovante, responda *desfazer*.' : undefined,
   });
 }

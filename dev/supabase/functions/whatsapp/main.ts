@@ -8,7 +8,7 @@ import { answer, serve, type BotDeps, type WaUser } from './bot.ts';
 import { todaySP } from './context.ts';
 import { groq } from './groq.ts';
 import { type AppInput, type AppResult, type Cfg, handle } from './handler.ts';
-import { b64, IMAGE_TYPES, MAX_IMAGE, readReceipt, VISION_MODELS } from './receipt.ts';
+import { b64, IMAGE_TYPES, MAX_IMAGE, readReceipt, type ReceiptCats, VISION_MODELS } from './receipt.ts';
 
 const env = (k: string, d = '') => (Deno.env.get(k) ?? d).trim(); // espaço ou quebra de linha colados junto não atrapalham
 const named = (k: string) => { try { const o = JSON.parse(env(k) || '{}'); return String(o.default ?? Object.values(o)[0] ?? ''); } catch { return ''; } };
@@ -95,7 +95,7 @@ async function transcribe(mediaId: string) {
 }
 
 // foto do comprovante: pega o arquivo na Meta, confere tipo e tamanho e manda o modelo de visão ler (nada é salvo)
-async function receipt(mediaId: string, today: string, categories: string[], note: string) {
+async function receipt(mediaId: string, today: string, categories: ReceiptCats, note: string, userName: string) {
   const meta = await graph(encodeURIComponent(mediaId)).then((r) => r.json());
   if (!meta?.url) throw new Error('imagem sem endereço');
   const mime = String(meta.mime_type ?? '').split(';')[0].trim().toLowerCase();
@@ -105,7 +105,7 @@ async function receipt(mediaId: string, today: string, categories: string[], not
   if (!file.ok) throw new Error('download da imagem falhou (' + file.status + ')');
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (bytes.length > MAX_IMAGE) return 'grande' as const;
-  return readReceipt({ key: env('GROQ_API_KEY'), base: GROQ_BASE, models: VISION, mime, data: b64(bytes), today, categories, note });
+  return readReceipt({ key: env('GROQ_API_KEY'), base: GROQ_BASE, models: VISION, mime, data: b64(bytes), today, categories, note, userName });
 }
 
 // ---------- pelo app: o mesmo robô, com o login do usuário ----------
@@ -129,11 +129,11 @@ async function assist(uid: string, inp: AppInput): Promise<AppResult> {
       heard = (await ai.transcribe(new Blob([fromB64(a.data)], { type: a.mime }), 'audio.' + (AUDIO_EXT[a.mime] ?? 'webm'))).trim();
       return heard;
     },
-    readReceipt: (_id, today, categories, note) => readReceipt({ key: env('GROQ_API_KEY'), base: GROQ_BASE, models: VISION, mime: inp.image!.mime, data: inp.image!.data, today, categories, note }),
+    readReceipt: (_id, today, categories, note, userName) => readReceipt({ key: env('GROQ_API_KEY'), base: GROQ_BASE, models: VISION, mime: inp.image!.mime, data: inp.image!.data, today, categories, note, userName }),
     deleteTx: async (owner, id) => { const ok = await deleteTx(owner, id); if (ok) removed = id; return ok; },
   };
   const kind = inp.image ? 'image' : inp.audio ? 'audio' : 'text';
-  const reply = await serve({ phone: 'app', kind, text: inp.text, audioId: inp.audio ? 'app' : undefined, mediaId: inp.image ? 'app' : undefined }, u, deps, { noAI: inp.noAI });
+  const reply = await serve({ phone: 'app', kind, text: inp.text, audioId: inp.audio ? 'app' : undefined, mediaId: inp.image ? 'app' : undefined, hint: inp.hint }, u, deps, { noAI: inp.noAI });
   return { reply, handled: reply !== null, heard: heard || undefined, tx, removed };
 }
 

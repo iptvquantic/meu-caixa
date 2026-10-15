@@ -127,8 +127,9 @@ const fake = http.createServer(async (req, res) => {
   if (url.pathname === '/groq/audio/transcriptions') { groqCalls.push({ audio: true, form: body.toString('latin1') }); return json({ text: 'Gastei 40 reais de Uber ontem.' }); }
   if (url.pathname === '/groq/chat/completions') {
     const j = JSON.parse(body); groqCalls.push(j);
-    if (Array.isArray(j.messages?.[1]?.content)) { // modelo de visão: comprovante de farmácia no PIX
-      return json({ choices: [{ message: { content: '{"comprovante": true, "valor": 52.9, "data": null, "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
+    if (Array.isArray(j.messages?.[1]?.content)) { // modelo de visão: PIX recebido da Vanessa (legenda "pix da vanessa") ou farmácia no PIX
+      if (/pix da vanessa/.test(j.messages[1].content[0].text)) return json({ choices: [{ message: { content: '{"comprovante": true, "tipo": "entrada", "valor": 30, "data": null, "descricao": "Pix Vanessa", "categoria": "Vendas", "pagamento": "pix", "parcelas": 1}' } }] });
+      return json({ choices: [{ message: { content: '{"comprovante": true, "tipo": "saida", "valor": 52.9, "data": null, "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
     }
     return json({ choices: [{ message: { content: j.response_format ? '{"lancamento": false}' : 'Resposta da IA (teste).' } }] });
   }
@@ -270,6 +271,18 @@ async function main() {
   a = await (await appCall(ANA_JWT, { image: { mime: 'image/jpeg', data: Buffer.from('JPEG').toString('base64') }, text: 'remédio' })).json();
   ok(a.tx?.description === 'Drogasil' && /🧾 Li o comprovante/.test(a.reply), 'app: foto do comprovante lida e lançada');
   const usage = psql(`select count from public.ai_usage where user_id = '${ANA}'`); ok(usage === '6', 'app: áudio e foto contam no limite diário de IA, como no WhatsApp (' + usage + ')');
+  // tipo automático: a foto de um PIX recebido vira entrada; a aba tocada no app decide quando a frase não diz
+  a = await (await appCall(ANA_JWT, { image: { mime: 'image/jpeg', data: Buffer.from('JPEG').toString('base64') }, text: 'pix da vanessa' })).json();
+  ok(a.tx?.type === 'in' && Number(a.tx?.amount) === 30 && /💰 \*Entrada\* de \*R\$ 30,00\*/.test(a.reply), 'app: foto de PIX recebido vira entrada: ' + JSON.stringify(a.tx));
+  ok(psql(`select c.legacy_key || ' ' || c.kind from public.transactions t join public.categories c on c.id = t.category_id where t.id = '${a.tx?.id}'`) === 'vendas in', 'app: entrada gravada na categoria de entrada (Vendas)');
+  const intro = groqCalls.filter((c) => Array.isArray(c.messages?.[1]?.content)).pop()?.messages[1].content[0].text || '';
+  ok(/Categorias de gasto do usuário: .*Farmácia/.test(intro) && /Categorias de entrada do usuário: .*Vendas/.test(intro) && /se chama Ana Souza/.test(intro), 'a IA recebe as categorias de gasto e de entrada e o nome do usuário');
+  a = await (await appCall(ANA_JWT, { text: 'xpto 12', hint: { type: 'in', sure: true } })).json();
+  ok(a.tx?.type === 'in' && Number(a.tx?.amount) === 12, 'app: aba Entrada tocada + frase sem pista → entrada: ' + JSON.stringify(a.tx));
+  a = await (await appCall(ANA_JWT, { text: 'qwerty 13', hint: { type: 'hack', sure: 'sim', card: "'; drop table x" } })).json();
+  ok(a.tx?.type === 'out' && Number(a.tx?.amount) === 13, 'app: dica fora do formato é ignorada (vale o padrão): ' + JSON.stringify(a.tx));
+  a = await (await appCall(ANA_JWT, { text: 'xpto 14' })).json();
+  ok(a.tx?.type === 'in', 'app: "xpto" já foi lançado como entrada → entrada de novo (histórico do banco)');
 
   // segurança
   const dup = await send('mercado 10', { id: 'wamid.repetida' }), again = await send('mercado 10', { id: 'wamid.repetida' });

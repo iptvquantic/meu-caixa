@@ -212,4 +212,102 @@ const ICON_FAMILY = {
 };
 const familyOf = (icon, kind) => { const name = String(icon || '').replace(/^i:/, ''); const fam = ICON_FAMILY[kind] || {}; for (const [k, list] of Object.entries(fam)) if (list.split(' ').includes(name)) return k; return null; };
 
-export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji };
+/* ===== Tipo automático: entrada, saída, cartão ou investimento ===== */
+// "recebi", "paguei", "investi", "no cartão" e "3x" decidem sozinhos. Sem essas palavras, vale o jeito da pessoa:
+// o que ela já lançou com as mesmas palavras, os nomes das categorias e contas fixas dela e o ícone (iFood é gasto,
+// freela é entrada). Sem pista, vale a aba escolhida no app; sem aba, saída. A aba tocada pela pessoa vence as pistas.
+const TYPE_RX = {
+  invest: /(^| )(apliquei|aplicacao|aporte|aportei|investi|guardei|resgatei|resgate)( |$)/,
+  in: /(^| )(recebi|recebido|recebida|recebimento|ganhei|vendi|venda|vendas|faturei|caiu|entrou|pix recebido|pagamento recebido)( |$)/,
+  card: /(^| )(cartao|credito|parcelado|parcelei|\d{1,2} ?x)( |$)/,
+  out: /(^| )(gastei|paguei|comprei|gasto|despesa|saida|pago)( |$)/,
+  cash: /(^| )(pix|debito|dinheiro|especie|boleto|a vista)( |$)/,
+  product: /(^| )(cdb|lci|lca|tesouro|selic|ipca|poupanca|acoes|fii|fiis|etf|bitcoin|btc|cripto|criptomoeda|previdencia|pgbl|vgbl)( |$)/
+};
+const typeText = s => norm(s).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+function explicitType(text) {
+  const n = typeText(text);
+  for (const k of ['invest', 'in', 'card', 'out']) if (TYPE_RX[k].test(n)) return k;
+  return null;
+}
+const TYPE_STOP = new Set(('de da do das dos para pra pro com sem por pelo pela uma um uns umas no na nos nas em que meu minha meus minhas seu sua seus suas '
+  + 'reais real pix ted doc valor mes dia hoje ontem anteontem cartao credito debito dinheiro especie parcelado vista boleto '
+  + 'gastei paguei comprei recebi recebido recebida ganhei vendi apliquei investi resgatei aporte resgate gasto pago').split(' '));
+// palavras que ajudam a reconhecer o lançamento ("Venda de IPTV" → venda, iptv); plural vira singular
+const typeWords = s => typeText(s).split(' ').filter(w => w.length >= 3 && !/^\d/.test(w) && !TYPE_STOP.has(w)).map(w => w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w);
+// palavras dos nomes das categorias que todo mundo começa tendo: valem menos que um nome criado pela pessoa
+const TYPE_GENERIC = new Set(typeWords('Alimentação Mercado Transporte Combustível Contas da casa Moradia Saúde Farmácia Lazer Assinaturas Educação Roupas PIX enviado Fornecedores Impostos e taxas Outros Vendas Serviços Salário PIX recebido Renda Fixa CDB Tesouro Direto Ações Fundos Criptomoedas Previdência Poupança'));
+// q: o lançamento rápido (parseQuick); data: { txs, cats, recs, cards } do app ou { transactions, categories, recurring, cards } do banco;
+// hint: { type, sure, pay, card } da tela (sure = a pessoa tocou na aba; pay = escolheu como pagou).
+// Devolve o tipo, a categoria e o cartão sugeridos, de onde veio a decisão (by) e as pistas (votes).
+function guessType(q, text, data, hint) {
+  const desc = (q && q.description) || text || '', W = typeWords(desc), set = new Set(W), full = W.join(' ');
+  const vote = { in: 0, out: 0, invest: 0 }, cats = {}, cardIds = {};
+  let outW = 0, cardW = 0;
+  const dirOf = t => (t === 'card' ? 'out' : t), add = (o, k, w) => { o[k] = (o[k] || 0) + w; };
+  const list = (a, b) => (data && (data[a] || data[b])) || [];
+  const catList = list('cats', 'categories'), cardList = list('cards', 'cards').filter(c => !c.archived);
+  if (W.length) {
+    // o que já foi lançado com as mesmas palavras (o mais recente pesa mais; descrição igual pesa o dobro)
+    const txs = list('txs', 'transactions').slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 2000);
+    txs.forEach((t, i) => {
+      const dir = dirOf(t.type); if (!(dir in vote)) return;
+      const D = typeWords(t.description); if (!D.length) return;
+      const hit = D.filter(w => set.has(w)).length; if (!hit) return;
+      const w = hit / (W.length + D.length - hit) * (D.join(' ') === full ? 2 : 1) / (1 + i / 300);
+      vote[dir] += w;
+      if (t.type === 'card') { cardW += w; if (t.card_id) add(cardIds, t.card_id, w); } else if (dir === 'out') outW += w;
+      if (t.category_id) add(cats, dir + '|' + t.category_id, w);
+    });
+    // nomes das categorias e das contas fixas da pessoa ("Venda de IPTV" é entrada)
+    // (nome inteiro na frase pesa mais na escolha da categoria: "Cerveja" antes de "Categoria importada")
+    const nameW = name => { const C = typeWords(name), hits = C.filter(w => set.has(w)); return !hits.length ? [0, 0] : [hits.some(w => !TYPE_GENERIC.has(w)) ? 2 : 1, 0.5 + 0.5 * hits.length / C.length]; };
+    for (const c of catList) {
+      if (c.archived || c.legacy_key === 'outros' || !(c.kind in vote)) continue;
+      const [w, cover] = nameW(c.name); if (w) { vote[c.kind] += w; add(cats, c.kind + '|' + c.id, w * cover); }
+    }
+    for (const r of list('recs', 'recurring')) {
+      const dir = dirOf(r.type), [w, cover] = r.active === false || !(dir in vote) ? [0, 0] : nameW(r.name); if (!w) continue;
+      vote[dir] += w;
+      if (r.type === 'card') { cardW += w; if (r.card_id) add(cardIds, r.card_id, w); } else if (dir === 'out') outW += w;
+      if (r.category_id) add(cats, dir + '|' + r.category_id, w * cover);
+    }
+    // o ícone, quando só faz sentido de um lado (uber → transporte, freela → serviços); "Pix Fulano" não diz o lado
+    const icon = suggestIcon(desc.replace(/(^|\s)(pix|ted|doc|transferencia|transferência)(?=\s|$)/gi, ' '), 'out');
+    if (iconIsSpecific(icon)) { const f = ['in', 'out', 'invest'].filter(k => familyOf(icon, k)); if (f.length === 1) vote[f[0]] += 1; }
+  }
+  const h = hint && ['in', 'out', 'card', 'invest'].includes(hint.type) ? hint : null;
+  const exp = explicitType(text), qType = (q && q.type) || 'out', n = typeText(text);
+  let dir, by;
+  if (exp) { dir = dirOf(exp); by = 'texto'; }
+  else if (h && h.sure) { dir = dirOf(h.type); by = 'aba'; }
+  else {
+    if (qType !== 'out') vote[dirOf(qType)] += 2; // palavra mais fraca do lançamento rápido ("salário", "entrada")
+    if (TYPE_RX.product.test(n)) vote.invest += 2; // "cdb 500", "tesouro 1000"
+    const tot = vote.in + vote.out + vote.invest, best = ['out', 'in', 'invest'].reduce((a, b) => (vote[b] > vote[a] ? b : a));
+    if (vote[best] >= 0.25 && vote[best] >= 0.6 * tot) { dir = best; by = 'historico'; }
+    else if (h) { dir = dirOf(h.type); by = 'aba'; }
+    else { dir = dirOf(qType); by = 'padrao'; }
+  }
+  // saída: cartão quando a frase ou a tela dizem, ou quando a pessoa costuma pagar isso no cartão
+  let type = dir, card_id = null;
+  if (dir === 'out') {
+    if (exp === 'card' || qType === 'card' || (h && h.type === 'card' && (by === 'aba' || h.pay))) type = 'card';
+    else if (!(h && h.sure && h.pay) && !TYPE_RX.cash.test(n) && cardW >= 0.25 && cardW >= 0.6 * (cardW + outW)) type = 'card';
+    if (type === 'card') {
+      const ok = id => cardList.some(c => c.id === id);
+      if (h && h.type === 'card' && h.card && ok(h.card)) card_id = h.card;
+      else { const top = Object.entries(cardIds).filter(([id]) => ok(id)).sort((a, b) => b[1] - a[1])[0]; card_id = top ? top[0] : null; }
+    }
+  }
+  // categoria mais usada com essas palavras (ou com o nome dela) do mesmo lado
+  const catFor = (kind, min = 0.25) => {
+    const top = Object.entries(cats).filter(([k]) => k.startsWith(kind + '|') && catList.some(c => c.id === k.slice(kind.length + 1) && c.kind === kind && !c.archived))
+      .sort((a, b) => b[1] - a[1])[0];
+    return top && top[1] >= min ? top[0].slice(kind.length + 1) : null;
+  };
+  const investKind = dir === 'invest' ? ((q && q.investKind === 'resgate') || /(^| )(resgatei|resgate|saquei)( |$)/.test(n) ? 'resgate' : 'aporte') : null;
+  return { type, investKind, category_id: catFor(dir), card_id, by, votes: vote, catFor };
+}
+
+export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords };

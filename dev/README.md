@@ -18,8 +18,8 @@ Postgres 16 e cria o usuário sozinho.
 
 | Comando | O que confere |
 |---|---|
-| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
-| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; assistente com microfone de verdade (dispositivo falso do Chromium) e foto enviada pelo seletor de arquivo; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
+| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
+| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
 | `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
 | `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
 | `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta, a foto do comprovante e o assistente do app (texto, áudio e foto gravando no banco). IA: chave publicável, login, limite, plano e leitura de comprovante. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
@@ -92,10 +92,21 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 - O usuário conecta em Ajustes → WhatsApp: o app mostra um código de 8 dígitos (vale 15 min, uma vez) e abre o
   WhatsApp com "MC código" já escrito. O robô só responde números conectados e respeita o liga/desliga.
 
-## Assistente no app (falar, escrever ou foto)
+## Assistente no app ("Lançar com IA": falar, escrever ou foto)
 
-- No Novo lançamento (botão +) e na página Assistente, o app manda texto, áudio (gravado no navegador) ou a foto
-  do comprovante (reduzida para JPEG de até 1600 px no aparelho) para `POST …/whatsapp?app=1` com o login.
+- No Início (cartão logo abaixo do saldo), no Novo lançamento (botão +) e na página Assistente, o app manda texto,
+  áudio (gravado no navegador) ou a foto do comprovante (reduzida para JPEG de até 1600 px no aparelho) para
+  `POST …/whatsapp?app=1` com o login. Liga/desliga em Ajustes → Recursos do app (`features.assist`).
+- Tirar foto: no celular, o campo `#photo-cam` (`capture="environment"`) abre a câmera do aparelho; no computador,
+  a webcam abre numa folha do app (`getUserMedia`) e desliga ao fotografar ou fechar. O arquivo sai do campo na
+  hora e o canvas é zerado: a foto não fica no aparelho, nem no servidor (só passa pela IA).
+- Tipo automático (`guessType` no `app.html`, copiado para o robô em `smart.ts`): palavras da frase ("recebi",
+  "paguei", "investi", "no cartão", "3x") > aba tocada no formulário (`hint.sure`) > pistas da pessoa (lançamentos
+  com as mesmas palavras, nomes das categorias e contas fixas, ícone) > aba lembrada > saída. Cartão quando a
+  frase ou a tela dizem, ou quando a pessoa costuma pagar aquilo no cartão (e não disse "pix"/"dinheiro").
+  O app manda a aba como `hint: { type, sure, pay, card }`; a função ignora qualquer coisa fora desse formato.
+- Foto: a IA devolve o tipo (`saida`, `entrada`, `investimento`) com as categorias de gasto e de entrada da pessoa
+  e o nome dela; legenda e aba tocada mandam mais; PIX sem o nome da pessoa segue o histórico de quem paga a ela.
 - A função confere o login (`auth.getUser`), limita 20 pedidos por minuto por pessoa, aceita só imagem
   JPEG/PNG/WebP até 3 MB e áudio webm/ogg/mp4/mpeg/wav até 4 MB, e roda o mesmo `serve()` do robô do WhatsApp
   (mesmas regras de lançamento, conta fixa, consultas e limite diário de IA). Devolve a resposta e o lançamento

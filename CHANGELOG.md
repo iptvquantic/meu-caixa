@@ -1,5 +1,25 @@
 # Histórico de versões
 
+## 2.3.2 — 15/10/2026
+- "Lançar com IA" em destaque: cartão dourado no Início (logo abaixo do saldo) e no topo do Novo lançamento,
+  com botões grandes para Tirar foto, Escolher foto, Falar e Escrever. Pode ser desligado em Ajustes →
+  Recursos do app (nada é apagado).
+- Tipo automático: o assistente descobre sozinho se é entrada, saída, cartão ou investimento. Palavras como
+  "recebi", "paguei", "investi", "no cartão" ou "3x" decidem; sem elas, vale o jeito de cada pessoa: o que ela
+  já lançou com as mesmas palavras (o cliente "Josimar" é entrada; a Netflix sempre no cartão vai para o
+  cartão), os nomes das categorias dela ("Venda de IPTV" é entrada) e o ícone (uber é gasto). A aba tocada no
+  formulário vence as pistas. Corrige "iptv vanessa 30", que entrava como saída em Assinaturas.
+- Tirar foto na hora: no celular abre a câmera traseira do aparelho; no computador, a webcam dentro do app.
+  A foto é reduzida no aparelho, lida pela IA e descartada: não fica salva no app nem no servidor (a câmera
+  desliga logo depois). O aviso do lançamento diz "foto descartada".
+- Comprovante por foto entende o lado: PIX recebido vira entrada, aplicação vira investimento e compra no
+  crédito vai para o cartão; num PIX sem o nome da pessoa, quem costuma pagar a ela vira entrada.
+- "Paguei a fatura" não lança de novo o que já está nas compras do cartão (a não ser que a fatura seja uma
+  conta fixa cadastrada).
+- Robô do WhatsApp: quando a Meta bloqueia o app ("API access blocked"), o aviso do dono explica e leva direto
+  ao painel da Meta, em vez de culpar o ID do número.
+- Avisos (toasts) ocupam a largura da tela no celular, sem quebrar o texto em várias linhas.
+
 ## 2.3.1 — 15/10/2026
 - Senha nova (cadastro e troca) com pelo menos 8 caracteres, letras e números, com a regra à vista.
 - Segurança: política de conteúdo (CSP) com o hash de cada script no app e na página inicial; o app no ar

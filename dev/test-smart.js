@@ -8,7 +8,7 @@ const cut = code.indexOf('\n(() => {\n');
 if (cut < 0) throw new Error('não achei o início do app no script principal');
 const ctx = {};
 vm.createContext(ctx);
-vm.runInContext(code.slice(0, cut) + ';Object.assign(this,{ICONS,ICON_GROUPS,ICON_RULES,ICON_FAMILY,suggestIcon,parseQuick,parseAmountBR,stripLeadingEmoji,familyOf,iconIsSpecific})', ctx);
+vm.runInContext(code.slice(0, cut) + ';Object.assign(this,{ICONS,ICON_GROUPS,ICON_RULES,ICON_FAMILY,suggestIcon,parseQuick,parseAmountBR,stripLeadingEmoji,familyOf,iconIsSpecific,explicitType,guessType,typeWords})', ctx);
 
 const { ok, done } = checker('ícones e lançamento rápido');
 const eq = (a, b, m) => ok(JSON.stringify(a) === JSON.stringify(b), `${m} → ${JSON.stringify(a)} (esperado ${JSON.stringify(b)})`);
@@ -63,5 +63,42 @@ eq(q('Uber, ontem, 23'), { type: 'out', amount: 23, inst: 1, date: '2026-10-07',
 eq(q('notebook 3.600 12x.'), { type: 'card', amount: 3600, inst: 12, date: T, desc: 'Notebook', kind: null }, 'milhar com ponto + ponto final');
 eq(q('mercado 52,90!'), { type: 'out', amount: 52.9, inst: 1, date: T, desc: 'Mercado', kind: null }, 'centavos + exclamação');
 eq(q('resgatei 200 do tesouro'), { type: 'invest', amount: 200, inst: 1, date: T, desc: 'Tesouro', kind: 'resgate' }, 'preposição no começo da descrição sai');
+
+// tipo automático: entrada, saída, cartão ou investimento (o mesmo código roda no robô)
+eq(ctx.explicitType('recebi 300 pix'), 'in', 'recebi → entrada'); eq(ctx.explicitType('Paguei a luz'), 'out', 'paguei → saída');
+eq(ctx.explicitType('tv 2400 10x'), 'card', '10x → cartão'); eq(ctx.explicitType('vendi no cartão'), 'in', 'vendi no cartão → entrada (maquininha)');
+eq(ctx.explicitType('investi 500'), 'invest', 'investi'); eq(ctx.explicitType('iptv vanessa 30'), null, 'sem palavra que decide');
+eq(ctx.typeWords('Venda de IPTV'), ['venda', 'iptv'], 'palavras do nome'); eq(ctx.typeWords('Assinaturas e pix 30'), ['assinatura'], 'plural vira singular; pix e números saem');
+{
+  const C = (id, kind, name, legacy_key = null) => ({ id, kind, name, legacy_key, archived: false });
+  const TX = (type, description, category_id, date, card_id = null) => ({ type, description, category_id, date, card_id });
+  // jeito do dono: venda de IPTV lançada com o nome do cliente, na categoria "Venda de IPTV"
+  const data = {
+    cats: [C('iptv', 'in', 'Venda de IPTV', 'iptv'), C('vend', 'in', 'Vendas', 'vendas'), C('ass', 'out', 'Assinaturas', 'assinaturas'), C('merc', 'out', 'Mercado', 'mercado'),
+      C('ifood', 'out', 'Lanche / ifood'), C('cerv', 'out', 'Cerveja'), C('imp1', 'out', 'Categoria importada 1'), C('imp2', 'out', 'Categoria importada 2'), C('cdb', 'invest', 'Renda Fixa/CDB', 'renda_fixa')],
+    txs: [TX('in', 'Josimar', 'iptv', '2026-10-10'), TX('in', 'Roberval', 'iptv', '2026-10-09'), TX('in', 'Josimar', 'iptv', '2026-09-15'),
+      TX('out', 'ifood mensalidade iptv ramom drograria padaria', 'merc', '2026-10-04'), TX('card', 'Shopee', null, '2026-10-01', 'k1'), TX('card', 'Shopee', null, '2026-09-01', 'k1'),
+      TX('out', 'Mercado', 'merc', '2026-10-03')],
+    recs: [], cards: [{ id: 'k1', name: 'Nubank', archived: false }, { id: 'k2', name: 'Inter', archived: true }]
+  };
+  const g = (text, hint) => { const r = ctx.guessType(ctx.parseQuick(text, T), text, data, hint); return [r.type, r.category_id, r.card_id, r.by]; };
+  eq(g('iptv vanessa 30'), ['in', 'iptv', null, 'historico'], 'iptv vanessa 30 → entrada em Venda de IPTV (o caso real)');
+  eq(g('josimar 30'), ['in', 'iptv', null, 'historico'], 'nome de cliente já lançado → entrada na mesma categoria');
+  eq(g('mercado 52,90'), ['out', 'merc', null, 'historico'], 'mercado → saída');
+  eq(g('shopee 80'), ['card', null, 'k1', 'historico'], 'Shopee sempre no cartão → cartão Nubank');
+  eq(g('shopee 80 pix'), ['out', null, null, 'historico'], '"pix" na frase: à vista');
+  eq(g('ifood 35'), ['out', 'ifood', null, 'historico'], 'nome da categoria "Lanche / ifood"');
+  eq(g('cerveja importada 30')[1], 'cerv', 'nome inteiro vence nome pela metade ("Cerveja", não "Categoria importada")');
+  eq(g('cdb 500'), ['invest', 'cdb', null, 'historico'], 'cdb → investimento');
+  eq(g('xpto 10'), ['out', null, null, 'padrao'], 'sem pista: saída');
+  eq(g('xpto 10', { type: 'in' }), ['in', null, null, 'aba'], 'sem pista: vale a aba aberta');
+  eq(g('mercado 10', { type: 'in' })[0], 'out', 'aba só lembrada perde para a pista');
+  eq(g('mercado 10', { type: 'in', sure: true })[0], 'in', 'aba tocada vence a pista');
+  eq(g('recebi mercado 10', { type: 'out', sure: true })[0], 'in', 'palavra da frase vence a aba');
+  eq(g('mercado 10', { type: 'card', sure: true, pay: true, card: 'k2' }), ['card', 'merc', null, 'aba'], 'cartão arquivado não é usado (quem chama usa o principal)');
+  eq(g('shopee 10', { type: 'out', sure: true, pay: true })[0], 'out', '"PIX, débito ou dinheiro" tocado: não vai para o cartão');
+  eq(ctx.guessType(ctx.parseQuick('resgatei 200 cdb', T), 'resgatei 200 cdb', data, null).investKind, 'resgate', 'resgate');
+  eq(ctx.guessType(ctx.parseQuick('salário 2500', T), 'salário 2500', { txs: [], cats: [], recs: [], cards: [] }, null).type, 'in', 'salário sem dados: entrada');
+}
 
 done();

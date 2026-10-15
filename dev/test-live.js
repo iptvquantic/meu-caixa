@@ -95,6 +95,7 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   await p.click('#mnav .fab'); await sleep(300);
   await p.type('#as-text', 'uber 23'); await p.keyboard.press('Enter'); await sleep(900);
   ok(appCalls.length === 1 && appCalls[0].auth === 'Bearer ' + jwt && appCalls[0].b.text === 'uber 23' && appCalls[0].b.noAI === false, 'assistente: frase vai ao robô com o login');
+  ok(appCalls[0].b.hint && ['in', 'out', 'card', 'invest'].includes(appCalls[0].b.hint.type) && appCalls[0].b.hint.sure === false, 'vai junto a aba do formulário como dica (não tocada): ' + JSON.stringify(appCalls[0].b.hint));
   ok(await p.$eval('#toast-root', e => /Saída de R\$\s?23,00/.test(e.textContent) && /Desfazer/.test(e.textContent)) && !(await p.$('#as-row')), 'lançado na hora: fecha e oferece Desfazer');
   await p.click('#toast-root [data-act="toastAction"]'); await sleep(600);
   ok(seen.some(s => s.startsWith('DELETE /rest/v1/transactions')), 'Desfazer apaga o lançamento no banco');

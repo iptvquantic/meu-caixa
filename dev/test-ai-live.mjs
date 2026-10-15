@@ -28,14 +28,14 @@ const fake = http.createServer(async (req, res) => {
   // Groq simulada (modelo de visão)
   if (url.pathname === '/openai/v1/chat/completions') {
     groqSeen.push({ auth: req.headers.authorization, body: JSON.parse(raw) });
-    return json({ choices: [{ message: { content: '{"comprovante": true, "valor": 52.9, "data": "2026-10-08", "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
+    return json({ choices: [{ message: { content: '{"comprovante": true, "tipo": "saida", "valor": 52.9, "data": "2026-10-08", "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
   }
   seen.push({ path: url.pathname, apikey: req.headers.apikey, auth: req.headers.authorization });
   if (req.headers.apikey !== PUB) return json({ message: 'Invalid API key' }, 401);
   if (url.pathname === '/auth/v1/user') return req.headers.authorization === 'Bearer ' + GOOD ? json({ id: 'u1', email: 'a@b.c', aud: 'authenticated' }) : json({ msg: 'invalid JWT' }, 401);
-  if (url.pathname === '/rest/v1/profiles') return json([]);
+  if (url.pathname === '/rest/v1/profiles') return json(req.headers.authorization ? [{ name: 'Ana Souza', settings: {} }] : []);
   if (url.pathname === '/rest/v1/rpc/ai_consume') return json(quota);
-  if (url.pathname === '/rest/v1/categories') return json([{ name: 'Farmácia', kind: 'out', archived: false }, { name: 'Antiga', kind: 'out', archived: true }]);
+  if (url.pathname === '/rest/v1/categories') return json([{ name: 'Farmácia', kind: 'out', archived: false }, { name: 'Antiga', kind: 'out', archived: true }, { name: 'Venda de IPTV', kind: 'in', archived: false }]);
   json({ message: 'não simulado' }, 404);
 });
 
@@ -74,9 +74,10 @@ const procs = [];
   // comprovante por foto
   r = await post(GOOD, { receipt: { image: 'data:image/jpeg;base64,QUJD', note: 'remédio' } });
   const rc = await r.json(), g = groqSeen[0]?.body;
-  ok(r.status === 200 && rc.receipt?.amount === 52.9 && rc.receipt?.description === 'Drogasil' && rc.receipt?.category === 'Farmácia', 'comprovante: devolve valor, loja e categoria: ' + JSON.stringify(rc));
+  ok(r.status === 200 && rc.receipt?.amount === 52.9 && rc.receipt?.description === 'Drogasil' && rc.receipt?.category === 'Farmácia' && rc.receipt?.kind === 'saida', 'comprovante: devolve tipo, valor, loja e categoria: ' + JSON.stringify(rc));
   ok(g?.model === 'qwen/qwen3.8-27b' && g.messages[1].content[1].image_url.url === 'data:image/jpeg;base64,QUJD' && groqSeen[0].auth === 'Bearer gsk-teste', 'manda a foto ao modelo de visão com a chave do servidor');
-  ok(/Farmácia/.test(g?.messages[1].content[0].text) && !/Antiga/.test(g?.messages[1].content[0].text), 'só as categorias de gasto ativas do usuário vão para a IA');
+  ok(/gasto do usuário: Farmácia\./.test(g?.messages[1].content[0].text) && /entrada do usuário: Venda de IPTV\./.test(g?.messages[1].content[0].text) && !/Antiga/.test(g?.messages[1].content[0].text), 'só as categorias ativas do usuário (gasto e entrada) vão para a IA');
+  ok(/se chama Ana Souza/.test(g?.messages[1].content[0].text), 'o nome do usuário vai junto (para saber se pagou ou recebeu)');
   ok(seen.some((x) => x.path === '/rest/v1/categories' && x.auth === 'Bearer ' + GOOD), 'categorias lidas com o login do usuário (RLS)');
   r = await post(GOOD, { receipt: { image: 'data:text/html;base64,PGgxPg==' } }); ok(r.status === 400 && groqSeen.length === 1, 'arquivo que não é imagem: 400, sem chamar a IA');
   r = await post(GOOD, { receipt: { image: 'data:image/jpeg;base64,' + 'A'.repeat(4300000) } }); ok(r.status === 413 && groqSeen.length === 1, 'imagem grande demais: 413');

@@ -16,7 +16,7 @@ function smartSource() {
   if (a < 0 || b < 0) throw new Error('trecho do lançamento rápido não encontrado no app.html');
   return '// @ts-nocheck\n// GERADO por dev/sync-bot.js a partir do app.html (ícone automático e lançamento rápido). Não edite aqui.\n'
     + html.slice(a, b).trimEnd().split('\n').filter((l) => !/^const (EMOJI_SET|PALETTE) =/.test(l)).join('\n') // listas só da tela
-    + '\n\nexport { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji };\n';
+    + '\n\nexport { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords };\n';
 }
 const copyOf = (name) => () => `// CÓPIA GERADA por dev/sync-bot.js de ../ai/${name}. Não edite aqui.\n` + fs.readFileSync(path.join(FN, 'ai', name), 'utf8');
 const FILES = { 'whatsapp/smart.ts': smartSource, 'whatsapp/context.ts': copyOf('context.ts'), 'whatsapp/receipt.ts': copyOf('receipt.ts') };

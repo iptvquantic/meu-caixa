@@ -39,15 +39,18 @@ const { ok, done } = checker('interface');
 
   // ---- assistente no Novo lançamento: escreve e já lança (o mesmo cérebro do robô; aqui, a demonstração) ----
   click(w, '[data-act="newTx"]'); await sleep(20);
-  ok(d.querySelector('#as-text') && d.querySelector('[data-act="asMic"]') && d.querySelector('[data-act="asPhoto"]'), 'assistente: escrever, falar e foto no topo do Novo lançamento');
+  ok(d.querySelector('.sheet .ai-card #as-text') && d.querySelector('[data-act="asCamera"]') && d.querySelector('[data-act="asMic"]') && d.querySelector('[data-act="asPhoto"]'), 'Lançar com IA no topo do Novo lançamento: tirar foto, escolher foto, falar e escrever');
+  ok(/descartada/.test(d.querySelector('.sheet .ai-card .ai-note').textContent) && d.querySelectorAll('.sheet .ai-kinds span').length === 4, 'avisa que a foto é descartada e mostra os 4 tipos que descobre');
+  ok(d.querySelector('[data-act="asSend"][data-empty]'), 'sem texto: botão de lançar apagado');
   type(w, '#as-text', 'uber 23 ontem'); await sleep(5);
-  ok(d.querySelector('[data-act="asSend"]') && !d.querySelector('[data-act="asMic"]'), 'com texto, o microfone vira o botão de lançar');
+  ok(d.querySelector('[data-act="asSend"]:not([data-empty])'), 'com texto, o botão de lançar acende');
   click(w, '[data-act="asSend"]'); await sleep(700);
   const uber = M.S.txs.find(t => t.description === 'Uber');
   const transp = M.S.cats.find(c => c.legacy_key === 'transporte' && c.kind === 'out');
-  ok(uber && uber.amount === 23 && uber.category_id === transp.id && uber.type === 'out', 'assistente: "uber 23 ontem" lançado na hora em Transporte');
+  // no exemplo, o Uber é sempre pago no cartão ("Uber do mês"): o tipo automático segue o histórico
+  ok(uber && uber.amount === 23 && uber.category_id === transp.id && uber.type === 'card' && uber.card_id === M.S.cards[0].id, 'assistente: "uber 23 ontem" lançado na hora no cartão de sempre, em Transporte: ' + JSON.stringify(uber));
   ok(uber && uber.date === M.isoOf(new Date(Date.now() - 864e5)), 'assistente: data de ontem');
-  ok(!d.querySelector('#as-row') && /Saída de R\$\s?23,00 · Transporte/.test(d.querySelector('#toast-root').textContent) && /Desfazer/.test(d.querySelector('#toast-root').textContent), 'fecha a folha e avisa com Desfazer');
+  ok(!d.querySelector('#as-row') && /Cartão de R\$\s?23,00 · Transporte/.test(d.querySelector('#toast-root').textContent) && /Desfazer/.test(d.querySelector('#toast-root').textContent), 'fecha a folha e avisa com Desfazer');
   click(w, '#toast-root [data-act="toastAction"]'); await sleep(40);
   ok(!M.S.txs.some(t => t.description === 'Uber'), 'Desfazer apaga o lançamento');
 

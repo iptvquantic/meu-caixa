@@ -4,7 +4,7 @@
 // e confere o robô na Meta (webhook do app, inscrição da conta do WhatsApp e ativação do número com PIN).
 // O número do robô é descoberto sozinho (o conectado da conta); o WhatsApp de atendimento do dono nunca é usado.
 // Pelo app (?app), o usuário logado manda o mesmo que mandaria no WhatsApp: texto, áudio ou foto do comprovante.
-import type { Incoming } from './bot.ts';
+import type { Hint, Incoming } from './bot.ts';
 import { IMAGE_TYPES, MAX_IMAGE } from './receipt.ts';
 
 export type Cfg = {
@@ -28,7 +28,7 @@ export type HandlerDeps = {
   log?: (...a: unknown[]) => void;
 };
 // o que o app manda (o mesmo que daria para mandar no WhatsApp) e o que volta
-export type AppInput = { text: string; audio?: { data: string; mime: string }; image?: { data: string; mime: string }; noAI: boolean };
+export type AppInput = { text: string; audio?: { data: string; mime: string }; image?: { data: string; mime: string }; noAI: boolean; hint?: Hint };
 export type AppResult = { reply: string | null; handled: boolean; heard?: string; tx?: Record<string, unknown> | null; removed?: string | null };
 // to = número que recebeu; waba = conta; mediaId/mime = áudio, foto ou documento
 export type WaMsg = { id: string; from: string; type: string; text?: string; audioId?: string; mediaId?: string; mime?: string; to?: string; waba?: string };
@@ -123,6 +123,12 @@ function media(v: any, types: string[], max: number) {
   if (Math.floor(data.length * 3 / 4) > max) return 'grande' as const;
   return { mime, data };
 }
+// aba do Novo lançamento (ajuda a decidir o tipo); qualquer coisa fora do formato é ignorada
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function hintOf(h: any): { hint?: Hint } {
+  if (!h || typeof h !== 'object' || !['in', 'out', 'card', 'invest'].includes(h.type)) return {};
+  return { hint: { type: h.type, sure: h.sure === true, pay: h.pay === true, ...(typeof h.card === 'string' && UUID.test(h.card) ? { card: h.card } : {}) } };
+}
 // null = pedido inválido; 'grande' = arquivo acima do limite
 export function appInput(body: any): AppInput | null | 'grande' {
   if (!body || typeof body !== 'object') return null;
@@ -131,7 +137,7 @@ export function appInput(body: any): AppInput | null | 'grande' {
   if (audio === null || image === null || (audio && image)) return null;
   if (audio === 'grande' || image === 'grande') return 'grande';
   if (!text && !audio && !image) return null;
-  return { text, ...(audio ? { audio } : {}), ...(image ? { image } : {}), noAI: body.noAI === true };
+  return { text, ...(audio ? { audio } : {}), ...(image ? { image } : {}), noAI: body.noAI === true, ...hintOf(body.hint) };
 }
 const hits = new Map<string, number[]>();
 function limited(uid: string, max = 20) { // até 20 pedidos por minuto por usuário (por instância)
@@ -150,6 +156,10 @@ async function gj(d: HandlerDeps, path: string, init?: RequestInit, token?: stri
   return j;
 }
 const credentialError = (e: unknown) => e instanceof GraphError && (/appsecret_proof/i.test(e.message) || e.code === 190);
+// a Meta bloqueou o app inteiro ("API access blocked"): nada funciona até o dono resolver no painel da Meta
+const blockedError = (e: unknown) => e instanceof GraphError && /api access blocked|app (is )?(restricted|disabled|blocked)/i.test(e.message);
+const BLOCKED = 'A Meta bloqueou o acesso do app do robô à API do WhatsApp (resposta da Meta: "API access blocked"). Isso se resolve no painel da Meta: abra o app em Meus apps e siga o aviso que aparece no topo (costuma ser a verificação de uso de dados, a verificação da empresa ou uma restrição do app). Depois toque em Conferir de novo. Enquanto isso o robô fica escondido dos clientes; o "Lançar com IA" do app funciona normalmente.';
+const BLOCKED_FIX = { meta: 'https://developers.facebook.com/apps/', metaLabel: 'Abrir meus apps na Meta' };
 
 // ---------- número do robô ----------
 // Descobre os números que o token enxerga (contas do WhatsApp liberadas → números, com o estado de cada um) e escolhe:
@@ -236,7 +246,7 @@ async function configuredPhone(d: HandlerDeps): Promise<Phone | null> {
     catch (e) { if (fieldMissing(e) && !fieldMissing(e, 'display_phone_number')) n = await gj(d, `${c.phoneId}?fields=${BASIC_FIELDS}`); else throw e; }
     return phoneOf({ ...n, id: c.phoneId }, 'configurado', c.wabaId || undefined);
   } catch (e) {
-    if (credentialError(e)) throw e; // chave ou token: o problema é outro
+    if (credentialError(e) || blockedError(e)) throw e; // chave, token ou app bloqueado: o problema é outro
     if (fieldMissing(e, 'display_phone_number')) { // o ID salvo é o da conta do WhatsApp?
       const list = await numbersOf(d, c.phoneId).catch(() => []);
       if (list.length === 1) return phoneOf(list[0], 'conta', c.phoneId);
@@ -249,7 +259,7 @@ async function robot(d: HandlerDeps, fresh = false): Promise<Robot> {
   if (!fresh && robotCache && robotCache.key === key && Date.now() - robotCache.at < TTL) return robotCache.v;
   let found: Found | null = null;
   try { found = await discover(d); } catch (e) {
-    if (credentialError(e)) throw e;
+    if (credentialError(e) || blockedError(e)) throw e;
     d.log?.('descoberta dos números falhou', e instanceof Error ? e.message : e);
   }
   const all = found?.phones ?? [], usable = all.filter((p) => !isProtected(c, p));
@@ -355,6 +365,7 @@ const ADD_NUMBER = 'No Gestor do WhatsApp → Números de telemóvel → Adicion
 
 function explain(e: unknown, step: string) {
   if (!(e instanceof GraphError)) return `Não consegui falar com a Meta (${step}). Tente de novo em instantes.`;
+  if (blockedError(e)) return BLOCKED;
   const m = e.message.toLowerCase();
   if (m.includes('appsecret_proof') || m.includes('client secret')) return 'A chave secreta do app (WHATSAPP_APP_SECRET) não confere com o app da Meta.';
   if (e.code === 190) return 'O token do WhatsApp (WHATSAPP_TOKEN) não vale mais: gere outro no usuário do sistema da Meta e troque no Supabase.';
@@ -472,7 +483,8 @@ export async function setupMeta(d: HandlerDeps): Promise<SetupReport> {
     }
   } catch (e) {
     d.log?.('ativação na Meta', step, e instanceof Error ? e.message : e);
-    if (e instanceof GraphError && /appsecret_proof/i.test(e.message)) Object.assign(rep, await secretHelp(d));
+    if (blockedError(e)) Object.assign(rep, { message: BLOCKED, fix: BLOCKED_FIX, attention: true });
+    else if (e instanceof GraphError && /appsecret_proof/i.test(e.message)) Object.assign(rep, await secretHelp(d));
     else if (e instanceof GraphError && (e.code === -2 || e.code === -3)) Object.assign(rep, await phoneHelp(d, e));
     else rep.message = explain(e, step);
   }
