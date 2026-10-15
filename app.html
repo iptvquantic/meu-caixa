@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-rtwj3wpF7iWEal/Ly8v/sZBy9lSqpZPQhl8vOdfyq88=' 'sha256-QRF8qYSot5qyeWUah5Rdw1SVfR5ohnWZV4DBLFdCbd4=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-rdi65vDakYfTG/W2nOYkRPmJ4Mft5h1B95nzP1YG8wM=' 'sha256-NpHeOVGuL2cQdl3lnIUWbjLqxZHcnNelR77qzS7eR/U=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -477,6 +477,7 @@ canvas{max-width:100%}
     <form id="auth-form" novalidate>
       <label class="field"><span>E-mail</span><input class="input" id="auth-email" type="email" autocomplete="email" inputmode="email" required></label>
       <label class="field"><span>Senha</span><input class="input" id="auth-pass" type="password" autocomplete="current-password" required></label>
+      <p class="c-muted" id="auth-pass-hint" style="font-size:12.5px;margin:-6px 0 12px" hidden>Pelo menos 8 caracteres, com letras e números.</p>
       <label class="field" id="auth-pass2-wrap" hidden><span>Repita a senha</span><input class="input" id="auth-pass2" type="password" autocomplete="new-password"></label>
       <button class="btn primary block" id="auth-submit" type="submit">Entrar</button>
     </form>
@@ -526,7 +527,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.3.0',
+  version: '2.3.1',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -1891,7 +1892,7 @@ function errMsg(e) {
   if (/Invalid login credentials/i.test(m)) return 'E-mail ou senha incorretos.';
   if (/Email not confirmed/i.test(m)) return 'Confirme seu e-mail pelo link que enviamos e tente de novo.';
   if (/already registered|already been registered/i.test(m)) return 'Este e-mail já tem conta. Use "Entrar".';
-  if (/Password should be|weak/i.test(m)) return 'Senha fraca: use pelo menos 6 caracteres.';
+  if (/Password should be|weak/i.test(m)) return 'Senha fraca: use pelo menos 8 caracteres, com letras e números.';
   if (/rate limit|too many/i.test(m)) return 'Muitas tentativas. Aguarde um minuto.';
   return m.length < 140 && m ? m : 'Algo deu errado. Tente de novo.';
 }
@@ -2774,6 +2775,7 @@ function showAuth(mode) {
   $('#auth .auth-tabs').hidden = mode === 'recovery';
   $('#auth-email').closest('.field').hidden = mode === 'recovery';
   $('#auth-pass2-wrap').hidden = mode === 'login';
+  $('#auth-pass-hint').hidden = mode === 'login';
   $('#auth-pass').setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
   $('#auth-pass').previousElementSibling.textContent = mode === 'recovery' ? 'Nova senha' : 'Senha';
   $('#auth-submit').textContent = { login: 'Entrar', signup: 'Criar conta grátis', recovery: 'Salvar nova senha' }[mode];
@@ -2782,19 +2784,21 @@ function showAuth(mode) {
   authMsg('');
 }
 function authMsg(text, ok) { const m = $('#auth-msg'); m.hidden = !text; m.textContent = text; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+// senha nova: 8+ caracteres com letras e números (a lista de senhas vazadas do Supabase é só no plano pago)
+const strongPass = p => p.length >= 8 && /\p{L}/u.test(p) && /\d/.test(p);
 async function onAuthSubmit(e) {
   e.preventDefault();
   const email = $('#auth-email').value.trim(), pass = $('#auth-pass').value, pass2 = $('#auth-pass2').value;
   const btn = $('#auth-submit'); btn.disabled = true;
   try {
     if (AUTH_MODE === 'recovery') {
-      if (pass.length < 6) throw new Error('Password should be at least 6');
+      if (!strongPass(pass)) throw new Error('weak password');
       if (pass !== pass2) throw new Error('As senhas não são iguais.');
       await api.newPassword(pass); history.replaceState(null, '', location.pathname + location.search); AUTH_MODE = 'login';
       authMsg('Senha alterada. Entrando…', true); S.user = (await api.session())?.user; await startApp();
     } else if (AUTH_MODE === 'signup') {
       if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Digite um e-mail válido.');
-      if (pass.length < 6) throw new Error('Password should be at least 6');
+      if (!strongPass(pass)) throw new Error('weak password');
       if (pass !== pass2) throw new Error('As senhas não são iguais.');
       const needsConfirm = await api.signUp(email, pass);
       if (needsConfirm) authMsg('Conta criada! Abra o link que enviamos para ' + email + ' e depois entre aqui.', true);

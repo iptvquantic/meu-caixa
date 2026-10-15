@@ -71,7 +71,12 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   ok(await p.$eval('#auth', e => !e.hidden), 'sem sessão: abre na tela de login');
   // criar conta
   await p.click('[data-act="authTab"][data-tab="signup"]');
-  await p.type('#auth-email', user.email); await p.type('#auth-pass', 'segredo123'); await p.type('#auth-pass2', 'segredo123');
+  ok(await p.$eval('#auth-pass-hint', e => !e.hidden && /8 caracteres/.test(e.textContent)), 'cadastro mostra a regra da senha');
+  await p.type('#auth-email', user.email); await p.type('#auth-pass', 'senhafraca'); await p.type('#auth-pass2', 'senhafraca');
+  await p.click('#auth-submit'); await sleep(300);
+  ok(/Senha fraca: use pelo menos 8 caracteres, com letras e números/.test(await p.$eval('#auth-msg', e => e.textContent)) && !seen.some(s => s.startsWith('POST /auth/v1/signup')), 'senha fraca recusada antes de ir ao servidor');
+  await p.$eval('#auth-pass', e => { e.value = ''; }); await p.$eval('#auth-pass2', e => { e.value = ''; });
+  await p.type('#auth-pass', 'segredo123'); await p.type('#auth-pass2', 'segredo123');
   await p.click('#auth-submit'); await sleep(700);
   ok(/Conta criada/.test(await p.$eval('#auth-msg', e => e.textContent)), 'criar conta pede confirmação por e-mail');
   ok(seen.some(s => s.startsWith('POST /auth/v1/signup') && s.includes('redirect_to=' + SITE + 'app.html')), 'link de confirmação volta para o app.html');

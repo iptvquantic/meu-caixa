@@ -1,6 +1,12 @@
 # Histórico de versões
 
-## 2.3.0 — 09/10/2026
+## 2.3.1 — 15/10/2026
+- Senha nova (cadastro e troca) com pelo menos 8 caracteres, letras e números, com a regra à vista.
+- Segurança: política de conteúdo (CSP) com o hash de cada script no app e na página inicial; o app no ar
+  não abre dentro de moldura de outro site.
+- Funções publicadas com entrada mínima (o código vem do commit do GitHub), sem cópia manual de código.
+
+## 2.3.0 — 15/10/2026
 - Assistente no app: no Novo lançamento (botão +) você fala 🎤, escreve ou manda a foto/print do comprovante 📷
   e ele lança na hora ("mercado 52,90", "recebi 300 pix", "notebook 3.600 12x", "paguei aluguel"), com
   Desfazer. É o mesmo "cérebro" do robô do WhatsApp, pela função do servidor e com o login da pessoa.
