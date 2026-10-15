@@ -86,8 +86,10 @@ has(s, 'METAS: nenhuma cadastrada.', 'sem metas');
 const f = norm(buildContext([], cats, cards, '2099-01', 'invoice', '', recs, []));
 has(f, 'receber Mensalidade Rogério R$ 45,00 dia 10 (a vencer)', 'conta futura aparece como a vencer');
 
-// ---------- a função "ai" (index.ts) ----------
-const fn = readFileSync(new URL('./supabase/functions/ai/index.ts', import.meta.url), 'utf8');
+// ---------- a função "ai" (index.ts = entrada; main.ts = o código) ----------
+const entry = readFileSync(new URL('./supabase/functions/ai/index.ts', import.meta.url), 'utf8');
+const fn = readFileSync(new URL('./supabase/functions/ai/main.ts', import.meta.url), 'utf8');
+ok(/npm:@supabase\/supabase-js@2\.117\.3/.test(entry) && /from '\.\/main\.ts'/.test(entry) && entry.split('\n').length < 10, 'entrada mínima: biblioteca com versão fixa e o código em main.ts');
 const at = s => fn.indexOf(s);
 ok(at('auth.getUser(') > 0 && at('auth.getUser(') < at("rpc('ai_consume')"), 'confere o login antes de tudo');
 ok(at("rpc('ai_consume')") < at('callGroq([{'), 'gasta a cota (limite diário) antes de chamar a Groq');

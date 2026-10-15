@@ -36,8 +36,8 @@ Postgres 16 e cria o usuário sozinho.
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
 | `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `migrations/03_v2_2_whatsapp.sql` — robô do WhatsApp (números conectados, códigos, mensagens recebidas) | aplicada (`20261009151422`) |
-| `functions/ai/index.ts` + `context.ts` + `receipt.ts` — função "ai" (Conselheiro e leitura de comprovante, Groq) | publicada do commit `09e1e79` (v10) |
-| `functions/whatsapp/` — robô (`index.ts` entrada, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto) | publicada do commit `7dab317` (v9) |
+| `functions/ai/` — função "ai" (`index.ts` entrada mínima, `main.ts` Conselheiro e comprovante, `context.ts`, `receipt.ts`) | publicada do commit `09e1e79` (v10) |
+| `functions/whatsapp/` — robô e assistente (`index.ts` entrada mínima, `main.ts` ligações, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto) | publicada do commit `7dab317` (v9) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
@@ -57,9 +57,9 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 ### Publicar uma função (`ai` ou `whatsapp`)
 
 1. Testes passando (`npm test`, `npm run test:fn:live`) e commit com push no `main`.
-2. `node fn-deploy.js <commit>` gera `out/deploy/<função>/index.ts`: o `index.ts` da função com os imports
-   locais apontando para os arquivos daquele commit no GitHub (repositório público). O script recusa se o commit
-   não estiver no `main` ou se algum arquivo local estiver diferente dele.
+2. `node fn-deploy.js <commit>` gera `out/deploy/<função>/index.ts`: o `index.ts` da função (4 linhas: a biblioteca
+   do Supabase e `start()` do `main.ts`) com o import local apontando para aquele commit no GitHub (repositório
+   público). O script recusa se o commit não estiver no `main` ou se algum arquivo local estiver diferente dele.
 3. Conferir a entrada gerada rodando de verdade: `WA_FN_DIR=out/deploy/whatsapp node test-bot-live.mjs` e
    `AI_FN_DIR=out/deploy/ai node test-ai-live.mjs`.
 4. Publicar pelo conector (`deploy_edge_function`) só esse `index.ts`, com `verify_jwt=false` (as duas funções

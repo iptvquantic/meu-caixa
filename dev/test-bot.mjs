@@ -712,9 +712,10 @@ ok(await signatureOk('', new ArrayBuffer(0), 'sha256=00') === false, 'sem chave 
 ok(messagesOf({ entry: [{ changes: [{ field: 'messages', value: { messages: [{ from: 'abc', id: '1', type: 'text', text: { body: 'x' } }] } }] }] }, '').length === 0, 'remetente inválido ignorado');
 
 // ---------- o código da função ----------
-const idx = readFileSync(new URL('./supabase/functions/whatsapp/index.ts', import.meta.url), 'utf8');
-ok(!/gsk_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9]{6,}|EAA[A-Za-z0-9]{20,}/.test(idx), 'nenhuma chave no código da função');
-ok(/WHATSAPP_APP_SECRET/.test(idx) && /SUPABASE_SECRET_KEYS/.test(idx) && /npm:@supabase\/supabase-js@2\.117\.3/.test(idx), 'segredos pelos Secrets; biblioteca com versão fixa');
+const entry = readFileSync(new URL('./supabase/functions/whatsapp/index.ts', import.meta.url), 'utf8');
+const idx = readFileSync(new URL('./supabase/functions/whatsapp/main.ts', import.meta.url), 'utf8');
+ok(!/gsk_[A-Za-z0-9]{10,}|sb_secret_[A-Za-z0-9]{6,}|EAA[A-Za-z0-9]{20,}/.test(entry + idx), 'nenhuma chave no código da função');
+ok(/WHATSAPP_APP_SECRET/.test(idx) && /SUPABASE_SECRET_KEYS/.test(idx) && /npm:@supabase\/supabase-js@2\.117\.3/.test(entry) && entry.split('\n').length < 10, 'segredos pelos Secrets; entrada mínima com a biblioteca em versão fixa');
 
 console.log(`${fail ? '❌' : '✅'} robô do WhatsApp: ${pass} ok, ${fail} falha(s)`);
 process.exit(fail ? 1 : 0);
