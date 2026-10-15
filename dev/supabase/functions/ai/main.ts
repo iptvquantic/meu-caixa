@@ -57,9 +57,10 @@ export function start(createClient: CreateClient) {
     const H = { ...corsHeaders(req.headers.get('origin') ?? ''), 'Content-Type': 'application/json' };
     const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: H });
     if (req.method === 'OPTIONS') return new Response('ok', { headers: H });
-    // saúde: a chave pública do projeto é aceita pela API do banco? (sem login, não lê dado nenhum)
+    // saúde: a chave pública do projeto é aceita pelo Supabase? (sem login, não lê dado nenhum; as tabelas não abrem
+    // para quem não entrou, então confere na configuração pública do login)
     if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) {
-      const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/rest/v1/profiles?select=id&limit=1`, { headers: { apikey: PUBLIC_KEY } }).catch(() => null);
+      const r = await fetch(`${Deno.env.get('SUPABASE_URL')}/auth/v1/settings`, { headers: { apikey: PUBLIC_KEY } }).catch(() => null);
       return json({ ok: r?.status === 200, key: PUBLIC_KEY.startsWith('sb_publishable_') ? 'publishable' : 'anon' });
     }
     if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);

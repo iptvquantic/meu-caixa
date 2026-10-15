@@ -32,6 +32,8 @@ const fake = http.createServer(async (req, res) => {
   }
   seen.push({ path: url.pathname, apikey: req.headers.apikey, auth: req.headers.authorization });
   if (req.headers.apikey !== PUB) return json({ message: 'Invalid API key' }, 401);
+  if (url.pathname === '/auth/v1/settings') return json({ external: { email: true } });
+  if (url.pathname === '/rest/v1/profiles' && !req.headers.authorization) return json({ message: 'permission denied for table profiles', code: '42501' }, 401); // como na produção: sem login, nada
   if (url.pathname === '/auth/v1/user') return req.headers.authorization === 'Bearer ' + GOOD ? json({ id: 'u1', email: 'a@b.c', aud: 'authenticated' }) : json({ msg: 'invalid JWT' }, 401);
   if (url.pathname === '/rest/v1/profiles') return json(req.headers.authorization ? [{ name: 'Ana Souza', settings: {} }] : []);
   if (url.pathname === '/rest/v1/rpc/ai_consume') return json(quota);
@@ -57,7 +59,7 @@ const procs = [];
   if (!up) throw new Error('a função não subiu:\n' + errLog.slice(-1500));
 
   const health = await fetch(FN + '?health=1').then((r) => r.json());
-  ok(health.ok === true && health.key === 'publishable', 'saúde: usa a chave publicável nova e o banco aceita: ' + JSON.stringify(health));
+  ok(health.ok === true && health.key === 'publishable' && seen.some((x) => x.path === '/auth/v1/settings' && x.apikey === PUB), 'saúde: usa a chave publicável nova e o Supabase aceita (sem ler tabela): ' + JSON.stringify(health));
   const pre = await fetch(FN, { method: 'OPTIONS', headers: { origin: 'https://iptvquantic.github.io' } });
   ok(pre.headers.get('access-control-allow-origin') === 'https://iptvquantic.github.io' && /authorization/.test(pre.headers.get('access-control-allow-headers')), 'CORS do site');
   const post = (auth, body = { messages: [{ role: 'user', content: 'oi' }] }) => fetch(FN, { method: 'POST', headers: { 'content-type': 'application/json', ...(auth ? { authorization: 'Bearer ' + auth } : {}) }, body: JSON.stringify(body) });
