@@ -36,8 +36,8 @@ Postgres 16 e cria o usuário sozinho.
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
 | `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `migrations/03_v2_2_whatsapp.sql` — robô do WhatsApp (números conectados, códigos, mensagens recebidas) | aplicada (`20261009151422`) |
-| `functions/ai/` — função "ai" (`index.ts` entrada mínima, `main.ts` Conselheiro e comprovante, `context.ts`, `receipt.ts`) | publicada do commit `0b36485` (v14, 15/10/2026) |
-| `functions/whatsapp/` — robô e assistente (`index.ts` entrada mínima, `main.ts` ligações, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto) | publicada do commit `0b36485` (v11, 15/10/2026) |
+| `functions/ai/` — função "ai" (`index.ts` entrada mínima, `main.ts` Conselheiro e comprovante, `context.ts`, `receipt.ts`) | publicada do commit `0ba8ef4` (v16, 15/10/2026) |
+| `functions/whatsapp/` — robô e assistente (`index.ts` entrada mínima, `main.ts` ligações, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto, `smart.ts` lançamento rápido e tipo automático) | publicada do commit `132e38a` (v12, 15/10/2026) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
@@ -64,7 +64,7 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
    `AI_FN_DIR=out/deploy/ai node test-ai-live.mjs`.
 4. Publicar pelo conector (`deploy_edge_function`) só esse `index.ts`, com `verify_jwt=false` (as duas funções
    conferem o acesso por conta própria: login na `ai`, assinatura da Meta na `whatsapp`).
-5. Conferir `?health=1` da função publicada e os logs.
+5. Conferir `?health=1` da função publicada (`ai`: `ok: true`; `whatsapp`: `db: true`) e os logs.
    Assim o que está no ar é exatamente o commit indicado no topo do `index.ts` publicado.
 
 ## Robô do WhatsApp
