@@ -1,5 +1,38 @@
 # Histórico de versões
 
+## 2.3.0 — 09/10/2026
+- Assistente no app: no Novo lançamento (botão +) você fala 🎤, escreve ou manda a foto/print do comprovante 📷
+  e ele lança na hora ("mercado 52,90", "recebi 300 pix", "notebook 3.600 12x", "paguei aluguel"), com
+  Desfazer. É o mesmo "cérebro" do robô do WhatsApp, pela função do servidor e com o login da pessoa.
+- Comprovante por foto: cupom, nota, PIX, TED ou via da maquininha viram saída com valor, data, loja e a
+  categoria certa (no crédito, vai para o cartão com as parcelas). A foto só é lida pela IA: não fica guardada.
+- O Conselheiro IA virou Assistente: na mesma conversa lança, responde saldo, fatura e contas (como o robô) e
+  responde perguntas livres com o histórico, por texto, voz ou foto.
+- Robô do WhatsApp: o cliente só vê "Conectar meu WhatsApp" quando o robô está de fato recebendo mensagens;
+  o número de atendimento do dono nunca é usado pelo robô; o dono vê os números da conta com o estado de
+  cada um e ativa um número novo com PIN no próprio app, com os caminhos da tela atual da Meta.
+- IA: modelo reserva trocado (o antigo saiu do ar na Groq) e leitura de imagem com o modelo de visão atual.
+- Novo lançamento no celular abre sem o teclado: o cursor fica piscando no R$ e o teclado só aparece quando
+  você toca no valor. No PC continua com o foco no valor.
+- Menu lateral do PC encolhe para uma coluna de ícones (com o nome ao passar o mouse) e volta ao normal no
+  mesmo botão; a escolha fica salva. Em telas de PC estreitas já começa encolhido.
+- Ícones dentro dos quadros 25% maiores e textos maiores em listas, painéis, menu e barra do celular.
+- Tema Automático: escuro ou claro, igual ao celular ou computador.
+- "Deixe o caixa no automático" virou um guia com progresso: conectar o WhatsApp, contas fixas, conta
+  automática, cartão, meta, chave PIX e instalar o app; some quando tudo estiver pronto (ou em Ocultar).
+- Resumo do mês refeito: resultado do mês e até 4 pontos com ícone, em ordem de importância (atrasos e
+  limites primeiro). Comparação justa com o mês anterior: até o mesmo dia, e não contra o mês inteiro.
+  Novo: quanto dá para gastar por dia sem fechar o mês no vermelho; meses por extenso.
+- Relatórios: setas de comparação em cada número, saldo como linha de total, gráfico com a linha do saldo,
+  tabela dos meses (toque para abrir o mês) com a média dos meses fechados, sem meses vazios antes de começar.
+- Contas fixas: quanto já foi pago e recebido no mês. Metas: quanto dá por dia até o fim do mês.
+- Cartão no saldo: explicação com exemplo; conta fixa no cartão entra certo no modo "pela data da compra".
+- Página inicial nova no mesmo endereço, com a cara do app. Quem já tem conta no aparelho (ou abre o app
+  instalado) vai direto para o app; "Começar grátis" abre o cadastro.
+- Robô do WhatsApp: descobre sozinho o número da conta (não depende mais do WHATSAPP_PHONE_ID certo) e o
+  aviso do dono diz exatamente o que corrigir, com links diretos.
+- "Deixe o caixa no automático" só sugere o WhatsApp quando o robô está pronto para os clientes.
+
 ## 2.2.1 — 09/10/2026
 - Robô do WhatsApp se ativa sozinho na Meta: quando o dono abre Ajustes, o app pede à função para cadastrar o
   webhook e ligar a conta do WhatsApp ao app, e mostra o resultado (ou o que falta, em português claro).

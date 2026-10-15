@@ -16,6 +16,7 @@ const profile = { id: user.id, email: user.email, plan: 'trial', plan_expiry: ne
 const seen = [];
 let waLinked = false; // o robô conectou o número?
 const setupCalls = []; // pedidos do app para ativar o robô na Meta (só o dono)
+const appCalls = [];   // o assistente do app falando com o robô (texto, áudio, foto)
 let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: 'ativado', waba: 'ativado', number: '15550100000' };
 
 (async () => {
@@ -42,11 +43,18 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
       if (path.startsWith('/rest/v1/recurring')) return J([{ id: 'rec-1', user_id: user.id, type: 'in', name: 'Cliente Teste', amount: 45, day: 1, category_id: null, card_id: null, start_month: '2026-01', end_month: null, phone: '22999990000', auto: false, active: true }]);
       if (path.startsWith('/rest/v1/goals')) return J([]);
       if (path.startsWith('/rest/v1/transactions')) {
+        if (m === 'DELETE') return r.respond({ status: 204, headers: cors, body: '' });
         if (m === 'POST') { const row = JSON.parse(r.postData()); return J({ id: 'tx-1', user_id: user.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString(), legacy_id: null, legacy_ts: null, recurring_id: null, recurring_month: null, ...row }, 201); }
         return J([]);
       }
       if (path.startsWith('/functions/v1/ai')) return J({ reply: 'Resposta da IA com seus números.', usage: { count: 1, limit: 40 } });
-      if (path.startsWith('/functions/v1/whatsapp?info=1')) return J({ configured: true, number: '15550100000' });
+      if (path.startsWith('/functions/v1/whatsapp?info=1')) return J({ configured: true, ready: true, number: '15550100000' });
+      if (path.startsWith('/functions/v1/whatsapp?app=1') && m === 'POST') { // o mesmo robô do WhatsApp, com o login
+        const b = JSON.parse(r.postData() || '{}'); appCalls.push({ auth: r.headers().authorization || '', b });
+        if (b.text === 'saldo') return J({ handled: true, reply: '📊 *Outubro de 2026*\n*Saldo: R$ 1.000,00*', tx: null, removed: null });
+        if (/\d/.test(b.text || '')) return J({ handled: true, reply: '💸 *Saída* de *R$ 23,00*\n🏷️ Outros · 📅 hoje · Uber', tx: { id: 'tx-robo-1', type: 'out', amount: '23.00', date: new Date().toISOString().slice(0, 10), description: 'Uber', category_id: null, card_id: null, installments: 1, invest_kind: null, recurring_id: null, recurring_month: null, created_at: new Date().toISOString() }, removed: null });
+        return J({ handled: false, reply: null, tx: null, removed: null });
+      }
       if (path.startsWith('/functions/v1/whatsapp?setup=1') && m === 'POST') { setupCalls.push(r.headers().authorization || ''); return J(setupReply); }
       if (path.startsWith('/rest/v1/rpc/wa_link_start')) return J({ code: '12345678', expires_at: new Date(Date.now() + 15 * 60000).toISOString() });
       if (path.startsWith('/rest/v1/wa_links')) {
@@ -57,6 +65,8 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
     }
   });
 
+  await p.goto(SITE + 'app.html?criar=1', { waitUntil: 'load' }); await sleep(900);
+  ok(await p.$eval('[data-act="authTab"][data-tab="signup"]', b => b.getAttribute('aria-selected') === 'true') && /Criar conta/.test(await p.$eval('#auth-submit', b => b.textContent)), '"Começar grátis" da página inicial abre direto o cadastro');
   await p.goto(SITE + 'app.html', { waitUntil: 'load' }); await sleep(900);
   ok(await p.$eval('#auth', e => !e.hidden), 'sem sessão: abre na tela de login');
   // criar conta
@@ -76,6 +86,13 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   await p.type('#tx-amount', '52,90'); await p.click('[data-act="txSave"]'); await sleep(800);
   const post = seen.find(s => s.startsWith('POST /rest/v1/transactions'));
   ok(post && /"amount":52\.9/.test(post) && !/user_id/.test(post), 'salva no Supabase sem mandar user_id (o banco preenche)');
+  // assistente no Novo lançamento: escreve e o robô lança na hora (com o login); Desfazer apaga
+  await p.click('#mnav .fab'); await sleep(300);
+  await p.type('#as-text', 'uber 23'); await p.keyboard.press('Enter'); await sleep(900);
+  ok(appCalls.length === 1 && appCalls[0].auth === 'Bearer ' + jwt && appCalls[0].b.text === 'uber 23' && appCalls[0].b.noAI === false, 'assistente: frase vai ao robô com o login');
+  ok(await p.$eval('#toast-root', e => /Saída de R\$\s?23,00/.test(e.textContent) && /Desfazer/.test(e.textContent)) && !(await p.$('#as-row')), 'lançado na hora: fecha e oferece Desfazer');
+  await p.click('#toast-root [data-act="toastAction"]'); await sleep(600);
+  ok(seen.some(s => s.startsWith('DELETE /rest/v1/transactions')), 'Desfazer apaga o lançamento no banco');
   // contas fixas do banco
   await p.evaluate(() => document.querySelector('#mnav [data-page="more"]').click()); await sleep(200);
   await p.evaluate(() => document.querySelector('#page [data-act="go"][data-page="bills"]').click()); await sleep(300);
@@ -84,9 +101,15 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   await p.evaluate(() => document.querySelector('#mnav [data-page="more"]').click()); await sleep(200);
   await p.evaluate(() => document.querySelector('#page [data-act="go"][data-page="ai"]').click()); await sleep(300);
   await p.evaluate(() => document.querySelector('[data-act="aiAsk"]').click()); await sleep(800);
+  ok(appCalls.at(-1)?.b.text === 'saldo' && appCalls.at(-1).b.noAI === true && await p.$eval('#chat', e => /Saldo: R\$\s?1\.000,00/.test(e.textContent)), 'Assistente: "saldo" respondido pelo robô');
+  await p.type('#ai-in', 'Analise meu mês'); await p.click('[data-act="aiSend"]'); await sleep(900);
   const ai = seen.find(s => s.startsWith('POST /functions/v1/ai'));
-  ok(ai && /"messages"/.test(ai), 'IA chamada pela função do Supabase');
+  ok(ai && /"messages"/.test(ai), 'pergunta livre: Conselheiro pela função do Supabase');
   ok(await p.$eval('#chat', e => /Resposta da IA/.test(e.textContent)), 'resposta da IA aparece no chat');
+  // Relatórios com a CSP do site: o Chart.js do CDN carrega e desenha
+  await p.evaluate(() => document.querySelector('#mnav [data-page="reports"]').click()); await sleep(1500);
+  ok(await p.evaluate(() => !!window.Chart && !!document.querySelector('#page canvas')), 'Relatórios: gráfico carrega com a CSP do site');
+  ok(await p.$eval('meta[http-equiv="Content-Security-Policy"]', m => /script-src 'self' 'sha256-/.test(m.content) && /connect-src 'self' https:\/\/jgqhtshcuyzytljkmmxd\.supabase\.co/.test(m.content)), 'app com CSP: scripts só por hash/CDNs fixos e dados só para o Supabase do projeto');
   // robô do WhatsApp: conectar com código, a tela atualiza sozinha, desconectar
   await p.evaluate(() => document.querySelector('#mnav [data-page="more"]').click()); await sleep(200);
   await p.evaluate(() => document.querySelector('#page [data-act="go"][data-page="settings"]').click()); await sleep(300);

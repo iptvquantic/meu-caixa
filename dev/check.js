@@ -34,6 +34,16 @@ for (const id of usedIds) if (!defined.has(id)) bad('id usado mas não existe:',
 // 4) Sem handlers inline com variável (o padrão perigoso do app antigo)
 if (/on(click|change|input|submit)="[^"]*\$\{/.test(html)) bad('onclick/onchange com interpolação de variável');
 
+// 4b) CSP em dia: os scripts embutidos batem com os hashes da política (node csp.js atualiza)
+{
+  const { withCsp, FILES, ROOT } = require('./csp');
+  for (const [f, kind] of Object.entries(FILES)) {
+    const src = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    if (!/<meta http-equiv="Content-Security-Policy"/.test(src)) bad(`${f}: sem CSP (rode: node csp.js)`);
+    else if (withCsp(src, kind) !== src) bad(`${f}: CSP desatualizada (rode: node csp.js)`);
+  }
+}
+
 // 5) HTML bem formado
 const errors = [];
 parse5.parse(html, { onParseError: e => errors.push(e) });
@@ -46,6 +56,13 @@ for (const m of html.matchAll(/eyJ[A-Za-z0-9_-]+\.(eyJ[A-Za-z0-9_-]+)\.[A-Za-z0-
   try { const p = JSON.parse(Buffer.from(m[1], 'base64url').toString()); if (p.role && p.role !== 'anon') bad('token com papel', p.role, 'no código'); } catch { /* não é JWT */ }
 }
 
+// 7) Todo ícone usado existe no mapa embutido (ico('nome') e 'i:nome')
+const iconsAt = html.indexOf('const ICONS='), iconsEnd = html.indexOf('};', iconsAt);
+const ICON_NAMES = new Set(Object.keys(JSON.parse(html.slice(iconsAt + 12, iconsEnd + 1))));
+const usedIcons = new Set([...html.matchAll(/\bico\('([a-z0-9-]+)'/g), ...html.matchAll(/'i:([a-z0-9-]+)'/g), ...html.matchAll(/icon: '([a-z0-9-]+)'/g), ...html.matchAll(/tileT\('([a-z0-9-]+)'/g), ...html.matchAll(/\badd\([\d.]+, '([a-z0-9-]+)', (?:'(?:in|out|card|invest|warn|gold|muted)'|[a-z])/g), ...html.matchAll(/\badd\([\d.]+, [^',]*\? '([a-z0-9-]+)' : '([a-z0-9-]+)'/g)].flatMap(m => m.slice(1).filter(Boolean)));
+for (const n of usedIcons) if (!ICON_NAMES.has(n)) bad('ícone usado mas não existe:', n);
+
+console.log(`ícones: ${usedIcons.size} usados / ${ICON_NAMES.size} embutidos`);
 console.log(`ações: ${used.size} usadas / ${handlers.size} funções · ids: ${usedIds.size} usados / ${defined.size} definidos · scripts: ${scripts.length}`);
 console.log(fail ? `❌ checagem estática: ${fail} problema(s)` : '✅ checagem estática ok');
 process.exit(fail ? 1 : 0);

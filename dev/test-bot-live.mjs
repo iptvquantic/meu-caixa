@@ -65,6 +65,11 @@ const linkCode = () => psql(`select set_config('request.jwt.claims', '{"sub":"${
 
 // ---------- Meta e Groq simuladas (+ /rest/v1 → PostgREST e /auth/v1/user, como no Supabase) ----------
 const sent = [], groqCalls = [], proof = { checked: 0, wrong: [], missing: [] }, meta = { subs: [], wabaApps: [], verified: false, secret: APP_SECRET };
+// números da conta 555: o do robô (conectado) e o de atendimento do dono (fica no celular; nunca usado)
+const NUMS = [
+  { id: PHONE_ID, display_phone_number: '+1 555-010-0000', verified_name: 'Meu Caixa Teste', status: 'CONNECTED', platform_type: 'CLOUD_API', account_mode: 'LIVE', code_verification_status: 'VERIFIED' },
+  { id: '7037', display_phone_number: '+55 22 99105-3813', verified_name: 'Quantic Play', status: 'DISCONNECTED', platform_type: 'NOT_APPLICABLE', account_mode: 'LIVE', code_verification_status: 'VERIFIED' },
+];
 const fake = http.createServer(async (req, res) => {
   const chunks = []; for await (const c of req) chunks.push(c);
   const body = Buffer.concat(chunks), url = new URL(req.url, 'http://x');
@@ -102,6 +107,9 @@ const fake = http.createServer(async (req, res) => {
     meta.verified = true; meta.subs = [{ object: url.searchParams.get('object'), callback_url: cb, active: true, fields: [{ name: url.searchParams.get('fields'), version: 'v24.0' }] }];
     return json({ success: true });
   }
+  if (url.pathname === G + '555' && url.searchParams.get('fields') === 'name') return json({ id: '555', name: 'Conta Teste' });
+  if (url.pathname === G + '555' && url.searchParams.get('fields') === 'owner_business_info') return json({ owner_business_info: { id: '3688', name: 'Empresa Teste' } });
+  if (url.pathname === G + '555/phone_numbers') return json({ data: url.searchParams.get('fields') === 'id' ? NUMS.map((n) => ({ id: n.id })) : NUMS });
   if (url.pathname === G + '555/subscribed_apps') {
     if (req.method === 'POST') { meta.wabaApps = [{ whatsapp_business_api_data: { id: '777', name: 'Meu Caixa' } }]; return json({ success: true }); }
     return json({ data: meta.wabaApps });
@@ -110,19 +118,30 @@ const fake = http.createServer(async (req, res) => {
   if (url.pathname === `/graph/v24.0/${PHONE_ID}`) return json({ display_phone_number: '+1 555-010-0000', verified_name: 'Meu Caixa Teste' });
   if (url.pathname === '/graph/v24.0/media-1') return json({ url: `http://127.0.0.1:${FAKE_PORT}/media/1`, mime_type: 'audio/ogg; codecs=opus', file_size: 9 });
   if (url.pathname === '/media/1') { res.writeHead(200, { 'content-type': 'audio/ogg' }); return res.end(Buffer.from('OggS-fake')); }
+  if (url.pathname === '/graph/v24.0/media-2') return json({ url: `http://127.0.0.1:${FAKE_PORT}/media/2`, mime_type: 'image/jpeg', file_size: 4 });
+  if (url.pathname === '/media/2') { // como a Meta: o arquivo só sai com o token do robô
+    if (req.headers.authorization !== 'Bearer token-de-teste') return json({ error: 'sem token' }, 401);
+    res.writeHead(200, { 'content-type': 'image/jpeg' }); return res.end(Buffer.from('JPEG'));
+  }
+  if (url.pathname === '/graph/v24.0/media-3') return json({ url: `http://127.0.0.1:${FAKE_PORT}/media/3`, mime_type: 'image/jpeg', file_size: 9 * 1024 * 1024 });
   if (url.pathname === '/groq/audio/transcriptions') { groqCalls.push({ audio: true, form: body.toString('latin1') }); return json({ text: 'Gastei 40 reais de Uber ontem.' }); }
   if (url.pathname === '/groq/chat/completions') {
     const j = JSON.parse(body); groqCalls.push(j);
+    if (Array.isArray(j.messages?.[1]?.content)) { // modelo de visão: comprovante de farmácia no PIX
+      return json({ choices: [{ message: { content: '{"comprovante": true, "valor": 52.9, "data": null, "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
+    }
     return json({ choices: [{ message: { content: j.response_format ? '{"lancamento": false}' : 'Resposta da IA (teste).' } }] });
   }
   json({ error: 'não simulado: ' + url.pathname }, 404);
 });
 
 let mid = 0;
-async function send(text, { from = PHONE, audio = false, id, secret = APP_SECRET } = {}) {
+async function send(text, { from = PHONE, audio = false, image = null, id, secret = APP_SECRET, to = PHONE_ID } = {}) {
   id = id ?? 'wamid.live.' + (++mid);
-  const msg = audio ? { from, id, timestamp: '1', type: 'audio', audio: { id: 'media-1', mime_type: 'audio/ogg; codecs=opus', voice: true } } : { from, id, timestamp: '1', type: 'text', text: { body: text } };
-  const body = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: 'waba', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '15550100000', phone_number_id: PHONE_ID }, contacts: [{ profile: { name: 'Ana' }, wa_id: from }], messages: [msg] } }] }] });
+  const msg = audio ? { from, id, timestamp: '1', type: 'audio', audio: { id: 'media-1', mime_type: 'audio/ogg; codecs=opus', voice: true } }
+    : image ? { from, id, timestamp: '1', type: 'image', image: { id: image, mime_type: 'image/jpeg', caption: text ?? undefined } }
+    : { from, id, timestamp: '1', type: 'text', text: { body: text } };
+  const body = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ id: '555', changes: [{ field: 'messages', value: { messaging_product: 'whatsapp', metadata: { display_phone_number: '15550100000', phone_number_id: to }, contacts: [{ profile: { name: 'Ana' }, wa_id: from }], messages: [msg] } }] }] });
   const before = sent.length;
   const r = await fetch(FN, { method: 'POST', body, headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=' + createHmac('sha256', secret).update(body).digest('hex') } });
   return { status: r.status, reply: sent.slice(before).map((s) => s.text.body).join('\n---\n'), to: sent.slice(before).map((s) => s.to) };
@@ -154,7 +173,7 @@ async function main() {
   // cadastro do webhook e informação para o app
   ok(await fetch(FN + '?hub.mode=subscribe&hub.verify_token=mc-verifica&hub.challenge=desafio42').then((r) => r.text()) === 'desafio42', 'Meta: cadastro do webhook confirmado');
   const info = await fetch(FN + '?info=1').then((r) => r.json());
-  ok(info.configured === true && info.number === '15550100000', 'app descobre o número do robô: ' + JSON.stringify(info));
+  ok(info.configured === true && info.number === '15550100000' && info.ready === false, 'app descobre o número do robô; antes de ligar na Meta, os clientes não veem o robô: ' + JSON.stringify(info));
 
   const health = await fetch(FN + '?health=1').then((r) => r.json());
   ok(health.db === true && health.configured === true, 'saúde: a função alcança o banco com a chave de serviço');
@@ -168,7 +187,10 @@ async function main() {
   ok(act.ok && act.webhook === 'ativado' && act.waba === 'ativado' && act.name === 'Meu Caixa Teste', 'dono ativa o robô na Meta: ' + JSON.stringify(act));
   ok(meta.verified && meta.subs[0]?.callback_url === `http://127.0.0.1:${FAKE_PORT}/functions/v1/whatsapp`, 'a Meta confirmou o webhook chamando a própria função (desafio respondido)');
   const recheck = await (await setup(DONO_JWT)).json();
-  ok(recheck.ok && recheck.webhook === 'ok' && recheck.waba === 'ok', 'conferir de novo: tudo certo, nada muda');
+  ok(recheck.ok && recheck.webhook === 'ok' && recheck.waba === 'ok' && recheck.ready, 'conferir de novo: tudo certo, nada muda');
+  ok(recheck.numbers?.length === 2 && recheck.numbers.find((n) => n.id === '7037')?.state === 'seu atendimento (fica no celular)', 'o dono vê os números da conta e o de atendimento à parte');
+  const after = await fetch(FN + '?info=1').then((r) => r.json());
+  ok(after.ready === true && after.number === '15550100000', 'depois de ligado: os clientes veem o robô');
 
   // conectar
   let r = await send('oi');
@@ -210,6 +232,19 @@ async function main() {
   has(chat.messages[0].content, 'DADOS REAIS de Ana Souza', 'IA recebe os números reais do banco'); has(chat.messages[0].content, 'pagar Aluguel', 'IA vê as contas fixas');
   ok(psql(`select count from public.ai_usage where user_id = '${ANA}'`) === '2', 'áudio + pergunta = 2 usos de IA no banco');
 
+  // comprovante por foto: baixa da Meta com o token, a IA lê, grava no banco na categoria certa
+  r = await send('remédio', { image: 'media-2' });
+  has(r.reply, '🧾 Li o comprovante (PIX):', 'foto do comprovante lida'); has(r.reply, '💸 *Saída* de *R$ 52,90*', '... e lançada como saída');
+  const vision = groqCalls.filter((c) => Array.isArray(c.messages?.[1]?.content)).pop();
+  ok(vision?.model === 'qwen/qwen3.8-27b' && vision.messages[1].content[1].image_url.url === 'data:image/jpeg;base64,' + Buffer.from('JPEG').toString('base64') && /remédio/.test(vision.messages[1].content[0].text), 'imagem baixada da Meta e enviada ao modelo de visão com a legenda');
+  ok(psql(`select c.legacy_key || ' ' || t.description || ' ' || t.type from public.transactions t join public.categories c on c.id = t.category_id where t.user_id = '${ANA}' and t.description = 'Drogasil'`) === 'farmacia Drogasil out', 'gravado no banco como saída em Farmácia');
+  ok(psql(`select count from public.ai_usage where user_id = '${ANA}'`) === '3', 'a foto gasta 1 uso de IA');
+  r = await send(null, { image: 'media-3' });
+  has(r.reply, 'grande demais', 'imagem enorme: avisa sem baixar');
+  // mensagem para o número de atendimento do dono (mesma conta): o robô nunca responde
+  r = await send('oi, meu sinal caiu', { to: '7037', from: '5521988887777' });
+  ok(r.status === 200 && !r.reply, 'mensagem para o WhatsApp de atendimento: o robô fica quieto');
+
   // limpeza que a função faz de vez em quando: só ids de mensagens com mais de 30 dias
   psql(`insert into public.wa_inbox (id, phone, received_at) values ('wamid.velha', '${PHONE}', now() - interval '31 days')`);
   const recent = Number(psql(`select count(*) from public.wa_inbox where received_at > now() - interval '1 day'`));
@@ -219,6 +254,22 @@ async function main() {
   const clean = await rest(`wa_inbox?received_at=lt.${encodeURIComponent(new Date(Date.now() - 30 * 864e5).toISOString())}`, { method: 'DELETE' });
   ok(clean.ok && psql(`select count(*) from public.wa_inbox where id = 'wamid.velha'`) === '0' && Number(psql(`select count(*) from public.wa_inbox`)) === recent && recent > 5,
     'limpeza (chave de serviço) apaga só os ids antigos');
+
+  // pelo app: o mesmo robô, com o login do usuário (texto, áudio e foto), gravando no banco
+  const appCall = (token, body) => fetch(FN + '?app=1', { method: 'POST', headers: { authorization: 'Bearer ' + token, 'content-type': 'application/json', origin: 'https://iptvquantic.github.io' }, body: JSON.stringify(body) });
+  let a = await appCall('login-falso', { text: 'mercado 10' });
+  ok(a.status === 401, 'app: login falso recusado');
+  a = await (await appCall(ANA_JWT, { text: 'farmácia 23,50' })).json();
+  ok(a.handled && Number(a.tx?.amount) === 23.5 && a.tx?.type === 'out' && !a.tx.user_id && /💸 \*Saída\* de \*R\$ 23,50\*/.test(a.reply), 'app: texto vira lançamento e volta para a tela: ' + JSON.stringify(a));
+  ok(psql(`select c.legacy_key from public.transactions t join public.categories c on c.id = t.category_id where t.id = '${a.tx?.id}' and t.user_id = '${ANA}'`) === 'farmacia', 'app: gravado no banco na categoria Farmácia');
+  a = await (await appCall(ANA_JWT, { text: 'quanto posso gastar até o fim do mês?', noAI: true })).json();
+  ok(a.handled === false && a.reply === null && !a.tx, 'app: pergunta livre fica para o Conselheiro (com histórico)');
+  a = await (await appCall(ANA_JWT, { audio: { mime: 'audio/webm;codecs=opus', data: Buffer.from('webm-fake').toString('base64') } })).json();
+  ok(a.heard === 'Gastei 40 reais de Uber ontem.' && Number(a.tx?.amount) === 40, 'app: áudio transcrito e lançado: ' + JSON.stringify(a));
+  ok(groqCalls.filter((c) => c.audio).pop()?.form.includes('filename="audio.webm"'), 'app: áudio vai ao Whisper como webm');
+  a = await (await appCall(ANA_JWT, { image: { mime: 'image/jpeg', data: Buffer.from('JPEG').toString('base64') }, text: 'remédio' })).json();
+  ok(a.tx?.description === 'Drogasil' && /🧾 Li o comprovante/.test(a.reply), 'app: foto do comprovante lida e lançada');
+  const usage = psql(`select count from public.ai_usage where user_id = '${ANA}'`); ok(usage === '6', 'app: áudio e foto contam no limite diário de IA, como no WhatsApp (' + usage + ')');
 
   // segurança
   const dup = await send('mercado 10', { id: 'wamid.repetida' }), again = await send('mercado 10', { id: 'wamid.repetida' });

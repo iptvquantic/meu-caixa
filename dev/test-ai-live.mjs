@@ -1,5 +1,5 @@
-// Função "ai" rodando no Deno de verdade, com o Supabase simulado (login e banco) — confere o que não depende da Groq:
-// saúde com a chave publicável nova, CORS, login obrigatório, sessão inválida, limite diário e plano vencido.
+// Função "ai" rodando no Deno de verdade, com o Supabase e a Groq simulados — confere saúde com a chave publicável
+// nova, CORS, login obrigatório, sessão inválida, limite diário, plano vencido e a leitura de comprovante por foto.
 // Uso: node test-ai-live.mjs   (AI_FN_DIR=out/deploy/ai para conferir a entrada gerada pelo fn-deploy.js)
 import { spawn, execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -13,7 +13,7 @@ const PUB = 'sb_publishable_teste123', GOOD = 'jwt-bom', QUOTA = { ok: true, cou
 let pass = 0, fail = 0, quota = QUOTA;
 const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log('❌', msg); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const seen = [];
+const seen = [], groqSeen = [];
 
 function deno() {
   if (process.env.DENO) return process.env.DENO;
@@ -24,12 +24,18 @@ function deno() {
 }
 const fake = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x'), json = (o, s = 200) => { res.writeHead(s, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)); };
-  for await (const _ of req) { /* corpo ignorado */ }
+  let raw = ''; for await (const ch of req) raw += ch;
+  // Groq simulada (modelo de visão)
+  if (url.pathname === '/openai/v1/chat/completions') {
+    groqSeen.push({ auth: req.headers.authorization, body: JSON.parse(raw) });
+    return json({ choices: [{ message: { content: '{"comprovante": true, "valor": 52.9, "data": "2026-10-08", "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
+  }
   seen.push({ path: url.pathname, apikey: req.headers.apikey, auth: req.headers.authorization });
   if (req.headers.apikey !== PUB) return json({ message: 'Invalid API key' }, 401);
   if (url.pathname === '/auth/v1/user') return req.headers.authorization === 'Bearer ' + GOOD ? json({ id: 'u1', email: 'a@b.c', aud: 'authenticated' }) : json({ msg: 'invalid JWT' }, 401);
   if (url.pathname === '/rest/v1/profiles') return json([]);
   if (url.pathname === '/rest/v1/rpc/ai_consume') return json(quota);
+  if (url.pathname === '/rest/v1/categories') return json([{ name: 'Farmácia', kind: 'out', archived: false }, { name: 'Antiga', kind: 'out', archived: true }]);
   json({ message: 'não simulado' }, 404);
 });
 
@@ -40,7 +46,7 @@ const procs = [];
   const env = {
     ...process.env, DENO_SERVE_ADDRESS: `tcp:127.0.0.1:${FN_PORT}`, DENO_DIR: path.join(TOOLS, 'deno-cache'), DENO_NO_UPDATE_CHECK: '1',
     ...(existsSync('/root/.ccr/ca-bundle.crt') ? { DENO_CERT: '/root/.ccr/ca-bundle.crt' } : {}),
-    SUPABASE_URL: `http://127.0.0.1:${FAKE_PORT}`, SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUB }), SUPABASE_ANON_KEY: 'anon-antiga', GROQ_API_KEY: '',
+    SUPABASE_URL: `http://127.0.0.1:${FAKE_PORT}`, SUPABASE_PUBLISHABLE_KEYS: JSON.stringify({ default: PUB }), SUPABASE_ANON_KEY: 'anon-antiga', GROQ_API_KEY: 'gsk-teste', GROQ_BASE_URL: `http://127.0.0.1:${FAKE_PORT}/openai/v1`,
   };
   try { execFileSync(deno(), ['check', path.join(dir, 'index.ts')], { env, stdio: ['ignore', 'pipe', 'pipe'] }); ok(true, 'tipos'); }
   catch (e) { ok(false, 'tipos do TypeScript: ' + String(e.stderr || e.message).replace(/\x1b\[[0-9;]*m/g, '').slice(0, 600)); }
@@ -65,6 +71,16 @@ const procs = [];
   r = await post(GOOD); ok(r.status === 402, 'plano vencido: 402');
   quota = QUOTA;
   r = await post(GOOD, { messages: [] }); ok(r.status === 400, 'mensagem vazia: 400');
+  // comprovante por foto
+  r = await post(GOOD, { receipt: { image: 'data:image/jpeg;base64,QUJD', note: 'remédio' } });
+  const rc = await r.json(), g = groqSeen[0]?.body;
+  ok(r.status === 200 && rc.receipt?.amount === 52.9 && rc.receipt?.description === 'Drogasil' && rc.receipt?.category === 'Farmácia', 'comprovante: devolve valor, loja e categoria: ' + JSON.stringify(rc));
+  ok(g?.model === 'qwen/qwen3.8-27b' && g.messages[1].content[1].image_url.url === 'data:image/jpeg;base64,QUJD' && groqSeen[0].auth === 'Bearer gsk-teste', 'manda a foto ao modelo de visão com a chave do servidor');
+  ok(/Farmácia/.test(g?.messages[1].content[0].text) && !/Antiga/.test(g?.messages[1].content[0].text), 'só as categorias de gasto ativas do usuário vão para a IA');
+  ok(seen.some((x) => x.path === '/rest/v1/categories' && x.auth === 'Bearer ' + GOOD), 'categorias lidas com o login do usuário (RLS)');
+  r = await post(GOOD, { receipt: { image: 'data:text/html;base64,PGgxPg==' } }); ok(r.status === 400 && groqSeen.length === 1, 'arquivo que não é imagem: 400, sem chamar a IA');
+  r = await post(GOOD, { receipt: { image: 'data:image/jpeg;base64,' + 'A'.repeat(4300000) } }); ok(r.status === 413 && groqSeen.length === 1, 'imagem grande demais: 413');
+  r = await post(null, { receipt: { image: 'data:image/jpeg;base64,QUJD' } }); ok(r.status === 401 && groqSeen.length === 1, 'comprovante sem login: 401');
 })().catch((e) => { fail++; console.log('❌ exceção:', e.message); }).finally(async () => {
   for (const p of procs) p.kill('SIGTERM');
   fake.close(); await sleep(200);

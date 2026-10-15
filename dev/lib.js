@@ -7,10 +7,12 @@ const SITE = 'https://iptvquantic.github.io/meu-caixa/';
 const SUPA_JS_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js';
 
 // O app.html (fonte da verdade). demo:true = sem nuvem, dados de exemplo no aparelho.
+// app.html como no site; na demonstração (prévia e prints), sem a nuvem e sem CSP (não há dado de ninguém)
 function appHtml({ demo = false } = {}) {
   let html = fs.readFileSync(path.join(ROOT, 'app.html'), 'utf8');
   if (demo) {
     html = html.replace(/supabaseUrl: '[^']*'/, "supabaseUrl: ''").replace(/supabaseKey: '[^']*'/, "supabaseKey: ''");
+    html = require('./csp').withCsp(html, 'none');
   }
   return html;
 }
@@ -25,11 +27,11 @@ const swVersion = () => (fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8').match
 const inlineScripts = html => [...html.matchAll(/<script>\n([\s\S]*?)<\/script>/g)].map(m => m[1]);
 
 // ---------- navegador (Chromium) ----------
-async function launch() {
+async function launch(extra = []) {
   const pp = require('puppeteer-core');
   let exe = process.env.CHROME_PATH;
   if (!exe && fs.existsSync('/opt/pw-browsers/chromium')) exe = '/opt/pw-browsers/chromium';
-  let args = ['--no-sandbox', '--disable-dev-shm-usage'];
+  let args = ['--no-sandbox', '--disable-dev-shm-usage', ...extra];
   if (!exe) {
     let C;
     try { C = require('@sparticuz/chromium').default; } catch {

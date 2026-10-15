@@ -1,11 +1,13 @@
-// Meu Caixa — Conselheiro IA (Supabase Edge Function)
+// Meu Caixa — Conselheiro IA e leitura de comprovante por foto (Supabase Edge Function)
 // Segurança: só responde a usuário logado; limite diário decidido no banco (ai_consume);
-// a chave da Groq vive só aqui como secret (GROQ_API_KEY). O app nunca vê a chave.
+// a chave da Groq vive só aqui como secret (GROQ_API_KEY). O app nunca vê a chave. A foto não é salva.
 import { createClient } from 'npm:@supabase/supabase-js@2.117.3';
-import { addMonths, buildContext, currentMonthSP, type Card, type Cat, type Goal, type Rec, type TxR } from './context.ts';
+import { addMonths, buildContext, currentMonthSP, todaySP, type Card, type Cat, type Goal, type Rec, type TxR } from './context.ts';
+import { IMAGE_TYPES, MAX_IMAGE, readReceipt, VISION_MODELS } from './receipt.ts';
 
 const ALLOWED = (Deno.env.get('ALLOWED_ORIGINS') ?? 'https://iptvquantic.github.io').split(',').map((s) => s.trim());
-const MODELS = [Deno.env.get('AI_MODEL') ?? 'openai/gpt-oss-120b', Deno.env.get('AI_MODEL_FALLBACK') ?? 'llama-3.3-70b-versatile'];
+// llama-3.3-70b-versatile saiu do ar na Groq em 16/08/2026: a reserva agora é o gpt-oss-20b
+const MODELS = [Deno.env.get('AI_MODEL') ?? 'openai/gpt-oss-120b', Deno.env.get('AI_MODEL_FALLBACK') ?? 'openai/gpt-oss-20b'];
 // chave pública do projeto: a nova (sb_publishable_) e, se não houver, a antiga (anon, que o Supabase desliga no fim de 2026)
 const PUBLIC_KEY = (() => { try { const o = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') ?? '{}'); return String(o.default ?? Object.values(o)[0] ?? ''); } catch { return ''; } })()
   || Deno.env.get('SUPABASE_ANON_KEY')!;
@@ -68,6 +70,20 @@ Deno.serve(async (req) => {
     if (qe) throw qe;
     if (!quota?.ok) return json({ error: quota?.reason === 'limit' ? 'Limite diário da IA atingido' : 'Plano vencido', reason: quota?.reason }, quota?.reason === 'limit' ? 429 : 402);
     const body = await req.json().catch(() => ({}));
+    // foto do comprovante: o app manda a imagem já reduzida (JPEG); devolve os campos para o usuário conferir
+    if (body?.receipt) {
+      const m = /^data:(image\/[a-z+.-]+);base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(body.receipt.image ?? ''));
+      if (!m || !IMAGE_TYPES.includes(m[1])) return json({ error: 'Imagem inválida: use foto ou print (JPG, PNG ou WebP)' }, 400);
+      if (m[2].length * 0.75 > MAX_IMAGE) return json({ error: 'Imagem grande demais' }, 413);
+      const { data: cats, error: ce } = await sb.from('categories').select('name,kind,archived').eq('kind', 'out');
+      if (ce) throw ce;
+      const vision = (Deno.env.get('GROQ_VISION_MODELS') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+      const receipt = await readReceipt({
+        key: Deno.env.get('GROQ_API_KEY') ?? '', base: Deno.env.get('GROQ_BASE_URL') || undefined, mime: m[1], data: m[2], today: todaySP(), models: vision.length ? vision : VISION_MODELS,
+        categories: (cats ?? []).filter((c: { archived?: boolean }) => !c.archived).map((c: { name: string }) => c.name), note: String(body.receipt.note ?? '').slice(0, 200),
+      });
+      return json({ receipt, usage: { count: quota.count, limit: quota.limit } });
+    }
     const month = /^\d{4}-\d{2}$/.test(body?.month) ? body.month : currentMonthSP();
     const msgs = (Array.isArray(body?.messages) ? body.messages : [])
       .filter((m: { role?: string; content?: unknown }) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string')

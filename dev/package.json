@@ -6,10 +6,10 @@
     "node": ">=22.6"
   },
   "scripts": {
-    "test": "node check.js && node test-smart.js && node test-app.js && node test-app21.js && node test-app22.js && node test-backup.js && npm run -s test:ai && npm run -s test:bot",
+    "test": "node check.js && node test-smart.js && node test-app.js && node test-app21.js && node test-app22.js && node test-app23.js && node test-backup.js && npm run -s test:ai && npm run -s test:bot",
     "test:ai": "node --experimental-strip-types --no-warnings test-ai.mjs",
     "test:bot": "node --experimental-strip-types --no-warnings test-bot.mjs",
-    "test:browser": "node test-live.js && node test-offline.js && node test-pwa.js",
+    "test:browser": "node test-live.js && node test-assist.js && node test-offline.js && node test-pwa.js && node test-landing.js",
     "test:db": "bash supabase/test-db.sh",
     "test:fn:live": "node test-bot-live.mjs && node test-ai-live.mjs",
     "test:all": "npm test && npm run -s test:browser && npm run -s test:db && npm run -s test:fn:live && npm run -s shots",

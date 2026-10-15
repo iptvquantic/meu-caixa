@@ -1,23 +1,27 @@
 // Meu Caixa — robô do WhatsApp: entende a mensagem e devolve a resposta (lançar, pagar conta fixa,
-// consultar, desfazer, perguntar à IA). Tudo que fala com o mundo (banco, IA, áudio) chega por "deps",
-// então dá para testar sem internet (dev/test-bot.mjs).
+// ler comprovante por foto, consultar, desfazer, perguntar à IA). Tudo que fala com o mundo (banco, IA,
+// áudio, imagem) chega por "deps", então dá para testar sem internet (dev/test-bot.mjs).
 import { familyOf, iconIsSpecific, norm, parseQuick, suggestIcon } from './smart.ts';
 import {
   addMonths, billsOfMonth, brl, buildContext, cardParts, goalValue, invoiceMonth, monthByCat, monthSums, r2, splitInstallments,
   type Card, type Cat, type Goal, type Rec, type TxR,
 } from './context.ts';
+import type { Receipt } from './receipt.ts';
 
 export type Category = Cat & { icon?: string; legacy_key?: string | null; archived?: boolean; sort?: number };
 export type RecX = Rec & { category_id?: string | null; card_id?: string | null };
 export type Data = { transactions: (TxR & { id?: string })[]; categories: Category[]; cards: Card[]; recurring: RecX[]; goals: Goal[] };
 export type WaUser = { user_id: string; name: string; access: boolean; plan: string; settings: Record<string, any> | null };
 export type Quick = { type: string; amount: number; installments: number; date: string; description: string; investKind: string | null };
-export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'other'; text?: string; audioId?: string; lastHour?: number };
+// image = foto ou imagem enviada como documento (text = legenda); doc = outro documento (PDF…)
+export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'doc' | 'other'; text?: string; audioId?: string; mediaId?: string; lastHour?: number };
 export type BotDeps = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<any>;
   ask: (system: string, question: string) => Promise<string>;            // pergunta livre (Groq)
   extract: (text: string, today: string) => Promise<Quick | null>;       // frase sem número ("gastei quarenta no uber")
   transcribe: (audioId: string) => Promise<string>;                      // áudio → texto (Groq Whisper)
+  // foto do comprovante → valor, data, loja e categoria (null: não é comprovante legível; 'grande'/'tipo': imagem recusada)
+  readReceipt: (mediaId: string, today: string, categories: string[], note: string) => Promise<Receipt | null | 'grande' | 'tipo'>;
   deleteTx: (uid: string, id: string) => Promise<boolean>;               // "desfazer": apaga o lançamento (id + dono)
   today: () => string;                                                   // AAAA-MM-DD em São Paulo
   appUrl: string;
@@ -43,12 +47,15 @@ export const MSG = {
   off: '🔕 O robô está desligado na sua conta. Para usar, ligue em *Ajustes → Recursos do app → WhatsApp* no app.',
   plan: (app: string) => `⏳ Seu plano venceu, então não consigo lançar. Você ainda pode consultar: *saldo*, *fatura*, *contas*.\nRenove pelo app: ${app}`,
   flood: '✋ Muitas mensagens em pouco tempo. Me dá um minutinho e tente de novo.',
-  unsupported: 'Por enquanto eu entendo *texto* e *áudio* 🙂\nEx.: _mercado 52,90_',
+  unsupported: 'Eu entendo *texto*, *áudio* e *foto de comprovante* 🙂\nEx.: _mercado 52,90_',
+  pdf: 'Ainda não leio PDF. Mande uma *foto* ou um *print* do comprovante 📷',
+  noReceipt: 'Não consegui ler esse comprovante 🧐 Tente uma foto mais de perto, com boa luz e o valor total aparecendo, ou escreva: _mercado 52,90_',
+  bigImage: 'Essa imagem é grande demais para eu ler. Mande como *foto* (não como documento) ou um *print* da tela.',
   noAudio: 'Não consegui entender o áudio. Pode repetir mais devagar ou escrever? Ex.: _uber 23 ontem_',
   limit: (n: number) => `Você já usou as ${n} perguntas/áudios de hoje. Amanhã libera de novo.\nLançar por texto e consultar (*saldo*, *fatura*, *contas*) continuam funcionando.`,
   fail: 'Tive um problema agora e não consegui terminar. Tente de novo em instantes.',
 };
-const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
+const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n📷 Mande a *foto ou o print de um comprovante* e eu lanço o gasto.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
 
 const SYSTEM = `Você é o Conselheiro do Meu Caixa respondendo pelo WhatsApp: um planejador financeiro experiente, direto, caloroso e prático.
 Você conversa com autônomos e pequenos negócios no Brasil e recebe, abaixo, os NÚMEROS REAIS do usuário.
@@ -132,7 +139,15 @@ export async function answer(m: Incoming, d: BotDeps): Promise<string | null> {
   const code = m.kind === 'text' ? CODE_ONLY.exec(m.text ?? '')?.[1] : undefined;
   if (code) return link(code, m, d); // reconectar (mesma conta) ou tentar outra conta (recusado: desconectar antes)
   if (feats(u).whatsapp === false) return MSG.off;
-  if (m.kind === 'image' || m.kind === 'other') return m.kind === 'image' ? MSG.unsupported : null;
+  return serve(m, u, d);
+}
+
+// O "cérebro" do robô, igual no WhatsApp e no app (o app chama com o login do usuário: dev/.../handler.ts ?app).
+// noAI: não responde pergunta livre (o app manda para o Conselheiro, que tem o histórico da conversa) → null.
+export async function serve(m: Incoming, u: WaUser, d: BotDeps, o: { noAI?: boolean } = {}): Promise<string | null> {
+  if (m.kind === 'image') return receipt(m, u, d);
+  if (m.kind === 'doc') return MSG.pdf;
+  if (m.kind === 'other') return null;
 
   let text = (m.text ?? '').trim(), heard = '';
   if (m.kind === 'audio') {
@@ -143,11 +158,11 @@ export async function answer(m: Incoming, d: BotDeps): Promise<string | null> {
     heard = `🎙️ _"${text.length > 200 ? text.slice(0, 200) + '…' : text}"_\n\n`;
   }
   if (!text) return null;
-  const reply = await route(text, u, d, m.kind === 'audio');
+  const reply = await route(text, u, d, m.kind === 'audio', !!o.noAI);
   return reply ? heard + reply : null;
 }
 
-async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean): Promise<string | null> {
+async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, noAI = false): Promise<string | null> {
   const n = norm(text).replace(/[!.?…]+$/g, '').trim(), today = d.today();
   if (!/[\p{L}\p{N}]/u.test(n) || ACK.test(n)) return null; // "ok", "obrigado", só emoji: não precisa responder
   if (/^(oi|ola|ola robo|bom dia|boa tarde|boa noite|ajuda|menu|comandos|help|inicio)$/.test(n)) return MSG.help(u.name);
@@ -179,11 +194,12 @@ async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean): P
     }
     if (q && q.amount > 0) return addEntry(u, d, q, text);
   }
-  return askAI(text, u, d, today, counted);
+  return noAI ? null : askAI(text, u, d, today, counted);
 }
 
 // ---------------- lançar ----------------
-async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loaded?: Data): Promise<string> {
+type EntryOpts = { cat?: Category | null; head?: string; tail?: string };
+async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loaded?: Data, o: EntryOpts = {}): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
   const data: Data = loaded ?? await d.rpc('wa_data', { p_uid: u.user_id });
   const today = d.today();
@@ -198,7 +214,7 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
   if (type === 'card' && !card) { type = 'out'; note = '\n_Você não tem cartão cadastrado: lancei como saída à vista. Cadastre o cartão no app._'; }
   const kind = type === 'in' ? 'in' : type === 'invest' ? 'invest' : 'out';
   const billCat = bill?.rec.category_id ? data.categories.find((c) => c.id === bill!.rec.category_id && c.kind === kind) : null;
-  const cat = billCat || matchCategory(q.description, kind, data) || othersOf(kind, data);
+  const cat = billCat || (o.cat && o.cat.kind === kind ? o.cat : null) || matchCategory(q.description, kind, data) || othersOf(kind, data);
   const tx = {
     type, amount: r2(q.amount), date: q.date, description: (q.description || '').slice(0, 140), category_id: cat?.id ?? null,
     card_id: type === 'card' ? card!.id : null, installments: type === 'card' ? Math.min(48, Math.max(1, q.installments || 1)) : 1,
@@ -212,7 +228,7 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
   }
   if (!r?.ok) return r?.reason === 'plan' ? MSG.plan(d.appUrl) : MSG.fail;
 
-  const lines: string[] = [];
+  const lines: string[] = o.head ? [o.head] : [];
   const v = `*${money(tx.amount)}*`;
   if (type === 'in') lines.push(`💰 *Entrada* de ${v}`);
   else if (type === 'out') lines.push(`💸 *Saída* de ${v}`);
@@ -239,8 +255,42 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
       if (p >= 80) lines.push(`${p >= 100 ? '🚨' : '⚠️'} Limite de ${cat.name}: ${p}% (${money(used)} de ${money(Number(g.amount))})`);
     }
   }
+  if (o.tail) lines.push(o.tail);
   lines.push('_Errou? Responda *desfazer*._');
   return lines.join('\n') + note;
+}
+
+// ---------------- comprovante por foto ----------------
+// Foto é gasto (saída; no crédito vai para o cartão). Só vira entrada se a legenda disser (ex.: "recebi").
+const PAY_LABEL: Record<string, string> = { credito: 'crédito', debito: 'débito', pix: 'PIX', dinheiro: 'dinheiro', boleto: 'boleto', outro: '' };
+async function receipt(m: Incoming, u: WaUser, d: BotDeps): Promise<string> {
+  if (!u.access) return MSG.plan(d.appUrl);
+  if (!m.mediaId) return MSG.noReceipt;
+  const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
+  if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
+  const data: Data = await d.rpc('wa_data', { p_uid: u.user_id });
+  const today = d.today(), caption = (m.text ?? '').trim().slice(0, 300);
+  const income = /\b(recebi|recebido|recebimento|entrada|vendi|venda|ganhei)\b/.test(norm(caption));
+  const kind = income ? 'in' : 'out';
+  const r = await d.readReceipt(m.mediaId, today, catsOfKind(kind, data).map((c) => c.name), caption);
+  if (r === 'grande') return MSG.bigImage;
+  if (r === 'tipo') return MSG.unsupported;
+  if (!r) return MSG.noReceipt;
+  // a legenda manda: "uber", "no cartão", "almoço com cliente"…
+  const fromCaption = caption ? parseQuick(caption, today) as Quick | null : null;
+  const card = !income && (r.payment === 'credito' || /\b(cartao|credito)\b/.test(norm(caption)));
+  const q: Quick = {
+    type: income ? 'in' : card ? 'card' : 'out', amount: r.amount, installments: card ? Math.max(r.installments, fromCaption?.installments ?? 1) : 1,
+    date: r.date, description: (r.description || fromCaption?.description || '').slice(0, 60), investKind: null,
+  };
+  const named = r.category ? data.categories.find((c) => c.kind === kind && !c.archived && norm(c.name) === norm(r.category)) ?? null : null;
+  const byCaption = caption ? matchCategory(caption, kind, data) : null;
+  const how = PAY_LABEL[r.payment] ? ` (${PAY_LABEL[r.payment]})` : '';
+  const dup = data.transactions.some((t) => t.date === q.date && Math.abs(Number(t.amount) - q.amount) < 0.005 && (t.type === q.type || (q.type !== 'in' && t.type !== 'in' && t.type !== 'invest')));
+  return addEntry(u, d, q, caption || q.description, data, {
+    cat: byCaption || named, head: `🧾 Li o comprovante${how}:`,
+    tail: dup ? '⚠️ Já havia um lançamento com esse valor nesse dia. Se foi o mesmo comprovante, responda *desfazer*.' : undefined,
+  });
 }
 
 // O banco diz qual é o último lançamento feito pelo WhatsApp (até 30 min); a função apaga só esse, do mesmo dono.

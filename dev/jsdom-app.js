@@ -4,12 +4,14 @@ const { appHtml, SITE, sleep } = require('./lib');
 
 const HTML = appHtml({ demo: true });
 
-async function bootApp({ desktop = false, url = SITE + 'app.html', onError } = {}) {
+async function bootApp({ desktop = false, touch = false, dark = true, wide = true, url = SITE + 'app.html', onError, storage = {} } = {}) {
   const dom = new JSDOM(HTML, {
     url, runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
       w.__MC_TEST__ = true;
-      w.matchMedia = q => ({ matches: /min-width:\s*900/.test(q) ? desktop : false, addEventListener() { }, removeEventListener() { } });
+      // tela: PC (min-width:900), toque (pointer: coarse), tema do aparelho (prefers-color-scheme: dark), largura < 1100 (max-width:1099)
+      w.matchMedia = q => ({ matches: /min-width:\s*900/.test(q) ? desktop : /pointer:\s*coarse/.test(q) ? touch : /prefers-color-scheme:\s*dark/.test(q) ? dark : /max-width:\s*1099/.test(q) ? !wide : false, addEventListener() { }, removeEventListener() { } });
+      for (const [k, v] of Object.entries(storage)) w.localStorage.setItem(k, JSON.stringify(v));
       w.scrollTo = () => { };
       w.print = () => { w.__printed = true; };
       w.HTMLElement.prototype.focus = function () { };

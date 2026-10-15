@@ -37,25 +37,37 @@ const { ok, done } = checker('interface');
   ok(saved && saved.amount === 52.9 && saved.category_id === farm.id && saved.type === 'out', 'valores corretos (52,90 / Farmácia / saída)');
   ok(saved && saved.date === localToday(w), 'data padrão = hoje no horário local (não UTC)');
 
-  // ---- lançamento rápido ----
+  // ---- assistente no Novo lançamento: escreve e já lança (o mesmo cérebro do robô; aqui, a demonstração) ----
   click(w, '[data-act="newTx"]'); await sleep(20);
-  type(w, '#tx-quick', 'uber 23 ontem'); click(w, '[data-act="txQuick"]'); await sleep(10);
-  ok(d.querySelector('#tx-amount').value === '23,00', 'rápido: valor formatado');
-  ok(d.querySelector('#tx-desc').value === 'Uber', 'rápido: descrição');
+  ok(d.querySelector('#as-text') && d.querySelector('[data-act="asMic"]') && d.querySelector('[data-act="asPhoto"]'), 'assistente: escrever, falar e foto no topo do Novo lançamento');
+  type(w, '#as-text', 'uber 23 ontem'); await sleep(5);
+  ok(d.querySelector('[data-act="asSend"]') && !d.querySelector('[data-act="asMic"]'), 'com texto, o microfone vira o botão de lançar');
+  click(w, '[data-act="asSend"]'); await sleep(700);
+  const uber = M.S.txs.find(t => t.description === 'Uber');
   const transp = M.S.cats.find(c => c.legacy_key === 'transporte' && c.kind === 'out');
-  ok(d.querySelector(`.cat[data-id="${transp.id}"]`).getAttribute('aria-pressed') === 'true', 'rápido: "Uber" → Transporte');
-  click(w, '[data-act="txSave"]'); await sleep(30);
+  ok(uber && uber.amount === 23 && uber.category_id === transp.id && uber.type === 'out', 'assistente: "uber 23 ontem" lançado na hora em Transporte');
+  ok(uber && uber.date === M.isoOf(new Date(Date.now() - 864e5)), 'assistente: data de ontem');
+  ok(!d.querySelector('#as-row') && /Saída de R\$\s?23,00 · Transporte/.test(d.querySelector('#toast-root').textContent) && /Desfazer/.test(d.querySelector('#toast-root').textContent), 'fecha a folha e avisa com Desfazer');
+  click(w, '#toast-root [data-act="toastAction"]'); await sleep(40);
+  ok(!M.S.txs.some(t => t.description === 'Uber'), 'Desfazer apaga o lançamento');
 
-  // ---- parcelado no cartão pelo lançamento rápido ----
+  // ---- parcelado no cartão pelo assistente ----
   click(w, '[data-act="newTx"]'); await sleep(20);
-  type(w, '#tx-quick', 'notebook 3.600 12x'); click(w, '[data-act="txQuick"]'); await sleep(10);
-  ok(d.querySelector('#tx-inst') && d.querySelector('#tx-inst').value === '12', 'rápido: 12x no cartão');
-  ok(/12x de R\$\s?300,00/.test(d.querySelector('#tx-inst-info').textContent), 'prévia das parcelas: 12x de R$ 300,00');
-  click(w, '[data-act="txSave"]'); await sleep(30);
+  type(w, '#as-text', 'notebook 3.600 12x'); click(w, '[data-act="asSend"]'); await sleep(700);
   const nb = M.S.txs.find(t => t.description === 'Notebook');
-  ok(nb && nb.type === 'card' && nb.installments === 12 && nb.card_id, 'compra parcelada salva no cartão');
+  ok(nb && nb.type === 'card' && nb.installments === 12 && nb.card_id, 'compra parcelada lançada no cartão');
   const parts = nb ? M.installmentsOf(nb) : [];
   ok(parts.length === 12 && parts[11].month > parts[0].month, '12 parcelas em meses seguidos');
+  // pergunta/consulta: responde na própria folha, sem lançar
+  click(w, '[data-act="newTx"]'); await sleep(20);
+  const n1 = M.S.txs.length;
+  type(w, '#as-text', 'saldo'); click(w, '[data-act="asSend"]'); await sleep(700);
+  ok(M.S.txs.length === n1 && /Saldo:/.test(d.querySelector('#as-out').textContent) && d.querySelector('#as-out b'), 'consulta responde na folha (negrito do WhatsApp vira negrito)');
+  click(w, '[data-act="closeSheet"]'); await sleep(10);
+  // foto do comprovante (demonstração: exemplo fixo) e sem internet: preenche o formulário
+  click(w, '[data-act="newTx"]'); await sleep(20);
+  await M.asRun({ image: { mime: 'image/jpeg', data: 'QUJD' } }, 'Lendo o comprovante…'); await sleep(50);
+  ok(M.S.txs.some(t => t.description === 'Drogasil' && t.category_id === farm.id && t.amount === 52.9), 'foto do comprovante vira saída em Farmácia');
 
   // ---- editar ----
   M.go('txs'); await sleep(10);

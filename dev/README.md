@@ -18,15 +18,15 @@ Postgres 16 e cria o usuário sozinho.
 
 | Comando | O que confere |
 |---|---|
-| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id existente, nenhuma chave secreta; ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
-| `npm run test:browser` | No Chromium, com o Supabase simulado: login, carga dos dados, gravação, IA pela função, conectar o WhatsApp com código; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho) |
+| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
+| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; assistente com microfone de verdade (dispositivo falso do Chromium) e foto enviada pelo seletor de arquivo; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
 | `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
-| `npm run test:bot` | Robô do WhatsApp sem internet: conectar, lançar (texto e áudio), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, cópias geradas em dia (entra no `npm test`) |
-| `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta. IA: chave publicável, login, limite e plano. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
+| `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
+| `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta, a foto do comprovante e o assistente do app (texto, áudio e foto gravando no banco). IA: chave publicável, login, limite, plano e leitura de comprovante. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
 | `npm run shots` | Prints em 360/390/1280 px nos 3 temas em `dev/shots/` e aviso se algo vaza na horizontal |
 | `npm run demo` | Cópia do app em modo demonstração (dados de exemplo, sem nuvem), usada na prévia |
 | `npm run test:all` | Tudo acima, menos a demonstração |
-| `npm run sync` | Gera as cópias que o robô usa (`functions/whatsapp/smart.ts` do `app.html` e `context.ts` da IA). Rode depois de mudar o lançamento rápido do app ou as contas da IA |
+| `npm run sync` | Gera as cópias que o robô usa (`functions/whatsapp/smart.ts` do `app.html`; `context.ts` e `receipt.ts` da IA). Rode depois de mudar o lançamento rápido do app, as contas ou a leitura de comprovante |
 
 ## Banco e IA (`dev/supabase/`)
 
@@ -36,8 +36,8 @@ Postgres 16 e cria o usuário sozinho.
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
 | `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `migrations/03_v2_2_whatsapp.sql` — robô do WhatsApp (números conectados, códigos, mensagens recebidas) | aplicada (`20261009151422`) |
-| `functions/ai/index.ts` + `context.ts` — função "ai" (Groq) | publicada do commit `09e1e79` (v10) |
-| `functions/whatsapp/` — robô do WhatsApp (`index.ts` entrada, `handler.ts` Meta, `bot.ts` conversa, `groq.ts` IA/áudio) | publicada do commit `09e1e79` (v2) |
+| `functions/ai/index.ts` + `context.ts` + `receipt.ts` — função "ai" (Conselheiro e leitura de comprovante, Groq) | publicada do commit `09e1e79` (v10) |
+| `functions/whatsapp/` — robô (`index.ts` entrada, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto) | publicada do commit `7dab317` (v9) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
@@ -72,7 +72,14 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 - Caminho: Meta (WhatsApp Cloud API) → função `whatsapp` (`verify_jwt=false`; cada aviso é conferido pela assinatura
   `X-Hub-Signature-256` com a chave secreta do app da Meta) → funções `wa_*` do banco (só a chave de serviço chama).
 - Segredos (Supabase → Edge Functions → Secrets): `WHATSAPP_TOKEN` (token permanente do usuário do sistema da Meta),
-  `WHATSAPP_APP_SECRET`, `WHATSAPP_PHONE_ID`, `WHATSAPP_VERIFY_TOKEN`, além de `GROQ_API_KEY`.
+  `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` e `GROQ_API_KEY`. Opcionais: `WHATSAPP_PHONE_ID` (o robô acha o
+  número sozinho: o conectado da conta), `WHATSAPP_WABA_ID`, `WHATSAPP_PROTECTED` (números que o robô nunca usa;
+  padrão: o WhatsApp de atendimento 5522991053813, que fica no celular) e `GROQ_VISION_MODELS`.
+- O número do robô tem que ser só dele (chip sem WhatsApp instalado), cadastrado no Gestor do WhatsApp →
+  Números de telemóvel → Adicionar número de telemóvel. Se a Meta pedir ativação, o dono ativa com um PIN de 6
+  números no próprio app (Ajustes → aviso do robô); a função chama `/{número}/register`.
+- O cliente só vê "Conectar meu WhatsApp" quando `?info=1` diz `ready: true`: número conectado na API (não de
+  teste) e mensagens chegando (mensagem recebida na última semana, ou webhook e conta inscritos no app).
 - Webhook na Meta: URL `https://jgqhtshcuyzytljkmmxd.supabase.co/functions/v1/whatsapp`, token de verificação =
   `WHATSAPP_VERIFY_TOKEN`, campo assinado: `messages`. **Não precisa mexer no painel da Meta**: quando o dono
   (plano master/admin) abre Ajustes, o app chama `POST …/whatsapp?setup=1` com o login dele; a função confere o
@@ -85,9 +92,21 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 - O usuário conecta em Ajustes → WhatsApp: o app mostra um código de 8 dígitos (vale 15 min, uma vez) e abre o
   WhatsApp com "MC código" já escrito. O robô só responde números conectados e respeita o liga/desliga.
 
+## Assistente no app (falar, escrever ou foto)
+
+- No Novo lançamento (botão +) e na página Assistente, o app manda texto, áudio (gravado no navegador) ou a foto
+  do comprovante (reduzida para JPEG de até 1600 px no aparelho) para `POST …/whatsapp?app=1` com o login.
+- A função confere o login (`auth.getUser`), limita 20 pedidos por minuto por pessoa, aceita só imagem
+  JPEG/PNG/WebP até 3 MB e áudio webm/ogg/mp4/mpeg/wav até 4 MB, e roda o mesmo `serve()` do robô do WhatsApp
+  (mesmas regras de lançamento, conta fixa, consultas e limite diário de IA). Devolve a resposta e o lançamento
+  criado; o app mostra na hora com Desfazer (que apaga pelo próprio app, com RLS).
+- Na página Assistente, pergunta livre vai ao Conselheiro (função `ai`, com o histórico da conversa).
+- Áudio: Whisper (Groq). Foto: modelo de visão da Groq (`qwen/qwen3.8-27b`). Nada é guardado além do lançamento.
+
 ## Publicar o app
 
 1. Mudou o `app.html` → subir `MC_CONFIG.version` e o `VERSION` do `sw.js` juntos (os aparelhos com o app instalado só atualizam assim).
+   Mudou algum `<script>` do `app.html` ou do `index.html` → `node csp.js` (a CSP leva o hash de cada script; o `check.js` acusa se esquecer).
 2. `npm test && npm run test:browser && npm run shots` e olhar os prints.
 3. Commit no `main`: o GitHub Pages publica em cerca de 1 minuto.
 4. Conferir no site (versão nova no `app.html` e no `sw.js`), nos logs e nos Advisors do Supabase.

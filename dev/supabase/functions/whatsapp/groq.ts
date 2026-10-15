@@ -34,7 +34,8 @@ export function toQuick(out: string, today: string): Quick | null {
   return { type, amount: Math.round(valor * 100) / 100, installments: parc, date: okDate(j.data, today), description: desc ? desc[0].toUpperCase() + desc.slice(1) : '', investKind };
 }
 
-export function groq(key: string, fetcher: typeof fetch = fetch, models = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'], base = 'https://api.groq.com/openai/v1') {
+// llama-3.3-70b-versatile saiu do ar na Groq em 16/08/2026: a reserva agora é o gpt-oss-20b
+export function groq(key: string, fetcher: typeof fetch = fetch, models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], base = 'https://api.groq.com/openai/v1') {
   const CHAT = `${base}/chat/completions`, AUDIO = `${base}/audio/transcriptions`;
   async function chat(messages: { role: string; content: string }[], o: { maxTokens: number; temperature: number; json?: boolean; effort?: string }) {
     if (!key) throw new Error('GROQ_API_KEY não configurada');

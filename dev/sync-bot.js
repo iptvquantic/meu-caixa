@@ -1,6 +1,7 @@
 // Gera os arquivos que o robô do WhatsApp compartilha com o app e com a IA (fonte da verdade continua lá):
 //   supabase/functions/whatsapp/smart.ts   ← trecho do app.html: ícone automático e lançamento rápido
 //   supabase/functions/whatsapp/context.ts ← cópia de supabase/functions/ai/context.ts (contas do mês)
+//   supabase/functions/whatsapp/receipt.ts ← cópia de supabase/functions/ai/receipt.ts (comprovante por foto)
 // Uso: node sync-bot.js   (o test-bot.mjs falha se as cópias estiverem desatualizadas)
 const fs = require('fs'), path = require('path');
 const { ROOT } = require('./lib');
@@ -17,10 +18,8 @@ function smartSource() {
     + html.slice(a, b).trimEnd().split('\n').filter((l) => !/^const (EMOJI_SET|PALETTE) =/.test(l)).join('\n') // listas só da tela
     + '\n\nexport { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji };\n';
 }
-function contextSource() {
-  return '// CÓPIA GERADA por dev/sync-bot.js de ../ai/context.ts. Não edite aqui.\n' + fs.readFileSync(path.join(FN, 'ai', 'context.ts'), 'utf8');
-}
-const FILES = { 'whatsapp/smart.ts': smartSource, 'whatsapp/context.ts': contextSource };
+const copyOf = (name) => () => `// CÓPIA GERADA por dev/sync-bot.js de ../ai/${name}. Não edite aqui.\n` + fs.readFileSync(path.join(FN, 'ai', name), 'utf8');
+const FILES = { 'whatsapp/smart.ts': smartSource, 'whatsapp/context.ts': copyOf('context.ts'), 'whatsapp/receipt.ts': copyOf('receipt.ts') };
 
 module.exports = { FILES, FN };
 if (require.main === module) {
