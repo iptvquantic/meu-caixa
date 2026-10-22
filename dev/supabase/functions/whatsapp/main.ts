@@ -79,19 +79,20 @@ const graph = async (path: string, init: RequestInit = {}, token = cfg.token, wi
   });
 };
 const GROQ_BASE = env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1');
-const ai = groq(env('GROQ_API_KEY'), fetch, undefined, GROQ_BASE);
+const log = (...a: unknown[]) => console.error('[whatsapp]', ...a);
+const ai = groq(env('GROQ_API_KEY'), fetch, undefined, GROQ_BASE, log);
 const VISION = env('GROQ_VISION_MODELS') ? env('GROQ_VISION_MODELS').split(',').map((s) => s.trim()).filter(Boolean) : VISION_MODELS;
 
 // áudio do WhatsApp: pega o endereço do arquivo na Meta, baixa e manda transcrever
 const EXT: Record<string, string> = { ogg: 'ogg', opus: 'ogg', mpeg: 'mp3', mp3: 'mp3', mp4: 'm4a', m4a: 'm4a', aac: 'm4a', wav: 'wav', webm: 'webm', flac: 'flac' };
-async function transcribe(mediaId: string) {
+async function transcribe(mediaId: string, vocab = '') {
   const meta = await graph(encodeURIComponent(mediaId)).then((r) => r.json());
   if (!meta?.url) throw new Error('áudio sem endereço');
   if (Number(meta.file_size) > 16 * 1024 * 1024) return '';
   const file = await fetch(meta.url, { headers: { Authorization: `Bearer ${cfg.token}` } });
   if (!file.ok) throw new Error('download do áudio falhou (' + file.status + ')');
   const sub = String(meta.mime_type ?? 'audio/ogg').split(';')[0].split('/')[1] ?? 'ogg';
-  return ai.transcribe(await file.blob(), 'audio.' + (EXT[sub] ?? 'ogg'));
+  return ai.transcribe(await file.blob(), 'audio.' + (EXT[sub] ?? 'ogg'), vocab);
 }
 
 // foto do comprovante: pega o arquivo na Meta, confere tipo e tamanho e manda o modelo de visão ler (nada é salvo)
@@ -119,22 +120,27 @@ async function assist(uid: string, inp: AppInput): Promise<AppResult> {
   const { data: p, error } = await sb.from('profiles').select('name, plan, settings').eq('id', uid).maybeSingle();
   if (error) throw new Error(`perfil: ${error.message}`);
   const u: WaUser = { user_id: uid, name: String(p?.name ?? ''), access: (await rpc('access_ok', { p_uid: uid })) === true, plan: String(p?.plan ?? ''), settings: p?.settings ?? null };
-  let tx: Record<string, unknown> | null = null, removed: string | null = null, heard = '';
+  const txs: Record<string, unknown>[] = [];
+  let removed: string | null = null, heard = '', pending: string | null = null, undo = false;
   const deps: BotDeps = {
-    // guarda o lançamento criado para o app mostrar na hora (e oferecer Desfazer)
-    rpc: async (fn, args) => { const r = await rpc(fn, args); if (fn === 'wa_add_tx' && r?.ok) tx = r.tx ?? null; return r; },
-    ask: ai.ask, extract: ai.extract, today: todaySP, appUrl: APP_URL,
-    transcribe: async () => {
+    // guarda os lançamentos criados para o app mostrar na hora (e oferecer Desfazer)
+    rpc: async (fn, args) => { const r = await rpc(fn, args); if (fn === 'wa_add_tx' && r?.ok && r.tx) txs.push(r.tx); return r; },
+    ask: ai.ask, extract: ai.extract, understand: ai.interpret, today: todaySP, appUrl: APP_URL, log,
+    transcribe: async (_id, vocab) => {
       const a = inp.audio!;
-      heard = (await ai.transcribe(new Blob([fromB64(a.data)], { type: a.mime }), 'audio.' + (AUDIO_EXT[a.mime] ?? 'webm'))).trim();
+      heard = (await ai.transcribe(new Blob([fromB64(a.data)], { type: a.mime }), 'audio.' + (AUDIO_EXT[a.mime] ?? 'webm'), vocab)).trim();
       return heard;
     },
+    // pelo app, "desfazer" é feito pelo próprio app; faltou o valor → a próxima mensagem completa a frase
+    onUndo: () => { undo = true; },
+    onPending: (text) => { pending = text.slice(0, 300); },
     readReceipt: (_id, today, categories, note, userName) => readReceipt({ key: env('GROQ_API_KEY'), base: GROQ_BASE, models: VISION, mime: inp.image!.mime, data: inp.image!.data, today, categories, note, userName }),
     deleteTx: async (owner, id) => { const ok = await deleteTx(owner, id); if (ok) removed = id; return ok; },
   };
   const kind = inp.image ? 'image' : inp.audio ? 'audio' : 'text';
-  const reply = await serve({ phone: 'app', kind, text: inp.text, audioId: inp.audio ? 'app' : undefined, mediaId: inp.image ? 'app' : undefined, hint: inp.hint }, u, deps, { noAI: inp.noAI });
-  return { reply, handled: reply !== null, heard: heard || undefined, tx, removed };
+  const reply = await serve({ phone: 'app', kind, text: inp.text, audioId: inp.audio ? 'app' : undefined, mediaId: inp.image ? 'app' : undefined, hint: inp.hint, context: inp.context }, u, deps, { noAI: inp.noAI });
+  if (undo) return { reply: null, handled: true, heard: heard || undefined, undo: true };
+  return { reply, handled: reply !== null, heard: heard || undefined, tx: txs[txs.length - 1] ?? null, txs, removed, pending };
 }
 
 const runtime = (globalThis as { EdgeRuntime?: { waitUntil: (p: Promise<unknown>) => void } }).EdgeRuntime;
@@ -145,8 +151,8 @@ export function start(createClient: CreateClient) {
   sb = createClient(env('SUPABASE_URL'), SECRET, { auth: { persistSession: false, autoRefreshToken: false } });
   Deno.serve((req) => handle(req, {
     cfg, rpc, graph, housekeeping, isAdmin, lastInbound, userOf, assist,
-    bot: (m) => answer(m, { rpc, ask: ai.ask, extract: ai.extract, transcribe, readReceipt: receipt, deleteTx, today: todaySP, appUrl: APP_URL }),
+    bot: (m) => answer(m, { rpc, ask: ai.ask, extract: ai.extract, understand: ai.interpret, transcribe, readReceipt: receipt, deleteTx, today: todaySP, appUrl: APP_URL, log }),
     waitUntil: runtime ? (p) => runtime.waitUntil(p) : undefined,
-    log: (...a) => console.error('[whatsapp]', ...a),
+    log,
   }));
 }

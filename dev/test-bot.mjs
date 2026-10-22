@@ -7,7 +7,8 @@ import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';
 import { answer, matchCategory, MSG, serve } from './supabase/functions/whatsapp/bot.ts';
 import { handle, kindOf, messagesOf, resetPhoneCache, signatureOk } from './supabase/functions/whatsapp/handler.ts';
-import { groq, toQuick } from './supabase/functions/whatsapp/groq.ts';
+import { groq, speechText, toQuick } from './supabase/functions/whatsapp/groq.ts';
+import { cleanDescription, contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf } from './supabase/functions/whatsapp/understand.ts';
 import { b64, readReceipt, toReceipt } from './supabase/functions/whatsapp/receipt.ts';
 
 const require = createRequire(import.meta.url);
@@ -319,7 +320,7 @@ const msg = (text, extra = {}) => ({ phone: PHONE, kind: 'text', text, lastHour:
   ok(count(db, 'ai_consume_for') === 1, 'áudio gasta 1 da cota');
   r = await answer({ phone: PHONE, kind: 'audio', audioId: 'a2', lastHour: 1 }, deps); t = lastAdd(db);
   ok(t.amount === 40 && t.category_id === 'c-merc' && extracted.length === 1 && count(db, 'ai_consume_for') === 2, 'áudio sem número ("quarenta") a IA extrai, sem gastar cota 2x');
-  has(await answer({ phone: PHONE, kind: 'audio', audioId: 'a3', lastHour: 1 }, deps), 'Não consegui entender o áudio', 'áudio vazio');
+  has(await answer({ phone: PHONE, kind: 'audio', audioId: 'a3', lastHour: 1 }, deps), 'Não ouvi nada no áudio', 'áudio vazio');
   r = await answer(msg('gastei quarenta no mercado'), deps);
   ok(extracted.length === 2 && lastAdd(db).amount === 40 && count(db, 'ai_consume_for') === 4, 'texto sem número com "gastei" também é extraído (gasta 1 da cota)');
 }
@@ -464,9 +465,129 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(ex.amount === 40 && body.response_format?.type === 'json_object' && body.reasoning_effort === 'low' && body.temperature === 0, 'extração pede JSON, esforço baixo, temperatura 0');
   sent.length = 0;
   g = groq('k', fake([{ status: 200, body: { text: ' mercado 52,90 ' } }]));
-  const tx = await g.transcribe(new Blob(['x'], { type: 'audio/ogg' }), 'audio.ogg'), form = sent[0].init.body;
-  ok(tx === 'mercado 52,90' && form.get('model') === 'whisper-large-v3-turbo' && form.get('language') === 'pt' && sent[0].url.endsWith('/audio/transcriptions'), 'transcrição: Whisper turbo em português');
+  const tx = await g.transcribe(new Blob(['x'], { type: 'audio/ogg' }), 'audio.ogg', 'Nubank, Venda de IPTV, Josimar.'), form = sent[0].init.body;
+  ok(tx === 'mercado 52,90' && form.get('model') === 'whisper-large-v3' && form.get('language') === 'pt' && form.get('response_format') === 'verbose_json' && form.get('temperature') === '0' && sent[0].url.endsWith('/audio/transcriptions'), 'transcrição: Whisper completo, em português, com os trechos (para tirar o silêncio)');
+  ok(form.get('prompt') === 'Nubank, Venda de IPTV, Josimar.', 'transcrição recebe o vocabulário da pessoa (nomes de clientes, cartões, categorias)');
+  sent.length = 0; const logged = [];
+  g = groq('k', fake([{ status: 413, body: { error: { message: 'Request Entity Too Large' } } }, { status: 200, body: { text: 'uber 23' } }]), undefined, undefined, (...a) => logged.push(a.join(' ')));
+  ok(await g.transcribe(new Blob(['x']), 'audio.wav') === 'uber 23' && sent[1].init.body.get('model') === 'whisper-large-v3-turbo' && /413 Request Entity Too Large/.test(logged.join('|')), 'transcrição recusada (o 413 de 15 a 17/10): registra o motivo e tenta o outro modelo');
+  sent.length = 0;
+  g = groq('k', fake([{ status: 400, body: {} }, { status: 400, body: {} }]));
+  threw = ''; try { await g.transcribe(new Blob(['x']), 'audio.wav'); } catch (e) { threw = e.message; } ok(/transcrição falhou \(Groq 400/.test(threw) && sent.length === 2, 'os dois modelos recusaram: erro claro');
+  // silêncio vira frase inventada pelo Whisper: some
+  ok(speechText({ text: 'Legendas pela comunidade Amara.org', segments: [{ text: ' Legendas pela comunidade Amara.org', no_speech_prob: 0.9, avg_logprob: -1.2 }] }) === '', 'silêncio: "Legendas pela comunidade Amara.org" não vira texto');
+  ok(speechText({ text: 'Obrigado.' }) === '' && speechText({ text: 'mercado 52' }) === 'mercado 52', 'frase inventada comum ("Obrigado.") some; fala de verdade fica');
+  ok(speechText({ segments: [{ text: ' paguei 50 no mercado', no_speech_prob: 0.02, avg_logprob: -0.2 }, { text: ' Obrigado.', no_speech_prob: 0.8, avg_logprob: -0.9 }] }) === 'paguei 50 no mercado', 'trecho de silêncio no fim é descartado');
+  // entender a frase: formato estrito (o modelo não foge do esquema), esforço médio; esquema recusado → só JSON
+  sent.length = 0;
+  g = groq('k', fake([{ status: 200, body: { choices: [{ message: { content: '{"acao":"nada","faltou":"","lancamentos":[]}' } }] } }]));
+  await g.interpret('sistema', 'contexto', SCHEMA.schema ? SCHEMA : SCHEMA); let ib = JSON.parse(sent[0].init.body);
+  ok(ib.response_format?.type === 'json_schema' && ib.response_format.json_schema.strict === true && ib.reasoning_effort === 'medium' && ib.temperature === 0 && ib.model === 'openai/gpt-oss-120b', 'entender: saída estrita no esquema, esforço médio, temperatura 0');
+  sent.length = 0;
+  g = groq('k', fake([{ status: 400, body: { error: { message: 'json_schema não suportado' } } }, { status: 200, body: { choices: [{ message: { content: '{"acao":"nada"}' } }] } }]));
+  ok(await g.interpret('s', 'c', SCHEMA) === '{"acao":"nada"}' && JSON.parse(sent[1].init.body).response_format.type === 'json_object', 'esquema recusado: tenta pedindo só JSON');
 }
+
+// ---------- entender: o que a IA devolve vira um plano conferido ----------
+{
+  const P = (o) => toPlan(JSON.stringify(o), TODAY);
+  const L = (x) => ({ tipo: 'saida', valor: 10, data: TODAY, descricao: 'x', categoria: '', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '', ...x });
+  let p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ valor: 350, descricao: 'parcela cartão do pai 3/12', pagamento: 'pix' })] });
+  ok(p.action === 'lancar' && p.items[0].type === 'out' && p.items[0].amount === 350 && p.items[0].description === 'Parcela cartão do pai 3/12' && p.items[0].payment === 'pix' && p.items[0].installments === 1, 'plano: saída por PIX com a descrição limpa');
+  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ tipo: 'cartao', valor: '2.400,00', parcelas: 10, cartao: 'Nubank' }), L({ tipo: 'investimento', investimento: 'resgate', valor: 200 }), L({ tipo: 'entrada', valor: 30, descricao: 'Entrada Edson Monsores', data: '2031-01-01' })] });
+  ok(p.items.length === 3 && p.items[0].type === 'card' && p.items[0].amount === 2400 && p.items[0].installments === 10 && p.items[0].card === 'Nubank', 'cartão: valor em texto e parcelas');
+  ok(p.items[1].type === 'invest' && p.items[1].investKind === 'resgate' && p.items[2].type === 'in' && p.items[2].description === 'Edson Monsores' && p.items[2].date === TODAY, 'resgate; "Entrada" sai da descrição; data futura vira hoje');
+  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ tipo: 'entrada', parcelas: 7, cartao: 'Nubank' })] });
+  ok(p.items[0].installments === 1 && p.items[0].card === '', 'parcelas e cartão só valem no tipo cartão');
+  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ valor: 0, descricao: 'uber' })] });
+  ok(p.action === 'falta_valor' && p.description === 'Uber', 'lançar sem valor de verdade = faltou o valor');
+  ok(P({ acao: 'falta_valor', faltou: 'parcela do pai', lancamentos: [] }).description === 'Parcela do pai' && P({ acao: 'consulta', faltou: '', lancamentos: [] }).action === 'consulta', 'faltou o valor e consulta');
+  ok(toPlan('não sei', TODAY) === null && P({ acao: 'xyz' }) === null && P({ acao: 'lancar', lancamentos: [L({ tipo: 'roubo' })] }) === null, 'resposta fora do formato: nada');
+  ok(P({ acao: 'lancar', faltou: '', lancamentos: Array.from({ length: 9 }, () => L({})) }).items.length === 5, 'no máximo 5 lançamentos por mensagem');
+  ok(cleanDescription('saída terceira parcela celular 22 99105-3813') === 'Terceira parcela celular 22', 'descrição: sem "Saída" e sem telefone');
+  // contexto: o jeito da pessoa vai junto
+  const { db } = fakeDb(), data = db.data;
+  data.categories.push({ id: 'c-iptv', kind: 'in', name: 'Venda de IPTV', icon: 'i:tv', legacy_key: 'iptv', archived: false, sort: 5 });
+  data.transactions.push({ id: 'h1', type: 'in', amount: 30, date: '2026-10-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null },
+    { id: 'h2', type: 'in', amount: 30, date: '2026-09-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null });
+  const cx = contextOf('josimar trinta', data, TODAY, { hint: { type: 'in', sure: true }, fromAudio: true });
+  ok(/Hoje: sexta-feira, 09\/10\/2026 \(2026-10-09\)/.test(cx) && /Venda de IPTV \(ex\.: Josimar\)/.test(cx) && /Cartões de crédito: Nubank/.test(cx), 'contexto: data, categorias com exemplos da pessoa e cartões');
+  ok(/Contas fixas do mês: Aluguel \(saída, R\$\s?900,00, dia 5, a pagar\)/.test(cx) && /Lançamentos parecidos.*\n- 05\/10 entrada R\$\s?30,00 "Josimar" → Venda de IPTV/.test(cx), 'contexto: contas fixas e lançamentos parecidos');
+  ok(/tocou na aba: Entrada/.test(cx) && /Mensagem \(áudio transcrito\): "josimar trinta"/.test(cx), 'contexto: aba tocada e a mensagem');
+  ok(!/tocou na aba/.test(contextOf('x', data, TODAY, { hint: { type: 'in' } })), 'aba só lembrada não vai para a IA');
+  const voc = vocabOf(data);
+  ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 640, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
+  ok(/"Pagamento do cartão do meu pai com pix" = saida por PIX/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor falado vira número/.test(UNDERSTAND) && UNDERSTAND.length < 3200, 'instruções curtas cobrem PIX x cartão, parcela 3/12 e valor falado');
+}
+
+// ---------- entender pelo robô: frase com dúvida e áudio passam pela IA ----------
+{
+  const { db, rpc } = linked();
+  db.data.categories.push({ id: 'c-fam', kind: 'out', name: 'Família', icon: 'i:users', legacy_key: null, archived: false, sort: 5 });
+  const seen = [];
+  const plans = [
+    [/pai.*3\/12.*350|350.*pai/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 350, data: TODAY, descricao: 'Parcela cartão do pai 3/12', categoria: 'Família', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
+    [/pai/, { acao: 'falta_valor', faltou: 'Parcela cartão do pai 3/12', lancamentos: [] }],
+    [/mercado e .*farm/, { acao: 'lancar', faltou: '', lancamentos: [
+      { tipo: 'saida', valor: 50, data: TODAY, descricao: 'Mercado', categoria: 'Mercado', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' },
+      { tipo: 'saida', valor: 30, data: TODAY, descricao: 'Farmácia', categoria: 'Farmácia', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
+    [/tv/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'cartao', valor: 2400, data: TODAY, descricao: 'TV', categoria: '', pagamento: 'credito', cartao: 'nubank', parcelas: 10, investimento: 'nao', conta_fixa: '' }] }],
+    [/aluguel/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 900, data: TODAY, descricao: 'Aluguel', categoria: '', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: 'Aluguel' }] }],
+    [/quanto/, { acao: 'consulta', faltou: '', lancamentos: [] }],
+    [/apaga/, { acao: 'desfazer', faltou: '', lancamentos: [] }],
+    [/pastel/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 12, data: TODAY, descricao: 'Pastel', categoria: 'Mercado', pagamento: 'dinheiro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
+  ];
+  const understand = async (system, context, schema) => {
+    seen.push({ system, context, schema });
+    if (/quebrada/.test(context)) throw new Error('IA indisponível (Groq 503)');
+    const msg = /Mensagem[^:]*: "([\s\S]*)"$/.exec(context)?.[1] ?? '';
+    for (const [rx, plan] of plans) if (rx.test(msg)) return JSON.stringify(plan);
+    return '{"acao":"nada","faltou":"","lancamentos":[]}';
+  };
+  const { deps, asked } = botDeps(rpc, { understand, transcribe: async (id, vocab) => { seen.push({ vocab }); return { p1: 'Pagamento cartão pai parcela com Pix 3/12', p2: 'gastei 50 no mercado e 30 na farmácia', p3: 'apaga isso' }[id] ?? ''; } });
+  const u = { user_id: ANA, name: 'Ana Souza', access: true, plan: 'trial', settings: {} };
+  // o caso do dono: "pagamento cartão pai parcela com pix 3/12" → saída por PIX, não compra no cartão dele
+  let r = await answer(msg('pagamento cartao pai parcela com pix 3/12 350'), deps), t = lastAdd(db);
+  ok(seen.length === 1 && t.type === 'out' && t.amount === 350 && t.card_id === null && t.installments === 1 && t.description === 'Parcela cartão do pai 3/12' && t.category_id === 'c-fam' && t.date === TODAY, 'pagamento do cartão do pai com PIX, parcela 3/12 → saída por PIX de R$ 350 (não é compra no cartão nem data): ' + JSON.stringify(t));
+  has(r, '💸 *Saída* de *R$ 350,00* (PIX)', 'responde a saída com a forma de pagamento');
+  ok(count(db, 'ai_consume_for') === 1 && seen[0].schema === SCHEMA && /Categorias de saída e cartão: .*Família/.test(seen[0].context), 'frase com dúvida gasta 1 da cota e vai com o contexto da pessoa');
+  // frase simples continua sem IA
+  const n0 = seen.length; await answer(msg('mercado 52,90'), deps);
+  ok(seen.length === n0 && lastAdd(db).category_id === 'c-merc' && count(db, 'ai_consume_for') === 1, 'frase simples ("mercado 52,90"): lança na hora, sem IA e sem gastar cota');
+  await answer(msg('pastel 12'), deps);
+  ok(seen.length === n0 + 1 && lastAdd(db).amount === 12, 'sem pista da categoria ("pastel 12"): a IA decide');
+  // áudio sem o valor: pede o valor; a próxima mensagem completa
+  const pend = []; const appDeps = { ...deps, onPending: (x) => pend.push(x), onUndo: () => pend.push('UNDO') };
+  r = await serve({ phone: 'app', kind: 'audio', audioId: 'p1' }, u, appDeps);
+  has(r, 'faltou o valor', 'áudio sem valor: pede o valor'); has(r, 'Parcela cartão do pai 3/12', '... dizendo o que entendeu');
+  ok(pend[0] === 'Pagamento cartão pai parcela com Pix 3/12' && /Nubank/.test(seen.find((x) => x.vocab)?.vocab || ''), 'guarda a frase para completar; a transcrição levou os nomes da pessoa');
+  r = await serve({ phone: 'app', kind: 'text', text: '350', context: pend[0] }, u, appDeps); t = lastAdd(db);
+  ok(t.amount === 350 && t.type === 'out' && /Mensagem \(escrita\): "Pagamento cartão pai parcela com Pix 3\/12\. 350"/.test(seen.at(-1).context), 'a próxima mensagem ("350") completa a frase e lança');
+  has(await answer(msg('paguei o cartão do meu pai, parcela 3/12'), deps), 'Mande de novo com o valor', 'pelo WhatsApp: pede para mandar de novo com o valor');
+  // vários lançamentos numa frase
+  const before = db.calls.filter(([f]) => f === 'wa_add_tx').length;
+  r = await serve({ phone: 'app', kind: 'audio', audioId: 'p2' }, u, appDeps);
+  ok(db.calls.filter(([f]) => f === 'wa_add_tx').length === before + 2 && (r.match(/📊 Saldo/g) || []).length === 1 && (r.match(/desfazer/g) || []).length === 1, '"50 no mercado e 30 na farmácia": 2 lançamentos, um saldo só no fim');
+  has(r, '💸 *Saída* de *R$ 50,00*', 'primeiro'); has(r, '💸 *Saída* de *R$ 30,00*', 'segundo');
+  // compra parcelada no cartão citado; conta fixa citada pela IA
+  await answer(msg('comprei uma tv de 2400 em 10x no nubank'), deps); t = lastAdd(db);
+  ok(t.type === 'card' && t.card_id === 'k-nu' && t.installments === 10 && t.amount === 2400, 'TV em 10x no Nubank: cartão, parcelas e total');
+  r = await answer(msg('paguei o aluguel no pix'), deps); t = lastAdd(db);
+  ok(t.recurring_id === 'r-alug' && t.amount === 900, 'conta fixa que a IA reconheceu: marcada como paga');
+  has(await answer(msg('paguei o aluguel no pix'), deps), 'já estava', '... e não paga 2x');
+  // pergunta: Conselheiro; desfazer pelo app: o app desfaz
+  r = await serve({ phone: 'app', kind: 'audio', audioId: 'p3' }, u, appDeps);
+  ok(pend.at(-1) === 'UNDO', 'áudio "apaga isso" no app: o próprio app desfaz o último lançamento dele');
+  const asked0 = asked.length; await answer({ phone: PHONE, kind: 'audio', audioId: 'a1', lastHour: 1 }, { ...deps, transcribe: async () => 'quanto eu gastei esse mês?' });
+  ok(asked.length === asked0 + 1, 'pergunta falada: o Conselheiro responde');
+  // IA fora do ar: o lançamento rápido resolve; sem cota: também
+  await answer(msg('quebrada parcela 3/12 40'), deps); t = lastAdd(db);
+  ok(t.amount === 40, 'IA fora do ar: lança pelo lançamento rápido');
+  db.quotaLimit = 0; const nUse = seen.length;
+  await answer(msg('cartao pai pix 77'), deps); t = lastAdd(db);
+  ok(t.amount === 77 && seen.length === nUse, 'sem cota de IA: o lançamento rápido lança mesmo assim');
+}
+
 
 // ---------- porta de entrada (Meta) ----------
 const SECRET = 'segredo-do-app', PHONE_ID = '1112223334';

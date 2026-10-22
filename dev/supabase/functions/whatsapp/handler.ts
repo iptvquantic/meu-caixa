@@ -28,8 +28,13 @@ export type HandlerDeps = {
   log?: (...a: unknown[]) => void;
 };
 // o que o app manda (o mesmo que daria para mandar no WhatsApp) e o que volta
-export type AppInput = { text: string; audio?: { data: string; mime: string }; image?: { data: string; mime: string }; noAI: boolean; hint?: Hint };
-export type AppResult = { reply: string | null; handled: boolean; heard?: string; tx?: Record<string, unknown> | null; removed?: string | null };
+// context = a frase anterior que ficou sem valor (o app manda de volta junto da próxima mensagem)
+export type AppInput = { text: string; audio?: { data: string; mime: string }; image?: { data: string; mime: string }; noAI: boolean; hint?: Hint; context?: string };
+// txs = lançamentos criados (uma frase pode ter vários); pending = faltou o valor; undo = o app desfaz o último dele
+export type AppResult = {
+  reply: string | null; handled: boolean; heard?: string; tx?: Record<string, unknown> | null; txs?: Record<string, unknown>[];
+  removed?: string | null; pending?: string | null; undo?: boolean;
+};
 // to = número que recebeu; waba = conta; mediaId/mime = áudio, foto ou documento
 export type WaMsg = { id: string; from: string; type: string; text?: string; audioId?: string; mediaId?: string; mime?: string; to?: string; waba?: string };
 
@@ -137,7 +142,8 @@ export function appInput(body: any): AppInput | null | 'grande' {
   if (audio === null || image === null || (audio && image)) return null;
   if (audio === 'grande' || image === 'grande') return 'grande';
   if (!text && !audio && !image) return null;
-  return { text, ...(audio ? { audio } : {}), ...(image ? { image } : {}), noAI: body.noAI === true, ...hintOf(body.hint) };
+  const context = typeof body.context === 'string' ? body.context.replace(/\s+/g, ' ').trim().slice(0, 300) : '';
+  return { text, ...(audio ? { audio } : {}), ...(image ? { image } : {}), noAI: body.noAI === true, ...hintOf(body.hint), ...(context ? { context } : {}) };
 }
 const hits = new Map<string, number[]>();
 function limited(uid: string, max = 20) { // até 20 pedidos por minuto por usuário (por instância)
