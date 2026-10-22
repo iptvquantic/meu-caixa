@@ -47,29 +47,28 @@ export const SCHEMA = {
   },
 };
 
-export const SYSTEM = `Você registra o dinheiro de autônomos e pequenos negócios no Brasil (app Meu Caixa). A pessoa falou (áudio transcrito) ou escreveu o que aconteceu. Entenda o sentido da frase inteira e devolva os lançamentos prontos, sem a pessoa precisar consertar nada.
+export const SYSTEM = `Você registra o dinheiro de autônomos e pequenos negócios no Brasil (app Meu Caixa). A pessoa falou (áudio transcrito) ou escreveu o que aconteceu. Entenda a frase inteira e devolva os lançamentos prontos, do jeito que ela mesma lançaria, sem ela precisar consertar nada.
 
-acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse o valor; em "entendido", o que ela quer lançar, ex.: "Uber", "Parcela cartão do pai 3/12"); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar o último); "fatura" (pagou a fatura do PRÓPRIO cartão: não se lança); "nada".
+acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse quanto; em "entendido" escreva a descrição do lançamento, ex.: "Parcela cartão do pai 3/12" — nunca a palavra "valor"); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar ou cancelar o último lançamento); "fatura" (pagou a fatura de um cartão DELA, da lista: não se lança, as compras já contam); "nada".
 
 tipo:
-- entrada: dinheiro que entrou (recebi, caiu, vendi, cliente pagou, me pagou, PIX recebido, salário, comissão, reembolso, estorno).
-- saida: saiu à vista (PIX, débito, dinheiro, boleto, transferência) — inclui pagar conta, parcela de algo já existente (empréstimo, carnê, financiamento) e conta ou cartão de OUTRA pessoa.
-- cartao: compra NOVA no cartão de crédito da própria pessoa (comprei no cartão, passei no crédito, parcelei em 10x).
-- investimento: aplicou/guardou (investi, aporte, poupança, caixinha, CDB, Tesouro, ações, cripto) ou tirou (resgatei: investimento "resgate").
+- entrada: dinheiro que entrou (recebi, caiu, vendi, cliente pagou, me pagou, PIX recebido, salário, reembolso, me devolveu). Frase que começa com "Entrada" é entrada.
+- saida: saiu à vista (PIX, débito, dinheiro, boleto, transferência), conta paga, parcela de algo que já existe (empréstimo, carnê, celular, financiamento) e pagamento do cartão ou de conta de OUTRA pessoa ("cartão da Luana", "cartão do pai"). Frase que começa com "Saída" é saída.
+- cartao: compra NOVA no cartão de crédito DELA (da lista): "comprei no cartão", "no crédito", "parcelei em 10x", "mercado 50 cartão".
+- investimento: aplicou ou guardou (investi, aporte, poupança, caixinha, CDB, Tesouro, ações, cripto); tirou = investimento "resgate".
 
 Regras:
-1. PIX, débito, dinheiro, boleto ou transferência citados = pagamento à vista: NUNCA "cartao", mesmo falando de cartão. "Pagamento do cartão do meu pai com pix" = saida por PIX.
-2. "parcela 3/12", "3 de 12", "terceira parcela" = parcela de algo que já existe: só o valor desta parcela, e "3/12" na descrição. Não é data nem compra parcelada.
-3. Compra nova "em 10x" no crédito: tipo cartao, parcelas 10, valor = TOTAL ("10x de 240" = 2400).
-4. Valor falado vira número: "cinquenta e dois e noventa" = 52.9; "mil e duzentos" = 1200; "trinta conto/pila" = 30; "1k" = 1000. Telefone, data e parcela não são valor.
+1. PIX, débito, dinheiro, boleto ou transferência citados = à vista: nunca "cartao", mesmo falando de cartão.
+2. "parcela 3/12", "3 de 12", "terceira parcela" = parcela de algo que já existe: o valor só desta parcela e "3/12" na descrição; não é data nem compra parcelada.
+3. Compra nova "em 10x" no crédito: tipo cartao, parcelas 10, valor TOTAL ("10x de 240" = 2400).
+4. Valor por extenso vira número: "cinquenta e dois e noventa" = 52.9; "mil e duzentos" = 1200; "trinta conto" = 30. Telefone, data e número da parcela não são valor.
 5. data AAAA-MM-DD: sem data = hoje; "ontem"; "anteontem"; "dia 15" = o dia 15 mais recente já passado; "15/10". Nunca futura.
-6. descricao: 2 a 6 palavras, inicial maiúscula, do jeito da pessoa (cliente, loja, pessoa, o que comprou), sem valor, data e sem "entrada/saída/paguei/recebi". Ex.: "Parcela cartão do pai 3/12", "Josimar", "Mercado Guanabara".
-7. categoria: um nome EXATO da lista da pessoa, do lado certo (saida e cartao: de saída; entrada: de entrada; investimento: de investimento). Os exemplos e os lançamentos parecidos mostram como ELA classifica (cliente que sempre foi de uma categoria continua nela). Supermercado → a categoria de mercado. Nenhuma serve: "".
-8. pagamento: só o que a pessoa disse (pix, débito, dinheiro, boleto, transferência, crédito); não disse: "outro". cartao (só tipo cartao): nome exato do cartão citado; não citou: "". conta_fixa: nome exato da conta fixa paga/recebida (sem valor dito, use o valor dela); senão "".
-9. Áudio pode trocar palavras de som parecido: corrija pelo contexto e pelos nomes da lista ("pics" = pix).
-10. Aba tocada no app (se informada) define o tipo, a não ser que a frase diga outro.
-
-Sem valor nos campos: "" (texto), 1 (parcelas), "nao" (investimento), "outro" (pagamento).`;
+6. descricao: 2 a 6 palavras com inicial maiúscula, do jeito dela (cliente, loja, pessoa, o que foi), sem valor, data, forma de pagamento nem as palavras entrada, saída, paguei, recebi. Ex.: "Parcela cartão do pai 3/12", "Edson Monsores", "Mercado Guanabara".
+7. categoria: nome EXATO da lista dela, do lado do tipo (saida e cartao usam as de saída). Os exemplos e os lançamentos parecidos mostram como ELA classifica: siga o mesmo (cliente de "Venda de IPTV" continua lá). Nenhuma serve: "".
+8. pagamento: só o que ela disse (pix, debito, dinheiro, boleto, transferencia, credito); senão "outro". cartao (só no tipo cartao): nome exato do cartão dela; não citou: "". conta_fixa: nome exato da conta fixa paga ou recebida (sem valor dito, use o valor dela); senão "".
+9. Áudio troca palavras de som parecido: corrija pelo contexto e pelos nomes da lista ("pics" = pix).
+10. Aba tocada no app (se informada) decide o tipo quando a frase não diz.
+Campos sem informação: "" (texto), 1 (parcelas), "nao" (investimento), "outro" (pagamento).`;
 
 const WEEK = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
 const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
@@ -97,7 +96,7 @@ export function contextOf(text: string, data: Data, today: string, o: { hint?: H
   const use: Record<string, number> = {};
   for (const t of recent) if (t.type === 'card' && t.card_id) use[t.card_id] = (use[t.card_id] ?? 0) + 1;
   const top = [...cards].sort((a, b) => (use[b.id] ?? 0) - (use[a.id] ?? 0))[0];
-  lines.push(`Cartões de crédito: ${cards.length ? cards.map((c) => c.name + (c === top && cards.length > 1 ? ' (o mais usado)' : '')).join(', ') : 'nenhum cadastrado'}.`);
+  lines.push(`Cartões de crédito dela: ${cards.length ? cards.map((c) => c.name + (c === top && cards.length > 1 ? ' (o mais usado)' : '')).join(', ') : 'nenhum cadastrado'}.`);
   const bills = billsOfMonth((data.recurring ?? []).filter((r) => r.active !== false), txs, today.slice(0, 7), today);
   if (bills.length) {
     lines.push('Contas fixas do mês: ' + bills.slice(0, 20).map((b) =>
@@ -159,6 +158,10 @@ export function cleanDescription(s: unknown) {
   return d;
 }
 
+// o que a pessoa quis lançar (para pedir o valor): nunca "Valor" ou "Lançamento"
+const GENERIC = /^(o )?(valor|lancamento|lancar|quanto|nada|gasto|despesa|entrada|saida)$/;
+const whatOf = (...c: unknown[]) => c.map(cleanDescription).find((d) => d.length > 1 && !GENERIC.test(norm(d))) ?? '';
+
 // Resposta da IA → plano conferido (null: resposta fora do formato)
 export function toPlan(raw: string, today: string): Plan | null {
   const m = /\{[\s\S]*\}/.exec(raw || '');
@@ -168,7 +171,7 @@ export function toPlan(raw: string, today: string): Plan | null {
   const action = plain(j?.acao);
   if (['consulta', 'desfazer', 'fatura', 'nada'].includes(action)) return { action: action as 'consulta' | 'desfazer' | 'fatura' | 'nada' };
   const list: any[] = Array.isArray(j?.lancamentos) ? j.lancamentos.slice(0, 5) : [];
-  if (action === 'falta_valor') return { action: 'falta_valor', description: cleanDescription(j?.entendido || list[0]?.descricao || '') };
+  if (action === 'falta_valor') return { action: 'falta_valor', description: whatOf(j?.entendido, list[0]?.descricao) };
   if (action !== 'lancar') return null;
   const items: Item[] = [];
   let noValue = '';
@@ -176,7 +179,7 @@ export function toPlan(raw: string, today: string): Plan | null {
     const type = TYPES[plain(l?.tipo)];
     const amount = Math.round(money(l?.valor) * 100) / 100;
     if (!type) continue;
-    if (!(amount > 0 && amount < 1e7)) { noValue ||= cleanDescription(l?.descricao) || ' '; continue; }
+    if (!(amount > 0 && amount < 1e7)) { noValue ||= whatOf(l?.descricao, j?.entendido) || ' '; continue; }
     const pay = plain(l?.pagamento);
     const inv = plain(l?.investimento);
     items.push({

@@ -146,44 +146,55 @@ function parseAmountBR(s) {
   const v = parseFloat(t);
   return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
 }
+// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Luana", "fatura" ou
+// "cartão do pai" = pagamento do cartão de outra pessoa (saída), que não é compra no cartão da própria pessoa
+const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei)( |$)| cartao$/;
+const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;
 function parseQuick(text, today) {
   // pontuação de frase ("…uber ontem.", "uber, ontem") não atrapalha; "3.600" e "52,90" continuam valores
   const raw = String(text || '').replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim();
   if (!raw) return null;
   const n = norm(raw);
   const out = { type: 'out', amount: null, installments: 1, date: today, description: '', investKind: null };
-  // valor: primeiro número "de dinheiro" (ignora "10x" e datas tipo 05/10)
+  // "parcela 3/12" (ou "3/12" com "parcela" na frase): número da parcela de algo que já existe — não é data nem valor
+  const nm = /(?:^|[^\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/.exec(raw);
+  const inst = nm && /(^| )(parcela|parcelas|prestacao|prestacoes|carne)( |$)/.test(n) && +nm[1] >= 1 && +nm[1] <= +nm[2] && +nm[2] <= 60 ? `${+nm[1]}/${+nm[2]}` : '';
+  // valor: primeiro número "de dinheiro" (ignora "10x", datas tipo 05/10 e a parcela 3/12)
   const amtRx = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?(?:\s?k\b)?)(?![\d/x])/i;
   const parcRx = /(\d{1,2})\s*x\b/i;
   const pm = parcRx.exec(n);
   if (pm) { out.installments = Math.min(48, Math.max(1, +pm[1])); out.type = 'card'; }
-  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
+  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ');
   const am = amtRx.exec(cleanForAmt);
   if (am) out.amount = parseAmountBR(am[1].replace(/\s+/g, ''));
   // tipo
   if (/(^| )(recebi|recebido|entrada|ganhei|vendi|venda|faturei|pix recebido|caiu|salario|pagamento recebido)( |$)/.test(n)) out.type = 'in';
   if (/(^| )(apliquei|aporte|investi|investimento|guardei)( |$)/.test(n)) { out.type = 'invest'; out.investKind = 'aporte'; }
   if (/(^| )(resgatei|resgate|saquei do investimento)( |$)/.test(n)) { out.type = 'invest'; out.investKind = 'resgate'; }
-  if (/(^| )(cartao|credito|no credito|parcelado)( |$)/.test(n) && out.type === 'out') out.type = 'card';
+  const cardPaid = CARD_CUE.test(n) && !NOT_MY_CARD.test(n);
+  if (cardPaid && out.type === 'out') out.type = 'card';
   // data
   const d = new Date(today + 'T12:00:00');
   if (/(^| )anteontem( |$)/.test(n)) d.setDate(d.getDate() - 2);
   else if (/(^| )ontem( |$)/.test(n)) d.setDate(d.getDate() - 1);
-  const dm = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(raw);
+  const dm = inst ? null : /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(raw);
   if (dm) {
     const y = dm[3] ? (+dm[3] < 100 ? 2000 + +dm[3] : +dm[3]) : d.getFullYear();
     const cand = new Date(y, +dm[2] - 1, +dm[1], 12);
     if (cand.getMonth() === +dm[2] - 1) d.setTime(cand.getTime());
   }
   out.date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  // descrição: o texto sem valor/datas/palavras de comando
+  // descrição: o texto sem valor/datas/palavras de comando ("Entrada"/"Saída" no começo também saem); a parcela 3/12 fica
   let desc = raw
     .replace(am ? am[0].trim() : '', ' ')
     .replace(parcRx, ' ')
-    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ')
-    .replace(/\b(r\$|reais|real|ontem|anteontem|hoje|no cart[aã]o|cart[aã]o|cr[eé]dito|no cr[eé]dito|parcelado|em|de|no|na|com|gastei|paguei|comprei|recebi|recebido|ganhei|apliquei|investi|resgatei|aporte|resgate|pix)\b/gi, ' ')
+    .replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ')
+    .replace(cardPaid ? /\b((no|pelo|com o|com|no meu|pelo meu|com meu)\s+)?(cart[aã]o|cr[eé]dito)( de cr[eé]dito)?\b/gi : /\bcr[eé]dito\b/gi, ' ')
+    .replace(/\b(r\$|reais|real|ontem|anteontem|hoje|parcelado|em|de|no|na|com|gastei|paguei|comprei|recebi|recebido|ganhei|apliquei|investi|resgatei|aporte|resgate|pix)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim()
+    .replace(/^(entrada|sa[ií]da|gasto|despesa|receita)\s+/i, '')
     .replace(/^(do|da|dos|das|pro|pra|pelo|pela)\s+/i, '');
+  if (inst) desc = (desc ? desc + ' ' : '') + inst;
   out.description = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
   return out.amount ? out : null;
 }
@@ -219,7 +230,7 @@ const familyOf = (icon, kind) => { const name = String(icon || '').replace(/^i:/
 const TYPE_RX = {
   invest: /(^| )(apliquei|aplicacao|aporte|aportei|investi|guardei|resgatei|resgate)( |$)/,
   in: /(^| )(recebi|recebido|recebida|recebimento|ganhei|vendi|venda|vendas|faturei|caiu|entrou|pix recebido|pagamento recebido)( |$)/,
-  card: /(^| )(cartao|credito|parcelado|parcelei|\d{1,2} ?x)( |$)/,
+  card: /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei|\d{1,2} ?x)( |$)| cartao$/,
   out: /(^| )(gastei|paguei|comprei|gasto|despesa|saida|pago)( |$)/,
   cash: /(^| )(pix|debito|dinheiro|especie|boleto|a vista)( |$)/,
   product: /(^| )(cdb|lci|lca|tesouro|selic|ipca|poupanca|acoes|fii|fiis|etf|bitcoin|btc|cripto|criptomoeda|previdencia|pgbl|vgbl)( |$)/
@@ -227,12 +238,12 @@ const TYPE_RX = {
 const typeText = s => norm(s).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 function explicitType(text) {
   const n = typeText(text);
-  for (const k of ['invest', 'in', 'card', 'out']) if (TYPE_RX[k].test(n)) return k;
+  for (const k of ['invest', 'in', 'card', 'out']) if (TYPE_RX[k].test(n) && !(k === 'card' && NOT_MY_CARD.test(n))) return k;
   return null;
 }
 const TYPE_STOP = new Set(('de da do das dos para pra pro com sem por pelo pela uma um uns umas no na nos nas em que meu minha meus minhas seu sua seus suas '
   + 'reais real pix ted doc valor mes dia hoje ontem anteontem cartao credito debito dinheiro especie parcelado vista boleto '
-  + 'gastei paguei comprei recebi recebido recebida ganhei vendi apliquei investi resgatei aporte resgate gasto pago').split(' '));
+  + 'gastei paguei comprei recebi recebido recebida ganhei vendi apliquei investi resgatei aporte resgate gasto pago entrada saida despesa receita').split(' '));
 // palavras que ajudam a reconhecer o lançamento ("Venda de IPTV" → venda, iptv); plural vira singular
 const typeWords = s => typeText(s).split(' ').filter(w => w.length >= 3 && !/^\d/.test(w) && !TYPE_STOP.has(w)).map(w => w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w);
 // palavras dos nomes das categorias que todo mundo começa tendo: valem menos que um nome criado pela pessoa

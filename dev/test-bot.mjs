@@ -511,13 +511,13 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   data.transactions.push({ id: 'h1', type: 'in', amount: 30, date: '2026-10-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null },
     { id: 'h2', type: 'in', amount: 30, date: '2026-09-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null });
   const cx = contextOf('josimar trinta', data, TODAY, { hint: { type: 'in', sure: true }, fromAudio: true });
-  ok(/Hoje: sexta-feira, 09\/10\/2026 \(2026-10-09\)/.test(cx) && /Venda de IPTV \(ex\.: Josimar\)/.test(cx) && /Cartões de crédito: Nubank/.test(cx), 'contexto: data, categorias com exemplos da pessoa e cartões');
+  ok(/Hoje: sexta-feira, 09\/10\/2026 \(2026-10-09\)/.test(cx) && /Venda de IPTV \(ex\.: Josimar\)/.test(cx) && /Cartões de crédito dela: Nubank/.test(cx), 'contexto: data, categorias com exemplos da pessoa e cartões');
   ok(/Contas fixas do mês: Aluguel \(saída, R\$\s?900,00, dia 5, a pagar\)/.test(cx) && /Lançamentos parecidos.*\n- 05\/10 entrada R\$\s?30,00 "Josimar" → Venda de IPTV/.test(cx), 'contexto: contas fixas e lançamentos parecidos');
   ok(/tocou na aba: Entrada/.test(cx) && /Mensagem \(áudio transcrito\): "josimar trinta"/.test(cx), 'contexto: aba tocada e a mensagem');
   ok(!/tocou na aba/.test(contextOf('x', data, TODAY, { hint: { type: 'in' } })), 'aba só lembrada não vai para a IA');
   const voc = vocabOf(data);
   ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 640, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
-  ok(/"Pagamento do cartão do meu pai com pix" = saida por PIX/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor falado vira número/.test(UNDERSTAND) && UNDERSTAND.length < 3200, 'instruções curtas cobrem PIX x cartão, parcela 3/12 e valor falado');
+  ok(/nunca "cartao", mesmo falando de cartão/.test(UNDERSTAND) && /cartão da Luana/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor por extenso vira número/.test(UNDERSTAND) && /começa com "Entrada"/.test(UNDERSTAND) && UNDERSTAND.length < 3400, 'instruções curtas cobrem PIX x cartão, cartão de outra pessoa, parcela 3/12, valor falado e "Entrada/Saída"');
 }
 
 // ---------- entender pelo robô: frase com dúvida e áudio passam pela IA ----------

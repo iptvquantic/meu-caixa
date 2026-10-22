@@ -63,6 +63,15 @@ eq(q('Uber, ontem, 23'), { type: 'out', amount: 23, inst: 1, date: '2026-10-07',
 eq(q('notebook 3.600 12x.'), { type: 'card', amount: 3600, inst: 12, date: T, desc: 'Notebook', kind: null }, 'milhar com ponto + ponto final');
 eq(q('mercado 52,90!'), { type: 'out', amount: 52.9, inst: 1, date: T, desc: 'Mercado', kind: null }, 'centavos + exclamação');
 eq(q('resgatei 200 do tesouro'), { type: 'invest', amount: 200, inst: 1, date: T, desc: 'Tesouro', kind: 'resgate' }, 'preposição no começo da descrição sai');
+// parcela de algo que já existe ("3/12") não é data; cartão de outra pessoa não é compra no cartão; "Entrada"/"Saída" saem da descrição
+eq(q('pagamento cartao pai parcela com pix 3/12 350'), { type: 'out', amount: 350, inst: 1, date: T, desc: 'Pagamento cartao pai parcela 3/12', kind: null }, 'parcela 3/12 do cartão do pai no PIX: saída, hoje, 3/12 na descrição');
+eq(q('pagamento cartao pai parcela com pix 3/12'), null, '... sem valor: não lança (3/12 não é valor)');
+eq(q('cartao luana 300'), { type: 'out', amount: 300, inst: 1, date: T, desc: 'Cartao luana', kind: null }, 'cartão da Luana: saída (pagamento do cartão dela)');
+eq(q('mercado 50 cartão'), { type: 'card', amount: 50, inst: 1, date: T, desc: 'Mercado', kind: null }, '"cartão" no fim: pagou no cartão');
+eq(q('paguei a fatura do cartão 1500').type, 'out', 'fatura não é compra no cartão');
+eq(q('Entrada Edson Monsores 30'), { type: 'in', amount: 30, inst: 1, date: T, desc: 'Edson Monsores', kind: null }, '"Entrada" no começo: entrada, e sai da descrição');
+eq(q('Saída terceira parcela celular pai 194'), { type: 'out', amount: 194, inst: 1, date: T, desc: 'Terceira parcela celular pai', kind: null }, '"Saída" no começo sai da descrição');
+eq(q('farmácia 37,50 05/10').date, '2026-10-05', 'sem "parcela", 05/10 continua sendo data');
 
 // tipo automático: entrada, saída, cartão ou investimento (o mesmo código roda no robô)
 eq(ctx.explicitType('recebi 300 pix'), 'in', 'recebi → entrada'); eq(ctx.explicitType('Paguei a luz'), 'out', 'paguei → saída');

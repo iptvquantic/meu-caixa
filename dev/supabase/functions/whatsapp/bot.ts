@@ -250,13 +250,13 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
   return noAI ? null : askAI(text, u, d, today, counted);
 }
 
-// Frase que o lançamento rápido resolve sem dúvida: um valor só, sem parcela/fatura/pessoa da família, sem "cartão"
-// junto de "pix", e com o tipo e a categoria já conhecidos (pelas palavras, pelo histórico ou pela aba tocada).
+// Frase que o lançamento rápido resolve sem dúvida: um valor só, sem parcela/fatura/pessoa da família, sem falar de
+// cartão, e com o tipo e a categoria já conhecidos (pelas palavras, pelo histórico ou pela aba tocada).
 const AMBIGUOUS = /(^| )(parcela|parcelas|prestacao|prestacoes|carne|financiamento|consorcio|fatura|emprestimo|emprestei|emprestou|emprestado|devolvi|devolveu|devolucao|estorno|reembolso|troco|metade|dividi|dividido|dividimos|cada|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|vo|avo)( |$)|\d+ ?\/ ?\d+|\d+ de \d+/;
 export function confident(q: Quick, text: string, data: Data, hint?: Hint) {
   const n = norm(text);
   if (AMBIGUOUS.test(n)) return false;
-  if (/(^| )(cartao|credito)( |$)/.test(n) && /(^| )(pix|debito|dinheiro|boleto|especie)( |$)/.test(n)) return false;
+  if (/(^| )(cartao|credito)( |$)/.test(n)) return false; // "no cartão" x "cartão da Luana" x "cartão Nubank": a IA decide com a lista de cartões
   if ((n.replace(/(^| )\d{1,2} ?x( |$)/g, ' ').match(/\d+(?:[.,]\d+)*/g) ?? []).length > 1) return false;
   const g = guessType(q, text, data, hint);
   if (g.by === 'padrao') return false;
