@@ -1,5 +1,24 @@
 # Histórico de versões
 
+## 2.3.3 — 22/10/2026
+- Voz que funciona de primeira: o áudio gravado vira WAV de 16 kHz no próprio celular (o formato do reconhecimento
+  de voz), sem o silêncio do começo e do fim e com o volume ajustado. Antes, o primeiro áudio às vezes era
+  recusado pelo serviço de transcrição ("erro 413") e o app pedia para repetir. Se mesmo assim falhar, a mensagem
+  diz o que fazer em vez de "tente de novo".
+- Transcrição mais precisa: modelo completo de reconhecimento de voz (o rápido fica de reserva), com o vocabulário
+  da pessoa (nomes de clientes, lojas, cartões e categorias criadas por ela); frases que o reconhecimento inventa
+  no silêncio ("Obrigado.", "Legendas…") são descartadas.
+- A IA entende a frase inteira, com o jeito de cada pessoa (categorias com exemplos dela, cartões, contas fixas e
+  lançamentos parecidos): "pagamento cartão pai parcela com pix 3/12 350" vira saída por PIX com "3/12" na
+  descrição (antes virava compra no cartão), "cartão da Luana 300" é saída, "comprei em 10x no cartão" é compra
+  parcelada, "Entrada Edson 30" é entrada sem "Entrada" na descrição, valor por extenso ("trezentos e
+  cinquenta") vira número, e uma frase com dois valores vira dois lançamentos.
+- Faltou o valor ("Uber", "parcela do pai"): o app pergunta "Quanto foi?" e a resposta completa o lançamento.
+- Frase simples e clara ("mercado 52,90", "josimar 30") continua lançando na hora, sem gastar a IA; IA ocupada ou
+  fora do ar: o lançamento rápido resolve o que der.
+- "Apaga isso" falado desfaz o último lançamento do assistente; o aviso do áudio mostra o que foi entendido.
+- Microfone com redução de ruído, eco e ganho automático.
+
 ## 2.3.2 — 15/10/2026
 - "Lançar com IA" em destaque: cartão dourado no Início (logo abaixo do saldo) e no topo do Novo lançamento,
   com botões grandes para Tirar foto, Escolher foto, Falar e Escrever. Pode ser desligado em Ajustes →

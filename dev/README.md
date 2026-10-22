@@ -21,7 +21,7 @@ Postgres 16 e cria o usuário sozinho.
 | `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
 | `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
 | `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
-| `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
+| `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), entender a frase com a IA (plano conferido, PIX x cartão, parcela 3/12, faltou o valor, vários lançamentos, IA fora do ar), transcrição (modelos, vocabulário, silêncio), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
 | `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta, a foto do comprovante e o assistente do app (texto, áudio e foto gravando no banco). IA: chave publicável, login, limite, plano e leitura de comprovante. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
 | `npm run shots` | Prints em 360/390/1280 px nos 3 temas em `dev/shots/` e aviso se algo vaza na horizontal |
 | `npm run demo` | Cópia do app em modo demonstração (dados de exemplo, sem nuvem), usada na prévia |
@@ -112,7 +112,22 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
   (mesmas regras de lançamento, conta fixa, consultas e limite diário de IA). Devolve a resposta e o lançamento
   criado; o app mostra na hora com Desfazer (que apaga pelo próprio app, com RLS).
 - Na página Assistente, pergunta livre vai ao Conselheiro (função `ai`, com o histórico da conversa).
-- Áudio: Whisper (Groq). Foto: modelo de visão da Groq (`qwen/qwen3.8-27b`). Nada é guardado além do lançamento.
+- Áudio: o app converte a gravação para WAV 16 kHz mono (sem o silêncio das pontas, volume ajustado; `toWav` no
+  `app.html`) antes de mandar — o WebM do Chrome do celular era recusado pela Groq com 413 de vez em quando. Na
+  função: `whisper-large-v3` (reserva `whisper-large-v3-turbo`), `verbose_json` para descartar trechos de silêncio e
+  frases inventadas, e o vocabulário da pessoa no `prompt` (`vocabOf`: nomes mais lançados, cartões, categorias
+  criadas por ela; até ~440 caracteres, a Groq aceita 224 tokens). Foto: modelo de visão da Groq (`qwen/qwen3.8-27b`).
+  Nada é guardado além do lançamento.
+- Entender a frase (`whatsapp/understand.ts`): áudio e frase com dúvida (cartão, parcela, fatura, pessoa da família,
+  mais de um valor, sem categoria conhecida) vão à IA (`openai/gpt-oss-120b`, reserva `gpt-oss-20b`, esforço baixo,
+  saída estrita `json_schema`) com o contexto da pessoa: categorias com exemplos dela, cartões, contas fixas do mês,
+  lançamentos parecidos e a aba tocada. A resposta (lançar 1 a 5, faltou o valor, consulta, desfazer, fatura) é
+  conferida (`toPlan`) antes de gravar. Frase simples e clara vai pelo lançamento rápido, sem IA. Faltou o valor: a
+  função devolve `pending` e o app manda a frase de volta em `context` junto da resposta seguinte.
+- Limites da Groq no plano grátis (a chave atual): 8 mil tokens por minuto e 200 mil por dia em cada modelo de
+  texto; cada frase entendida usa ~1,8 mil. Para vender com muitos clientes, passar a chave para o plano pago
+  (Developer) da Groq. Avaliação com o modelo de verdade: 38 frases reais (as do dono) acertadas com esforço baixo
+  em 22/10/2026.
 
 ## Publicar o app
 

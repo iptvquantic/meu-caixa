@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-XYIKViObcNASLTpVMyamw+/Af5IpB1eQF8TltstDU2U=' 'sha256-gqNnUtnE6DaNQESwIWmdozs6kawmp/0zjhNG28QERoQ=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-AZMupJhtuTQqkruHE/mQujAKwap3USZdEo409rnfnGQ=' 'sha256-kXjfb/Y3fw5eLc91vJejlM5Vccn1vbNXeiFiErItn1c=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -557,7 +557,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.3.2',
+  version: '2.3.3',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -1471,9 +1471,11 @@ const Demo = {
       const tx = this._ins('txs', { type: 'out', amount: 52.9, date: today, description: 'Drogasil', category_id: c ? c.id : null, card_id: null, installments: 1, invest_kind: null });
       return { handled: true, tx, reply: `🧾 Li o comprovante (PIX):\n💸 *Saída* de *R$ 52,90*\n🏷️ ${c ? c.name : 'Sem categoria'} · 📅 hoje · Drogasil\n_Demonstração: no app de verdade a IA lê a sua foto._` };
     }
-    const text = heard || b.text || '', n = norm(text);
+    // faltou o valor na frase anterior: ela vai junto ("parcela do pai" + "350")
+    const said = heard || b.text || '', text = b.context ? `${b.context} ${said}` : said, n = norm(said);
     if (/^(saldo|resumo|como estou)$/.test(n)) { const T = totals(monthKey(new Date())); return { handled: true, heard, reply: `📊 *${monthLabel(monthKey(new Date()))}*\n💰 Entradas: ${money(T.in)}\n💸 Saídas: ${money(T.out)}\n💳 Cartão: ${money(T.card)}\n*Saldo: ${money(T.saldo)}*` }; }
     const q = parseQuick(text, today);
+    if (!q && /[a-z]{3}/i.test(said) && !/\?\s*$/.test(said) && !b.context) return { handled: true, heard, pending: said, reply: `Entendi *${said.replace(/[*_]/g, '').slice(0, 60)}*, mas faltou o valor. Quanto foi? Fale ou escreva só o valor (ex.: _350_).` };
     if (!q) return b.noAI ? { handled: false, reply: null, heard } : { handled: true, heard, reply: 'Na demonstração eu lanço frases como *mercado 52,90* e respondo *saldo*.' };
     // o mesmo tipo automático do robô: a frase, o histórico, as categorias e a aba
     const g = guessType(q, text, { txs: this.db.txs, cats: this.db.cats, recs: this.db.recs, cards: this.db.cards }, b.hint);
@@ -2015,7 +2017,7 @@ function openSheet(html, labelId, onClose) {
 }
 function closeSheet() {
   const top = SHEETS.pop(); if (!top) return;
-  if (top.bg.querySelector('#as-row')) { if (REC.mr && REC.where === 'tx') recStop(true); AS.busy = ''; AS.draft = ''; }
+  if (top.bg.querySelector('#as-row')) { if (REC.mr && REC.where === 'tx') recStop(true); AS.busy = ''; AS.draft = ''; AS.pending = ''; }
   if (top.onClose) try { top.onClose(); } catch (e) { /* fechar nunca falha */ }
   top.bg.remove();
   if (!SHEETS.length) document.body.style.overflow = '';
@@ -2158,7 +2160,7 @@ function txQuickFill(text) {
 // No Início e no Novo lançamento lança na hora com Desfazer; no Assistente vira conversa.
 // Foto e áudio só passam pela memória do aparelho e pela IA: nada é salvo além do lançamento.
 const AS_UNDO = /^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/;
-const AS = { busy: '', draft: '', last: null, focus: false };
+const AS = { busy: '', draft: '', last: null, focus: false, pending: '' };
 const REC = { mr: null, chunks: [], t0: 0, tick: null, cancel: false, where: '' };
 // *negrito* e _itálico_ do WhatsApp → HTML (o texto é escapado antes)
 function waLite(s) {
@@ -2190,7 +2192,7 @@ async function recStart(where, onDone) {
   if (REC.mr) return;
   if (!recSupported()) { toast('Este navegador não grava áudio. Escreva a mensagem.'); return; }
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
   catch { toast('Libere o microfone para o Meu Caixa nas permissões do navegador.'); return; }
   const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x)) || '';
   let mr;
@@ -2212,7 +2214,39 @@ async function recStart(where, onDone) {
   recUI();
 }
 function recStop(cancel) { if (REC.mr && REC.mr.state !== 'inactive') { REC.cancel = !!cancel; REC.mr.stop(); } }
-const audioOf = async blob => ({ mime: (blob.type || 'audio/webm').split(';')[0], data: await blobB64(blob) });
+// Áudio gravado → WAV 16 kHz mono (o formato do reconhecimento de voz), sem o silêncio do começo e do fim e com o
+// volume ajustado: a transcrição acerta mais e o arquivo é sempre aceito (o WebM do celular às vezes era recusado).
+// Sem fala nenhuma: null (nem manda). Se o aparelho não converter, vai o áudio original.
+async function toWav(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext, OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!AC || !OAC) return blob;
+  const ac = new AC();
+  let buf;
+  try { buf = await ac.decodeAudioData(await blob.arrayBuffer()); } finally { try { ac.close(); } catch { } }
+  const rate = 16000, off = new OAC(1, Math.max(1, Math.ceil(buf.duration * rate)), rate);
+  const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < pcm.length; i++) { const v = Math.abs(pcm[i]); if (v > peak) peak = v; }
+  if (peak < 0.004) return null;
+  const thr = Math.max(0.008, peak * 0.05), pad = Math.round(rate * 0.35);
+  let a = 0, b = pcm.length - 1;
+  while (a < b && Math.abs(pcm[a]) < thr) a++;
+  while (b > a && Math.abs(pcm[b]) < thr) b--;
+  a = Math.max(0, a - pad); b = Math.min(pcm.length - 1, b + pad);
+  const gain = Math.min(10, 0.92 / peak), n = b - a + 1, dv = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); str(36, 'data'); dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, pcm[a + i] * gain)); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
+  return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+async function audioOf(blob) {
+  let wav = blob;
+  try { wav = await toWav(blob); } catch { wav = blob; }
+  if (!wav) { toast('Não ouvi nada no áudio. Fale perto do microfone e tente de novo.'); return null; }
+  return { mime: (wav.type || 'audio/webm').split(';')[0], data: await blobB64(wav) };
+}
 const recHTML = (hint) => `<div class="rec" role="status"><i class="dot" aria-hidden="true"></i><span class="rec-t">${recTime()}</span><small>${hint}</small></div><button class="iconbtn" data-act="recCancel" aria-label="Cancelar gravação" title="Cancelar">${ico('x')}</button><button class="iconbtn as-go" data-act="recSend" aria-label="Enviar áudio" title="Enviar">${ico('send')}</button>`;
 const busyHTML = label => `<div class="as-busy" role="status"><i class="spin" aria-hidden="true"></i><span>${esc(label)}</span></div>`;
 // ---------- foto: câmera agora (celular: a câmera do aparelho; computador: a webcam) ou uma foto/print salvo ----------
@@ -2267,26 +2301,38 @@ function assistErr(e) {
   if (e.status === 429 || e.status === 413 || e.status === 400) return e.message;
   return errMsg(e);
 }
+// o que o robô lançou (uma frase pode ter vários lançamentos) entra na tela na hora
 function assistApply(r) {
-  let t = null;
-  if (r.tx && r.tx.id) { t = normTx(r.tx); if (!S.txs.some(x => x.id === t.id)) S.txs.push(t); AS.last = { id: t.id, at: Date.now() }; }
+  const list = (Array.isArray(r.txs) && r.txs.length ? r.txs : r.tx ? [r.tx] : []).filter(x => x && x.id).map(normTx);
+  for (const t of list) if (!S.txs.some(x => x.id === t.id)) S.txs.push(t);
+  if (list.length) AS.last = { ids: list.map(t => t.id), id: list[list.length - 1].id, at: Date.now() };
   if (r.removed) S.txs = S.txs.filter(x => x.id !== r.removed);
-  if (t || r.removed) indexData();
-  return t;
+  if (list.length || r.removed) indexData();
+  return list;
 }
 const txLabel = t => `${{ in: 'Entrada', out: 'Saída', card: 'Cartão', invest: 'Investimento' }[t.type] || 'Lançamento'} de ${money(t.amount)}${S.catMap[t.category_id] ? ' · ' + S.catMap[t.category_id].name : ''}`;
-async function asUndo(id) {
+const txsLabel = list => list.length === 1 ? txLabel(list[0]) : `${list.length} lançamentos: ${list.map(t => `${{ in: 'entrada', out: 'saída', card: 'cartão', invest: 'investimento' }[t.type] || ''} ${money(t.amount)}`).join(' + ')}`;
+// desfaz o que o assistente acabou de lançar (todos os lançamentos da mesma frase)
+async function asUndoMany(ids) {
+  let ok = true;
+  for (const id of ids) ok = (await asUndo(id, true)) && ok;
+  if (ok) { render(); toast(ids.length > 1 ? `${ids.length} lançamentos desfeitos` : 'Lançamento desfeito'); }
+  return ok;
+}
+async function asUndo(id, quiet) {
   try {
     await api.deleteTx(id);
     S.txs = S.txs.filter(x => x.id !== id); indexData();
-    for (const m of S.chat) if (m.txId === id) m.undone = true;
-    if (AS.last && AS.last.id === id) AS.last = null;
-    render(); toast('Lançamento desfeito');
+    for (const m of S.chat) if (m.txId === id || (m.txIds || []).includes(id)) m.undone = true;
+    if (AS.last && (AS.last.id === id || (AS.last.ids || []).includes(id))) AS.last = null;
+    if (!quiet) { render(); toast('Lançamento desfeito'); }
     return true;
   } catch (e) { toast(errMsg(e)); return false; }
 }
+// "desfazer" (escrito, falado ou entendido pelo robô): o último lançamento do assistente neste aparelho, até 30 min
+const recentUndo = () => AS.last && Date.now() - AS.last.at < 30 * 60e3 ? (AS.last.ids || [AS.last.id]) : null;
 // "desfazer" escrito ou falado: o último lançamento feito pelo assistente neste aparelho (até 30 min)
-const localUndoTarget = text => AS_UNDO.test(norm(String(text || '')).replace(/[!.?…]+$/g, '').trim()) && AS.last && Date.now() - AS.last.at < 30 * 60e3 ? AS.last.id : null;
+const localUndoTarget = text => AS_UNDO.test(norm(String(text || '')).replace(/[!.?…]+$/g, '').trim()) && recentUndo() ? AS.last.id : null;
 // a aba do formulário ajuda a decidir o tipo (tocada pela pessoa vale mais que a lembrada)
 const asHint = () => TX ? { type: TX.type, sure: !!(TX.touchedType || TX.touchedPay), pay: !!TX.touchedPay, ...(TX.type === 'card' && TX.card_id ? { card: TX.card_id } : {}) } : undefined;
 // ---------- cartão "Lançar com IA" (Novo lançamento e Início) ----------
@@ -2300,34 +2346,45 @@ function asRowHTML() {
       <button class="ai-btn" data-act="asPhoto">${ico('image')}<span>Escolher foto</span></button>
       <button class="ai-btn" data-act="asMic">${ico('mic')}<span>Falar</span></button>
     </div>
-    <div class="ai-write"><label class="sr" for="as-text">Escrever o lançamento</label><input id="as-text" placeholder="Ou escreva: mercado 52,90" autocomplete="off" enterkeyhint="send" maxlength="300" value="${esc(AS.draft)}"${AS.focus ? ' data-autofocus' : ''}><span id="as-act">${asActHTML()}</span></div>`;
+    <div class="ai-write"><label class="sr" for="as-text">${AS.pending ? 'Quanto foi' : 'Escrever o lançamento'}</label><input id="as-text" placeholder="${AS.pending ? 'Quanto foi? Ex.: 350' : 'Ou escreva: mercado 52,90'}" autocomplete="off" enterkeyhint="send" maxlength="300" value="${esc(AS.draft)}"${AS.focus || AS.pending ? ' data-autofocus' : ''}${AS.pending ? ' inputmode="decimal"' : ''}><span id="as-act">${asActHTML()}</span></div>`;
 }
 const asActHTML = () => `<button class="iconbtn as-go" data-act="asSend" aria-label="Lançar o que escrevi" title="Lançar"${AS.draft.trim() ? '' : ' data-empty'}>${ico('send')}</button>`;
 function asRow() { const el = $('#as-row'); if (el) el.innerHTML = asRowHTML(); }
 async function asRun(input, label) {
   if (AS.busy || !$('#as-row')) return;
-  const undoId = input.text && !input.image ? localUndoTarget(input.text) : null;
-  if (undoId) { AS.draft = ''; asRow(); if (await asUndo(undoId)) closeSheet(); return; }
+  if (input.text && !input.image && localUndoTarget(input.text)) { AS.draft = ''; asRow(); if (await asUndoMany(recentUndo())) closeSheet(); return; }
   AS.busy = label; asRow(); const out = $('#as-out'); if (out) out.innerHTML = '';
   try {
-    const r = await api.assist({ ...input, noAI: false, hint: asHint() });
+    // faltou o valor na frase anterior: ela vai junto ("parcela do pai 3/12" + "350")
+    const r = await api.assist({ ...input, noAI: false, hint: asHint(), ...(AS.pending ? { context: AS.pending } : {}) });
     const open = !!$('#as-row'); // a pessoa pode ter fechado a folha enquanto esperava
-    AS.busy = ''; AS.draft = '';
+    AS.busy = ''; AS.draft = ''; AS.pending = r.pending || '';
     store.set('mc_ai_used', true);
-    const t = assistApply(r);
-    if (t) {
+    if (r.undo) {
+      const ids = recentUndo();
+      if (ids && await asUndoMany(ids)) { if (open) closeSheet(); return; }
+      if (open) asRow();
+      toast('Nada recente para desfazer por aqui. Para outros lançamentos, use o Extrato.');
+      return;
+    }
+    const list = assistApply(r);
+    if (list.length) {
       if (open) { closeSheet(); TX = null; }
+      const t = list[list.length - 1];
       if (!t.date.startsWith(S.month)) S.month = t.date.slice(0, 7);
-      render(); toast(txLabel(t) + (input.image ? ' · foto descartada' : ''), { label: 'Desfazer', fn: () => asUndo(t.id) });
+      // no áudio, o aviso mostra o que foi entendido (dá para conferir de relance, sem abrir nada)
+      const heard = r.heard ? `🎙️ “${r.heard.length > 70 ? r.heard.slice(0, 70) + '…' : r.heard}” → ` : '';
+      render(); toast(heard + txsLabel(list) + (input.image ? ' · foto descartada' : ''), { label: 'Desfazer', fn: () => asUndoMany(list.map(x => x.id)) });
       return;
     }
     if (r.removed) render();
     if (!open) return;
     asRow();
     const o = $('#as-out'); if (o) o.innerHTML = `${r.heard ? `<p class="c-muted">🎙️ “${esc(r.heard)}”</p>` : ''}${waLite(r.reply || 'Não entendi. Tente assim: mercado 52,90')}`;
+    if (AS.pending) $('#as-text')?.focus({ preventScroll: true });
   } catch (e) {
     AS.busy = ''; asRow();
-    if (input.text && !input.image && (S.offline || e.status === undefined) && txQuickFill(input.text)) { toast('Sem internet: preenchi o formulário. Confira e toque em Salvar.'); return; }
+    if (input.text && !input.image && (S.offline || e.status === undefined) && txQuickFill((AS.pending ? AS.pending + ' ' : '') + input.text)) { AS.pending = ''; toast('Sem internet: preenchi o formulário. Confira e toque em Salvar.'); return; }
     toast(assistErr(e));
   }
 }
@@ -2610,7 +2667,7 @@ function mdLite(s) {
   return html + (inList ? '</ul>' : '');
 }
 // resposta do robô (formato do WhatsApp) com Desfazer quando lançou algo
-const bubble = m => `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${m.txId ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-id="${esc(m.txId)}">${ico('undo-2')}Desfazer</button>`}</div>` : ''}</div>`;
+const bubble = m => `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${(m.txIds || (m.txId ? [m.txId] : [])).length ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-ids="${esc((m.txIds || [m.txId]).join(','))}">${ico('undo-2')}Desfazer</button>`}</div>` : ''}</div>`;
 function aiRowHTML() {
   if (REC.mr && REC.where === 'ai') return recHTML('Gravando… fale o lançamento ou a pergunta');
   return `<label class="sr" for="ai-in">Mensagem para o assistente</label><textarea class="input" id="ai-in" rows="1" placeholder="Escreva ou fale: mercado 52,90" data-input="aiin">${esc(S.aiDraft || '')}</textarea>`
@@ -2667,18 +2724,30 @@ async function advisorReply(text) {
     return 'A IA não respondeu agora. Resumo calculado aqui mesmo:\n' + localAnswer(text);
   }
 }
+// resposta do robô na conversa: lançamentos (com Desfazer), "desfazer" e o pedido do valor que faltou
+async function robotMsg(r) {
+  S.aiPending = r.pending || '';
+  if (r.undo) {
+    const ids = recentUndo();
+    return { role: 'assistant', content: ids && await asUndoMany(ids) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não há lançamento recente feito por aqui para desfazer. Para outros, use o Extrato.', wa: true };
+  }
+  const list = assistApply(r);
+  if (list.length || r.removed) renderShell();
+  return { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txIds: list.map(t => t.id) };
+}
 async function sendAI(text) {
   text = String(text || '').trim(); if (!text || S.aiBusy) return;
   S.aiBusy = true; S.chat.push({ role: 'user', content: text }); chatShow(true);
-  const undoId = localUndoTarget(text);
   let msg;
-  if (undoId) msg = { role: 'assistant', content: (await asUndo(undoId)) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
+  if (localUndoTarget(text)) msg = { role: 'assistant', content: (await asUndoMany(recentUndo())) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
   else {
     // 1º o robô: lançamento, conta fixa, saldo, fatura, contas, metas (pergunta livre volta sem resposta)
     let r = null;
-    if (!/\?\s*$/.test(text)) { try { r = await api.assist({ text, noAI: true }); } catch (e) { if (e.status === 429) r = { handled: true, reply: e.message }; } }
-    if (r && r.handled) { const t = assistApply(r); msg = { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txId: t ? t.id : null }; if (t || r.removed) renderShell(); }
-    else msg = { role: 'assistant', content: (await advisorReply(text)) || 'Sem resposta.' };
+    if (S.aiPending || !/\?\s*$/.test(text)) {
+      try { r = await api.assist({ text, noAI: true, ...(S.aiPending ? { context: S.aiPending } : {}) }); } catch (e) { if (e.status === 429) r = { handled: true, reply: e.message }; }
+    }
+    if (r && r.handled) msg = await robotMsg(r);
+    else { S.aiPending = ''; msg = { role: 'assistant', content: (await advisorReply(text)) || 'Sem resposta.' }; }
   }
   S.chat.push(msg); S.aiBusy = false; chatShow(false);
 }
@@ -2689,12 +2758,11 @@ async function aiRun(input, label) {
   S.aiBusy = true; S.chat.push(me); chatShow(true);
   let msg;
   try {
-    const r = await api.assist({ ...input, noAI: true });
+    const r = await api.assist({ ...input, noAI: true, ...(S.aiPending && !input.image ? { context: S.aiPending } : {}) });
     if (r.heard) me.content = `🎙️ “${r.heard}”`;
-    const undoId = r.heard ? localUndoTarget(r.heard) : null;
-    if (undoId) msg = { role: 'assistant', content: (await asUndo(undoId)) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
-    else if (r.handled) { const t = assistApply(r); msg = { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txId: t ? t.id : null }; if (t || r.removed) renderShell(); }
-    else if (r.heard) { chatShow(true); msg = { role: 'assistant', content: (await advisorReply(r.heard)) || 'Sem resposta.' }; }
+    if (r.heard && localUndoTarget(r.heard)) msg = { role: 'assistant', content: (await asUndoMany(recentUndo())) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
+    else if (r.handled) msg = await robotMsg(r);
+    else if (r.heard) { S.aiPending = ''; chatShow(true); msg = { role: 'assistant', content: (await advisorReply(r.heard)) || 'Sem resposta.' }; }
     else msg = { role: 'assistant', content: 'Não consegui entender. Tente de novo ou escreva: mercado 52,90', wa: true };
   } catch (e) { msg = { role: 'assistant', content: assistErr(e), wa: true }; }
   S.chat.push(msg); S.aiBusy = false; chatShow(false);
@@ -3134,7 +3202,7 @@ const ACT = {
   txNewCat: () => showNewCat(catKindOf(TX.type)),
   txDate: el => { const d = new Date(); d.setDate(d.getDate() - +el.dataset.d); $('#tx-date').value = isoOf(d); updDateChips(); updInstInfo(); },
   asSend: () => { const i = $('#as-text'), v = (i?.value || '').trim(); if (v) asRun({ text: v }, 'Lançando…'); else if (i) { i.focus(); toast('Escreva o lançamento. Ex.: mercado 52,90'); } },
-  asMic: () => recStart('tx', async blob => asRun({ audio: await audioOf(blob) }, 'Ouvindo e lançando…')),
+  asMic: () => recStart('tx', async blob => { const audio = await audioOf(blob); if (audio) asRun({ audio }, 'Ouvindo e lançando…'); }),
   asCamera: () => photoCam('tx'),
   asPhoto: () => photoPick('tx'),
   homeCamera: () => photoCam('tx'),
@@ -3142,7 +3210,7 @@ const ACT = {
   homeWrite: () => openTx(null, null, { write: true }),
   camShot: () => camShot(),
   camFile: () => { const where = CAM.where; closeSheet(); photoPick(where); },
-  asUndo: el => asUndo(el.dataset.id),
+  asUndo: el => { const ids = String(el.dataset.ids || el.dataset.id || '').split(',').filter(Boolean); if (ids.length) asUndoMany(ids).then(() => chatShow(false)); },
   recSend: () => recStop(false),
   recCancel: () => recStop(true),
   txSave: () => saveTx(),
@@ -3212,7 +3280,7 @@ const ACT = {
   installLater: () => { store.set('mc_install_dismiss', Date.now()); render(); },
   aiAsk: el => sendAI(el.dataset.q),
   aiSend: () => { const i = $('#ai-in'); if (!i) return; const v = i.value; i.value = ''; i.style.height = ''; S.aiDraft = ''; const a = $('#ai-act'); if (a) a.innerHTML = aiActHTML(); sendAI(v); },
-  aiMic: () => recStart('ai', async blob => aiRun({ audio: await audioOf(blob) }, '🎙️ Áudio')),
+  aiMic: () => recStart('ai', async blob => { const audio = await audioOf(blob); if (audio) aiRun({ audio }, '🎙️ Áudio'); }),
   aiCamera: () => photoCam('ai'),
   aiPhoto: () => photoPick('ai')
 };

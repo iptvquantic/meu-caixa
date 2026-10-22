@@ -89,5 +89,44 @@ const { ok, done } = checker('versão 2.3.2 (Lançar com IA)');
   click(w, '[data-act="aiCamera"]');
   ok(cam === 1 && M.PHOTO.where === 'ai', 'Assistente: Tirar foto vai para a conversa');
   w.close();
+
+  // ---- faltou o valor: o app pergunta e a próxima resposta completa a frase; vários lançamentos; "desfazer" do robô ----
+  w = await bootApp({ desktop: true, onError }); d = w.document; M = w.__mc; S = M.S;
+  await sleep(50);
+  const calls = [], real2 = M.Demo.assist.bind(M.Demo);
+  M.Demo.assist = async b => { calls.push({ text: b.text, context: b.context }); return real2(b); };
+  M.openTx(); await sleep(40);
+  type(w, '#as-text', 'parcela do pai'); click(w, '[data-act="asSend"]'); await sleep(700);
+  ok(/faltou o valor/.test(d.querySelector('#as-out').textContent) && d.querySelector('.sheet #as-row') && /Quanto foi/.test(d.querySelector('#as-text').placeholder), 'sem valor: a folha continua aberta e pergunta "Quanto foi?"');
+  type(w, '#as-text', '350'); click(w, '[data-act="asSend"]'); await sleep(700);
+  const pai = S.txs.find(x => x.amount === 350);
+  ok(calls[1] && calls[1].context === 'parcela do pai' && pai && /pai/i.test(pai.description) && !d.querySelector('.sheet #as-row'), 'o valor completa a frase anterior e lança: ' + JSON.stringify(calls[1]));
+  // dois lançamentos na mesma frase: um aviso com Desfazer para os dois
+  const mk = (amount, description) => M.Demo._ins('txs', { type: 'out', amount, date: M.isoOf(new Date()), description, category_id: null, card_id: null, installments: 1, invest_kind: null });
+  M.Demo.assist = async () => { const a = mk(50, 'Mercado'), b = mk(30, 'Farmácia'); return { handled: true, txs: [a, b], tx: b, reply: 'ok' }; };
+  M.openTx(); await sleep(40);
+  type(w, '#as-text', '50 no mercado e 30 na farmácia'); click(w, '[data-act="asSend"]'); await sleep(200);
+  const both = S.txs.filter(x => (x.amount === 50 && x.description === 'Mercado') || (x.amount === 30 && x.description === 'Farmácia'));
+  ok(both.length === 2 && /2 lançamentos: saída R\$\s?50,00 \+ saída R\$\s?30,00/.test(d.querySelector('#toast-root').textContent), 'dois lançamentos numa frase: entram os dois e o aviso diz isso');
+  click(w, '#toast-root [data-act="toastAction"]'); await sleep(60);
+  ok(!S.txs.some(x => both.some(y => y.id === x.id)), 'Desfazer do aviso apaga os dois');
+  // "desfazer" entendido pelo robô (ex.: áudio "apaga isso"): o app desfaz o último lançamento dele
+  M.Demo.assist = async () => { const a = mk(77, 'Teste'); return { handled: true, txs: [a], tx: a, reply: 'ok' }; };
+  M.openTx(); await sleep(40);
+  type(w, '#as-text', 'teste 77'); click(w, '[data-act="asSend"]'); await sleep(200);
+  ok(S.txs.some(x => x.amount === 77), 'lançado');
+  M.Demo.assist = async () => ({ handled: true, undo: true, reply: null });
+  M.openTx(); await sleep(40);
+  await M.asRun({ audio: { mime: 'audio/wav', data: 'UklGRg==' } }, 'Ouvindo…'); await sleep(100);
+  ok(!S.txs.some(x => x.amount === 77) && /desfeito/i.test(d.querySelector('#toast-root').textContent), '"apaga isso" falado: o app desfaz o último lançamento');
+  // na conversa do Assistente: o mesmo fluxo do valor que faltou
+  M.Demo.assist = real2;
+  M.go('ai'); await sleep(30);
+  await M.sendAI('parcela da moto'); await sleep(20);
+  ok(/faltou o valor/.test([...d.querySelectorAll('#chat .bubble')].pop().textContent) && S.aiPending === 'parcela da moto', 'Assistente: pede o valor');
+  await M.sendAI('420'); await sleep(20);
+  const moto = S.txs.find(x => x.amount === 420);
+  ok(moto && /moto/i.test(moto.description) && [...d.querySelectorAll('#chat .bubble')].pop().querySelector('[data-act="asUndo"][data-ids]') && !S.aiPending, 'Assistente: o valor completa e lança, com Desfazer');
+  w.close();
   done();
 })().catch(e => { console.log('❌ exceção', e.stack || e.message); process.exit(1); });

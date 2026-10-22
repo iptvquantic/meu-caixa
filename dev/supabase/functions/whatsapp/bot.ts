@@ -65,6 +65,8 @@ export const MSG = {
   missing: (what: string, app: boolean) => `Entendi${what ? ` *${what}*` : ''}, mas faltou o valor. ${app ? 'Quanto foi? Fale ou escreva só o valor (ex.: _350_).' : `Mande de novo com o valor, ex.: _${(what || 'mercado').toLowerCase()} 50_.`}`,
   limit: (n: number) => `Você já usou as ${n} perguntas/áudios de hoje. Amanhã libera de novo.\nLançar por texto e consultar (*saldo*, *fatura*, *contas*) continuam funcionando.`,
   fail: 'Tive um problema agora e não consegui terminar. Tente de novo em instantes.',
+  audioFail: 'Não consegui ouvir esse áudio agora 🎙️ Grave de novo ou escreva. Ex.: _uber 23 ontem_',
+  busy: 'A IA está ocupada agora 😅 Tente de novo em 1 minuto ou escreva com o valor, ex.: _mercado 52,90_.',
   invoicePaid: '💳 Pagar a fatura não precisa de lançamento: as compras do cartão já contam no saldo (cada parcela no mês da fatura). Para conferir, mande *fatura*.',
 };
 const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n📷 Mande a *foto ou o print de um comprovante* (compra, PIX enviado ou recebido) e eu lanço.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
@@ -167,7 +169,8 @@ export async function serve(m: Incoming, u: WaUser, d: BotDeps, o: { noAI?: bool
     const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
     if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
     data = await d.rpc('wa_data', { p_uid: u.user_id }) as Data;
-    text = (await d.transcribe(m.audioId ?? '', vocabOf(data))).trim(); // os nomes da pessoa ajudam a transcrição
+    try { text = (await d.transcribe(m.audioId ?? '', vocabOf(data))).trim(); } // os nomes da pessoa ajudam a transcrição
+    catch (e) { d.log?.('áudio', e instanceof Error ? e.message : e); return MSG.audioFail; }
     if (!text) return MSG.noAudio;
     heard = `🎙️ _"${text.length > 200 ? text.slice(0, 200) + '…' : text}"_\n\n`;
   }
@@ -205,10 +208,12 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
       const done = findBill(text, /^(recebi|recebido)/.test(fn) ? 'in' : 'out', data, today, true);
       if (done) return `✅ *${done.rec.name}* já estava marcada como ${done.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
     }
-    // "paguei a fatura": as compras do cartão já contam (a não ser que a fatura seja uma conta fixa cadastrada)
-    if (/(^| )faturas?( |$)/.test(fn) && INVOICE_PAY.test(fn) && !/(^| )(pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|amigo|amiga|namorada|namorado|tio|tia|avo)( |$)/.test(fn)) {
+    // "paguei a fatura" / "paguei o cartão 1500": as compras do próprio cartão já contam (a não ser que a fatura seja
+    // uma conta fixa cadastrada, ou que a pessoa não tenha cartão no app: aí é uma saída como outra qualquer)
+    if ((/(^| )faturas?( |$)/.test(fn) && INVOICE_PAY.test(fn) && !/(^| )(pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|amigo|amiga|namorada|namorado|tio|tia|avo)( |$)/.test(fn))
+      || ownCardPayment(fn, await load())) {
       const data = await load();
-      if (feats(u).bills === false || !(findBill(full, 'out', data, today) || findBill(full, 'out', data, today, true))) return MSG.invoicePaid;
+      if (data.cards.some((c) => !c.archived) && (feats(u).bills === false || !(findBill(full, 'out', data, today) || findBill(full, 'out', data, today, true)))) return MSG.invoicePaid;
     }
     // frase simples e clara ("mercado 52,90", "josimar 30"): lança na hora, sem gastar IA
     if (simple && q && q.amount > 0) {
@@ -226,13 +231,14 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
         counted = true;
       }
       const data = await load();
-      let plan: Plan | null = null;
+      let plan: Plan | null = null, down = false;
       try { plan = toPlan(await d.understand(UNDERSTAND, contextOf(full, data, today, { hint: ro.hint, fromAudio: ro.fromAudio }), SCHEMA), today); }
-      catch (e) { d.log?.('entender falhou', e instanceof Error ? e.message : e); }
+      catch (e) { down = true; d.log?.('entender falhou', e instanceof Error ? e.message : e); }
       if (plan) {
         const r = await applyPlan(plan, full, u, d, data);
         if (r !== undefined) return r;
       } else if (q && q.amount > 0) return quickEntry(q, full, u, d, data, ro.hint); // IA fora do ar: lançamento rápido
+      else if (down) return MSG.busy; // IA fora do ar e sem valor na frase: diz o que fazer (não fica pedindo para repetir)
     } else {
       // sem o "entender" (robô antigo): frase sem número pela IA de extração e o lançamento rápido
       let x = q;
@@ -250,6 +256,15 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
   return noAI ? null : askAI(text, u, d, today, counted);
 }
 
+// "paguei o cartão 1500", "pagamento do meu cartão", "paguei o Nubank": só palavras de pagar o cartão da própria pessoa
+const OWN_CARD = new Set(['paguei', 'pago', 'paga', 'quitei', 'pagamento', 'pagar', 'o', 'a', 'do', 'da', 'de', 'meu', 'minha', 'cartao', 'credito', 'fatura', 'reais', 'real', 'r', 'hoje', 'ontem']);
+function ownCardPayment(n: string, data: Data) {
+  const words = n.replace(/[\d.,$]+/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.some((w) => /^(paguei|pago|paga|quitei|pagamento|pagar)$/.test(w))) return false;
+  const cardWords = new Set(data.cards.filter((c) => !c.archived).flatMap((c) => norm(c.name).split(' ')));
+  if (!words.some((w) => w === 'cartao' || w === 'fatura' || (cardWords.has(w) && w.length > 3))) return false;
+  return words.every((w) => OWN_CARD.has(w) || cardWords.has(w));
+}
 // Frase que o lançamento rápido resolve sem dúvida: um valor só, sem parcela/fatura/pessoa da família, sem falar de
 // cartão, e com o tipo e a categoria já conhecidos (pelas palavras, pelo histórico ou pela aba tocada).
 const AMBIGUOUS = /(^| )(parcela|parcelas|prestacao|prestacoes|carne|financiamento|consorcio|fatura|emprestimo|emprestei|emprestou|emprestado|devolvi|devolveu|devolucao|estorno|reembolso|troco|metade|dividi|dividido|dividimos|cada|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|vo|avo)( |$)|\d+ ?\/ ?\d+|\d+ de \d+/;

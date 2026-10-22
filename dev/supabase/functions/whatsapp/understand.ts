@@ -49,7 +49,7 @@ export const SCHEMA = {
 
 export const SYSTEM = `Você registra o dinheiro de autônomos e pequenos negócios no Brasil (app Meu Caixa). A pessoa falou (áudio transcrito) ou escreveu o que aconteceu. Entenda a frase inteira e devolva os lançamentos prontos, do jeito que ela mesma lançaria, sem ela precisar consertar nada.
 
-acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse quanto; em "entendido" escreva a descrição do lançamento, ex.: "Parcela cartão do pai 3/12" — nunca a palavra "valor"); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar ou cancelar o último lançamento); "fatura" (pagou a fatura de um cartão DELA, da lista: não se lança, as compras já contam); "nada".
+acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse quanto; em "entendido" escreva a descrição do lançamento, ex.: "Parcela cartão do pai 3/12" — nunca a palavra "valor"); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar ou cancelar o último lançamento); "fatura" (pagou a fatura de um cartão DELA, da lista — "paguei o cartão" sem dizer de quem é o dela: não se lança, as compras já contam); "nada".
 
 tipo:
 - entrada: dinheiro que entrou (recebi, caiu, vendi, cliente pagou, me pagou, PIX recebido, salário, reembolso, me devolveu). Frase que começa com "Entrada" é entrada.
@@ -125,16 +125,28 @@ export function contextOf(text: string, data: Data, today: string, o: { hint?: H
   return lines.join('\n');
 }
 
-// Vocabulário para a transcrição do áudio (o Whisper acerta mais nomes e termos que já conhece)
-export function vocabOf(data: Data) {
-  const names = new Set<string>();
-  for (const c of data.cards ?? []) if (!c.archived) names.add(c.name);
-  for (const c of data.categories ?? []) if (!c.archived && c.legacy_key !== 'outros') names.add(c.name);
-  const recent = [...(data.transactions ?? [])].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 150);
-  for (const t of recent) { const d = clip(t.description, 24); if (d && !/\d{3,}/.test(d)) names.add(d); }
-  let out = 'Lançamentos de dinheiro em reais: recebi 300 no PIX; paguei 52,90 no débito; parcela 3/12; comprei em 10x no cartão; investi 500. ';
-  for (const n of names) { if (out.length + n.length > 620) break; out += n + ', '; }
-  return out.replace(/, $/, '.');
+// Vocabulário para a transcrição do áudio (o Whisper acerta mais nomes e termos que já conhece). Vai primeiro o que
+// ele não adivinha: nomes de clientes, lojas e pessoas que a pessoa mais lança, os cartões e as categorias criadas por ela.
+// Curto de propósito: a Groq aceita até 224 tokens de vocabulário.
+const SEEDED = new Set(['alimentacao', 'mercado', 'transporte', 'combustivel', 'contas', 'moradia', 'saude', 'farmacia', 'lazer', 'assinaturas', 'educacao', 'roupas', 'pix', 'fornecedores', 'impostos', 'outros', 'vendas', 'servicos', 'salario', 'pix_recebido', 'renda_fixa', 'tesouro', 'acoes', 'fundos', 'cripto', 'previdencia', 'poupanca']);
+export function vocabOf(data: Data, max = 420) {
+  const out: string[] = [], seen = new Set<string>();
+  const add = (s: unknown) => {
+    const t = clip(String(s ?? '').replace(/^(entrada|sa[ií]da|gasto|despesa|receita)\s+/i, ''), 28);
+    if (!t || /\d{3,}/.test(t) || seen.has(norm(t))) return;
+    seen.add(norm(t)); out.push(t);
+  };
+  const count = new Map<string, { s: string; n: number }>();
+  for (const t of [...(data.transactions ?? [])].sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 300)) {
+    const k = norm(t.description ?? '');
+    if (k) count.set(k, { s: String(t.description), n: (count.get(k)?.n ?? 0) + 1 });
+  }
+  for (const { s: d } of [...count.values()].sort((a, b) => b.n - a.n).slice(0, 40)) add(d);
+  for (const c of data.cards ?? []) if (!c.archived) add(c.name);
+  for (const c of data.categories ?? []) if (!c.archived && !SEEDED.has(String(c.legacy_key ?? ''))) add(c.name);
+  let v = 'Lançamentos em reais: recebi 300 no PIX, paguei 52,90 no débito, parcela 3/12, 10x no cartão.';
+  for (const n of out) { if (v.length + n.length + 2 > max) break; v += ' ' + n + ','; }
+  return v.replace(/,$/, '.');
 }
 
 const TYPES: Record<string, Item['type']> = { entrada: 'in', saida: 'out', cartao: 'card', investimento: 'invest' };
@@ -155,7 +167,8 @@ function okDate(s: unknown, today: string) {
 export function cleanDescription(s: unknown) {
   let d = clip(s, 80).replace(/\d[\d.\-]{7,}/g, '').replace(/^(entrada|saida|saída|gasto|despesa|receita|lançamento|lancamento)\s*[:,-]?\s+/i, '').replace(/\s+/g, ' ').trim().slice(0, 60);
   if (d) d = d[0].toUpperCase() + d.slice(1);
-  return d;
+  // "Pastel Caldo De Cana" → "Pastel Caldo de Cana" (preposições e artigos em minúscula)
+  return d.replace(/ (De|Da|Do|Das|Dos|E|Em|Com|Para|Pra|Pro|No|Na|Nos|Nas|Ao|À) /g, (m) => m.toLowerCase());
 }
 
 // o que a pessoa quis lançar (para pedir o valor): nunca "Valor" ou "Lançamento"

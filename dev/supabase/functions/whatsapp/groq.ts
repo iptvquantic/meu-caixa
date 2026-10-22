@@ -78,7 +78,7 @@ export function groq(key: string, fetcher: typeof fetch = fetch, models = ['open
       toQuick(await chat([{ role: 'system', content: EXTRACT }, { role: 'user', content: `Hoje é ${today}. Frase: ${text.slice(0, 500)}` }], { maxTokens: 300, temperature: 0, json: true, effort: 'low' }), today),
     // entende a frase com o contexto da pessoa (understand.ts): resposta no formato estrito do esquema
     interpret: (system: string, context: string, schema: Record<string, unknown>) =>
-      chat([{ role: 'system', content: system }, { role: 'user', content: context }], { maxTokens: 2000, temperature: 0, schema, effort: 'medium' }),
+      chat([{ role: 'system', content: system }, { role: 'user', content: context }], { maxTokens: 2000, temperature: 0, schema, effort: 'low' }),
     // áudio → texto. vocab = nomes e termos da pessoa (o Whisper acerta mais o que já conhece)
     transcribe: async (audio: Blob, fileName = 'audio.ogg', vocab = '') => {
       if (!key) throw new Error('GROQ_API_KEY não configurada');
@@ -90,7 +90,7 @@ export function groq(key: string, fetcher: typeof fetch = fetch, models = ['open
         form.append('language', 'pt');
         form.append('temperature', '0');
         form.append('response_format', 'verbose_json');
-        form.append('prompt', (vocab || 'Lançamentos de dinheiro em reais: mercado 52,90; uber 23 ontem; recebi 300 no PIX; parcela 3/12; notebook 3.600 em 12x no cartão.').slice(0, 640));
+        form.append('prompt', (vocab || 'Lançamentos de dinheiro em reais: mercado 52,90; uber 23 ontem; recebi 300 no PIX; parcela 3/12; notebook 3.600 em 12x no cartão.').slice(0, 440));
         const r = await fetcher(AUDIO, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
         if (r.ok) return speechText(await r.json());
         const why = await errOf(r);

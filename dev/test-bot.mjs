@@ -478,11 +478,11 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(speechText({ text: 'Legendas pela comunidade Amara.org', segments: [{ text: ' Legendas pela comunidade Amara.org', no_speech_prob: 0.9, avg_logprob: -1.2 }] }) === '', 'silêncio: "Legendas pela comunidade Amara.org" não vira texto');
   ok(speechText({ text: 'Obrigado.' }) === '' && speechText({ text: 'mercado 52' }) === 'mercado 52', 'frase inventada comum ("Obrigado.") some; fala de verdade fica');
   ok(speechText({ segments: [{ text: ' paguei 50 no mercado', no_speech_prob: 0.02, avg_logprob: -0.2 }, { text: ' Obrigado.', no_speech_prob: 0.8, avg_logprob: -0.9 }] }) === 'paguei 50 no mercado', 'trecho de silêncio no fim é descartado');
-  // entender a frase: formato estrito (o modelo não foge do esquema), esforço médio; esquema recusado → só JSON
+  // entender a frase: formato estrito (o modelo não foge do esquema), esforço baixo (avaliado: acerta e gasta menos da cota por minuto); esquema recusado → só JSON
   sent.length = 0;
   g = groq('k', fake([{ status: 200, body: { choices: [{ message: { content: '{"acao":"nada","entendido":"","lancamentos":[]}' } }] } }]));
   await g.interpret('sistema', 'contexto', SCHEMA.schema ? SCHEMA : SCHEMA); let ib = JSON.parse(sent[0].init.body);
-  ok(ib.response_format?.type === 'json_schema' && ib.response_format.json_schema.strict === true && ib.reasoning_effort === 'medium' && ib.temperature === 0 && ib.model === 'openai/gpt-oss-120b', 'entender: saída estrita no esquema, esforço médio, temperatura 0');
+  ok(ib.response_format?.type === 'json_schema' && ib.response_format.json_schema.strict === true && ib.reasoning_effort === 'low' && ib.temperature === 0 && ib.model === 'openai/gpt-oss-120b', 'entender: saída estrita no esquema, esforço baixo, temperatura 0');
   sent.length = 0;
   g = groq('k', fake([{ status: 400, body: { error: { message: 'json_schema não suportado' } } }, { status: 200, body: { choices: [{ message: { content: '{"acao":"nada"}' } }] } }]));
   ok(await g.interpret('s', 'c', SCHEMA) === '{"acao":"nada"}' && JSON.parse(sent[1].init.body).response_format.type === 'json_object', 'esquema recusado: tenta pedindo só JSON');
@@ -516,7 +516,7 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(/tocou na aba: Entrada/.test(cx) && /Mensagem \(áudio transcrito\): "josimar trinta"/.test(cx), 'contexto: aba tocada e a mensagem');
   ok(!/tocou na aba/.test(contextOf('x', data, TODAY, { hint: { type: 'in' } })), 'aba só lembrada não vai para a IA');
   const voc = vocabOf(data);
-  ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 640, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
+  ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 440, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
   ok(/nunca "cartao", mesmo falando de cartão/.test(UNDERSTAND) && /cartão da Luana/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor por extenso vira número/.test(UNDERSTAND) && /começa com "Entrada"/.test(UNDERSTAND) && UNDERSTAND.length < 3400, 'instruções curtas cobrem PIX x cartão, cartão de outra pessoa, parcela 3/12, valor falado e "Entrada/Saída"');
 }
 
@@ -583,6 +583,13 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   // IA fora do ar: o lançamento rápido resolve; sem cota: também
   await answer(msg('quebrada parcela 3/12 40'), deps); t = lastAdd(db);
   ok(t.amount === 40, 'IA fora do ar: lança pelo lançamento rápido');
+  // pagar o próprio cartão não lança (as compras já contam); o cartão de outra pessoa é saída (a IA decide)
+  const nPaid = db.calls.filter(([f]) => f === 'wa_add_tx').length;
+  has(await answer(msg('paguei o cartão 1500'), deps), 'Pagar a fatura não precisa de lançamento', '"paguei o cartão 1500": é a fatura do próprio cartão');
+  has(await answer(msg('pagamento do meu cartão nubank'), deps), 'Pagar a fatura não precisa de lançamento', '"pagamento do meu cartão nubank": também');
+  ok(db.calls.filter(([f]) => f === 'wa_add_tx').length === nPaid, '... e nada é lançado');
+  has(await answer(msg('quebrada uber'), deps), 'A IA está ocupada agora', 'IA fora do ar e sem valor: diz o que fazer (não pede para repetir)');
+  has(await serve({ phone: 'app', kind: 'audio', audioId: 'x' }, u, { ...appDeps, transcribe: async () => { throw new Error('transcrição falhou (Groq 413)'); } }), 'Não consegui ouvir esse áudio agora', 'transcrição recusada: mensagem clara, sem erro 502');
   db.quotaLimit = 0; const nUse = seen.length;
   await answer(msg('cartao pai pix 77'), deps); t = lastAdd(db);
   ok(t.amount === 77 && seen.length === nUse, 'sem cota de IA: o lançamento rápido lança mesmo assim');

@@ -124,12 +124,30 @@ const fake = http.createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': 'image/jpeg' }); return res.end(Buffer.from('JPEG'));
   }
   if (url.pathname === '/graph/v24.0/media-3') return json({ url: `http://127.0.0.1:${FAKE_PORT}/media/3`, mime_type: 'image/jpeg', file_size: 9 * 1024 * 1024 });
-  if (url.pathname === '/groq/audio/transcriptions') { groqCalls.push({ audio: true, form: body.toString('latin1') }); return json({ text: 'Gastei 40 reais de Uber ontem.' }); }
+  if (url.pathname === '/groq/audio/transcriptions') {
+    groqCalls.push({ audio: true, form: body.toString('latin1') });
+    // como a Groq com verbose_json: o texto e os trechos (o último é silêncio que o Whisper "inventou")
+    return json({ text: 'Gastei 40 reais de Uber ontem. Obrigado.', segments: [{ text: ' Gastei 40 reais de Uber ontem.', no_speech_prob: 0.01, avg_logprob: -0.2 }, { text: ' Obrigado.', no_speech_prob: 0.9, avg_logprob: -1.1 }] });
+  }
   if (url.pathname === '/groq/chat/completions') {
     const j = JSON.parse(body); groqCalls.push(j);
     if (Array.isArray(j.messages?.[1]?.content)) { // modelo de visão: PIX recebido da Vanessa (legenda "pix da vanessa") ou farmácia no PIX
       if (/pix da vanessa/.test(j.messages[1].content[0].text)) return json({ choices: [{ message: { content: '{"comprovante": true, "tipo": "entrada", "valor": 30, "data": null, "descricao": "Pix Vanessa", "categoria": "Vendas", "pagamento": "pix", "parcelas": 1}' } }] });
       return json({ choices: [{ message: { content: '{"comprovante": true, "tipo": "saida", "valor": 52.9, "data": null, "descricao": "Drogasil", "categoria": "Farmácia", "pagamento": "pix", "parcelas": 1}' } }] });
+    }
+    if (j.response_format?.type === 'json_schema') { // entender a frase (intérprete): planos fixos para as frases do teste
+      const said = /Mensagem[^:]*: "([\s\S]*)"\s*$/.exec(j.messages?.[1]?.content ?? '')?.[1] ?? '';
+      const L = (x) => ({ tipo: 'saida', valor: 0, data: '', descricao: '', categoria: '', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '', ...x });
+      const plan = /pai.*3\/12.*350/i.test(said) ? { acao: 'lancar', entendido: '', lancamentos: [L({ valor: 350, descricao: 'Parcela cartão do pai 3/12', pagamento: 'pix' })] }
+        : /uber/i.test(said) ? { acao: 'lancar', entendido: '', lancamentos: [L({ valor: 40, descricao: 'Uber', categoria: 'Transporte', data: new Date(Date.now() - 864e5 - 3 * 3600e3).toISOString().slice(0, 10) })] }
+        : /pai/i.test(said) ? { acao: 'falta_valor', entendido: 'Parcela cartão do pai 3/12', lancamentos: [] }
+        : /\d/.test(said) ? (() => { // outra frase com valor: como a IA faria com a aba tocada e os lançamentos parecidos
+          const ctx = j.messages[1].content, word = said.replace(/[\d.,]+/g, '').trim();
+          const tipo = /tocou na aba: Entrada/.test(ctx) || new RegExp('entrada R\\$[^\\n]*"' + word, 'i').test(ctx) ? 'entrada' : 'saida';
+          return { acao: 'lancar', entendido: '', lancamentos: [L({ tipo, valor: Number((/\d+(?:[.,]\d+)?/.exec(said) ?? ['0'])[0].replace(',', '.')), descricao: word })] };
+        })()
+        : { acao: 'nada', entendido: '', lancamentos: [] };
+      return json({ choices: [{ message: { content: JSON.stringify(plan) } }] });
     }
     return json({ choices: [{ message: { content: j.response_format ? '{"lancamento": false}' : 'Resposta da IA (teste).' } }] });
   }
@@ -226,7 +244,10 @@ async function main() {
   // áudio e IA
   r = await send(null, { audio: true });
   has(r.reply, '🎙️ _"Gastei 40 reais de Uber ontem."_', 'áudio transcrito'); has(r.reply, '📅 ontem', 'data do áudio');
-  ok(groqCalls.some((c) => c.audio && /whisper-large-v3-turbo/.test(c.form) && /name="language"\r\n\r\npt/.test(c.form)), 'áudio enviado ao Whisper em português');
+  const wh = groqCalls.find((c) => c.audio);
+  ok(wh && /name="model"\r\n\r\nwhisper-large-v3\r\n/.test(wh.form) && /name="language"\r\n\r\npt/.test(wh.form) && /name="response_format"\r\n\r\nverbose_json/.test(wh.form), 'áudio enviado ao Whisper completo, em português, com os trechos');
+  const vocab = (/name="prompt"\r\n\r\n([^\r]*)/.exec(Buffer.from(wh?.form ?? '', 'latin1').toString('utf8')) ?? [])[1] ?? '';
+  ok(/^Lançamentos em reais: .*parcela 3\/12.*\. .*Mercado/.test(vocab) && vocab.length <= 440 && !/Obrigado/.test(r.reply), 'a transcrição leva os nomes que a pessoa usa (curto); o "Obrigado." inventado no silêncio some: ' + vocab);
   r = await send('quanto posso gastar até o fim do mês?');
   ok(r.reply === 'Resposta da IA (teste).', 'pergunta respondida pela IA');
   const chat = groqCalls.filter((c) => c.messages).pop();
@@ -271,6 +292,16 @@ async function main() {
   a = await (await appCall(ANA_JWT, { image: { mime: 'image/jpeg', data: Buffer.from('JPEG').toString('base64') }, text: 'remédio' })).json();
   ok(a.tx?.description === 'Drogasil' && /🧾 Li o comprovante/.test(a.reply), 'app: foto do comprovante lida e lançada');
   const usage = psql(`select count from public.ai_usage where user_id = '${ANA}'`); ok(usage === '6', 'app: áudio e foto contam no limite diário de IA, como no WhatsApp (' + usage + ')');
+  // a frase do dono: pagamento do cartão do pai no PIX, parcela 3/12 → saída por PIX (a IA entende; nada de cartão nem data)
+  a = await (await appCall(ANA_JWT, { text: 'pagamento cartao pai parcela com pix 3/12 350' })).json();
+  ok(a.tx?.type === 'out' && Number(a.tx?.amount) === 350 && a.tx?.card_id === null && /3\/12/.test(a.tx?.description ?? '') && /\(PIX\)/.test(a.reply ?? ''), 'app: "pagamento cartao pai parcela com pix 3/12 350" → saída por PIX: ' + JSON.stringify(a.tx));
+  const und = groqCalls.filter((c) => c.response_format?.type === 'json_schema').pop();
+  ok(und?.response_format?.json_schema?.strict === true && und.model === 'openai/gpt-oss-120b' && /Categorias de saída e cartão: .*Farmácia/.test(und.messages[1].content), 'a IA recebe o formato estrito e o contexto da pessoa');
+  // sem o valor: pergunta; a resposta seguinte completa
+  a = await (await appCall(ANA_JWT, { text: 'pagamento cartao do pai parcela 3/12' })).json();
+  ok(a.handled && !a.tx && /faltou o valor/.test(a.reply ?? '') && a.pending === 'pagamento cartao do pai parcela 3/12', 'app: sem valor → pergunta e devolve a frase pendente: ' + JSON.stringify(a));
+  a = await (await appCall(ANA_JWT, { text: '350', context: 'pagamento cartao do pai parcela 3/12' })).json();
+  ok(a.tx?.type === 'out' && Number(a.tx?.amount) === 350, 'app: "350" com a frase pendente lança');
   // tipo automático: a foto de um PIX recebido vira entrada; a aba tocada no app decide quando a frase não diz
   a = await (await appCall(ANA_JWT, { image: { mime: 'image/jpeg', data: Buffer.from('JPEG').toString('base64') }, text: 'pix da vanessa' })).json();
   ok(a.tx?.type === 'in' && Number(a.tx?.amount) === 30 && /💰 \*Entrada\* de \*R\$ 30,00\*/.test(a.reply), 'app: foto de PIX recebido vira entrada: ' + JSON.stringify(a.tx));

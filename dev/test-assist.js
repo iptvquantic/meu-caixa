@@ -25,7 +25,7 @@ async function open(br, mobile) {
   await p.evaluate(() => {
     const M = window.__mc; window.__calls = [];
     M.Demo.assist = async (b) => {
-      window.__calls.push({ text: b.text, noAI: b.noAI, hint: b.hint || null, audio: b.audio ? { mime: b.audio.mime, len: b.audio.data.length } : null, image: b.image ? { mime: b.image.mime, len: b.image.data.length, head: b.image.data.slice(0, 4) } : null });
+      window.__calls.push({ text: b.text, noAI: b.noAI, hint: b.hint || null, audio: b.audio ? { mime: b.audio.mime, len: b.audio.data.length, head: b.audio.data.slice(0, 4), hdr: b.audio.data.slice(0, 60) } : null, image: b.image ? { mime: b.image.mime, len: b.image.data.length, head: b.image.data.slice(0, 4) } : null });
       const tx = M.Demo._ins('txs', { type: 'out', amount: 52.9, date: new Date().toISOString().slice(0, 10), description: b.image ? 'Drogasil' : 'Mercado', category_id: null, card_id: null, installments: 1, invest_kind: null });
       return { handled: true, heard: b.audio ? 'mercado 52,90' : undefined, tx, reply: '💸 *Saída* de *R$ 52,90*' };
     };
@@ -54,7 +54,9 @@ const inputsEmpty = p => p.evaluate(() => ['photo-cam', 'photo-pick'].every(id =
   ok(await p.$('#as-row .rec') && /0:0[1-2]/.test(await p.$eval('#as-row .rec', e => e.textContent)), 'gravando: contador e botões de cancelar e enviar');
   await p.click('[data-act="recSend"]'); await sleep(900);
   let c = (await calls())[0];
-  ok(c && c.audio && /^audio\/(webm|ogg|mp4)$/.test(c.audio.mime) && c.audio.len > 200 && c.noAI === false, 'áudio gravado vai para o robô (tipo e conteúdo): ' + JSON.stringify(c));
+  ok(c && c.audio && c.audio.mime === 'audio/wav' && c.audio.head === 'UklG' && c.audio.len > 2000 && c.noAI === false, 'áudio gravado vira WAV (16 kHz, sem silêncio) e vai para o robô: ' + JSON.stringify(c));
+  const hdr = Buffer.from(c?.audio?.hdr || '', 'base64');
+  ok(hdr.toString('latin1', 8, 16) === 'WAVEfmt ' && hdr.readUInt16LE(22) === 1 && hdr.readUInt32LE(24) === 16000 && hdr.readUInt16LE(34) === 16, 'WAV mono, 16 kHz, 16 bits (o formato do reconhecimento de voz)');
   ok(c && c.hint && c.hint.sure === false, 'vai junto a aba do formulário como dica');
   ok(!(await p.$('#as-row')) && /Saída de R\$\s?52,90/.test(await toastText(p)), 'lançado: folha fecha e avisa com Desfazer');
   // cancelar a gravação não manda nada
