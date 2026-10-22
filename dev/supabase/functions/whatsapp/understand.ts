@@ -20,10 +20,10 @@ export const SCHEMA = {
   name: 'interpretacao',
   strict: true,
   schema: {
-    type: 'object', additionalProperties: false, required: ['acao', 'faltou', 'lancamentos'],
+    type: 'object', additionalProperties: false, required: ['acao', 'entendido', 'lancamentos'],
     properties: {
       acao: { type: 'string', enum: ['lancar', 'falta_valor', 'consulta', 'desfazer', 'fatura', 'nada'] },
-      faltou: { type: 'string' },
+      entendido: { type: 'string' },
       lancamentos: {
         type: 'array',
         items: {
@@ -49,7 +49,7 @@ export const SCHEMA = {
 
 export const SYSTEM = `Você registra o dinheiro de autônomos e pequenos negócios no Brasil (app Meu Caixa). A pessoa falou (áudio transcrito) ou escreveu o que aconteceu. Entenda o sentido da frase inteira e devolva os lançamentos prontos, sem a pessoa precisar consertar nada.
 
-acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse o valor; em "faltou", o que entendeu); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar o último); "fatura" (pagou a fatura do PRÓPRIO cartão: não se lança); "nada".
+acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer lançar mas não disse o valor; em "entendido", o que ela quer lançar, ex.: "Uber", "Parcela cartão do pai 3/12"); "consulta" (pergunta: saldo, quanto gastou, fatura, conselho); "desfazer" (apagar o último); "fatura" (pagou a fatura do PRÓPRIO cartão: não se lança); "nada".
 
 tipo:
 - entrada: dinheiro que entrou (recebi, caiu, vendi, cliente pagou, me pagou, PIX recebido, salário, comissão, reembolso, estorno).
@@ -65,7 +65,7 @@ Regras:
 5. data AAAA-MM-DD: sem data = hoje; "ontem"; "anteontem"; "dia 15" = o dia 15 mais recente já passado; "15/10". Nunca futura.
 6. descricao: 2 a 6 palavras, inicial maiúscula, do jeito da pessoa (cliente, loja, pessoa, o que comprou), sem valor, data e sem "entrada/saída/paguei/recebi". Ex.: "Parcela cartão do pai 3/12", "Josimar", "Mercado Guanabara".
 7. categoria: um nome EXATO da lista da pessoa, do lado certo (saida e cartao: de saída; entrada: de entrada; investimento: de investimento). Os exemplos e os lançamentos parecidos mostram como ELA classifica (cliente que sempre foi de uma categoria continua nela). Supermercado → a categoria de mercado. Nenhuma serve: "".
-8. cartao (só tipo cartao): nome exato do cartão citado; não citou: "". conta_fixa: nome exato da conta fixa paga/recebida (sem valor dito, use o valor dela); senão "".
+8. pagamento: só o que a pessoa disse (pix, débito, dinheiro, boleto, transferência, crédito); não disse: "outro". cartao (só tipo cartao): nome exato do cartão citado; não citou: "". conta_fixa: nome exato da conta fixa paga/recebida (sem valor dito, use o valor dela); senão "".
 9. Áudio pode trocar palavras de som parecido: corrija pelo contexto e pelos nomes da lista ("pics" = pix).
 10. Aba tocada no app (se informada) define o tipo, a não ser que a frase diga outro.
 
@@ -168,7 +168,7 @@ export function toPlan(raw: string, today: string): Plan | null {
   const action = plain(j?.acao);
   if (['consulta', 'desfazer', 'fatura', 'nada'].includes(action)) return { action: action as 'consulta' | 'desfazer' | 'fatura' | 'nada' };
   const list: any[] = Array.isArray(j?.lancamentos) ? j.lancamentos.slice(0, 5) : [];
-  if (action === 'falta_valor') return { action: 'falta_valor', description: cleanDescription(j?.faltou || list[0]?.descricao || '') };
+  if (action === 'falta_valor') return { action: 'falta_valor', description: cleanDescription(j?.entendido || list[0]?.descricao || '') };
   if (action !== 'lancar') return null;
   const items: Item[] = [];
   let noValue = '';

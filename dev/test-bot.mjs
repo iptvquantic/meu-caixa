@@ -480,7 +480,7 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(speechText({ segments: [{ text: ' paguei 50 no mercado', no_speech_prob: 0.02, avg_logprob: -0.2 }, { text: ' Obrigado.', no_speech_prob: 0.8, avg_logprob: -0.9 }] }) === 'paguei 50 no mercado', 'trecho de silêncio no fim é descartado');
   // entender a frase: formato estrito (o modelo não foge do esquema), esforço médio; esquema recusado → só JSON
   sent.length = 0;
-  g = groq('k', fake([{ status: 200, body: { choices: [{ message: { content: '{"acao":"nada","faltou":"","lancamentos":[]}' } }] } }]));
+  g = groq('k', fake([{ status: 200, body: { choices: [{ message: { content: '{"acao":"nada","entendido":"","lancamentos":[]}' } }] } }]));
   await g.interpret('sistema', 'contexto', SCHEMA.schema ? SCHEMA : SCHEMA); let ib = JSON.parse(sent[0].init.body);
   ok(ib.response_format?.type === 'json_schema' && ib.response_format.json_schema.strict === true && ib.reasoning_effort === 'medium' && ib.temperature === 0 && ib.model === 'openai/gpt-oss-120b', 'entender: saída estrita no esquema, esforço médio, temperatura 0');
   sent.length = 0;
@@ -492,18 +492,18 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
 {
   const P = (o) => toPlan(JSON.stringify(o), TODAY);
   const L = (x) => ({ tipo: 'saida', valor: 10, data: TODAY, descricao: 'x', categoria: '', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '', ...x });
-  let p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ valor: 350, descricao: 'parcela cartão do pai 3/12', pagamento: 'pix' })] });
+  let p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ valor: 350, descricao: 'parcela cartão do pai 3/12', pagamento: 'pix' })] });
   ok(p.action === 'lancar' && p.items[0].type === 'out' && p.items[0].amount === 350 && p.items[0].description === 'Parcela cartão do pai 3/12' && p.items[0].payment === 'pix' && p.items[0].installments === 1, 'plano: saída por PIX com a descrição limpa');
-  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ tipo: 'cartao', valor: '2.400,00', parcelas: 10, cartao: 'Nubank' }), L({ tipo: 'investimento', investimento: 'resgate', valor: 200 }), L({ tipo: 'entrada', valor: 30, descricao: 'Entrada Edson Monsores', data: '2031-01-01' })] });
+  p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ tipo: 'cartao', valor: '2.400,00', parcelas: 10, cartao: 'Nubank' }), L({ tipo: 'investimento', investimento: 'resgate', valor: 200 }), L({ tipo: 'entrada', valor: 30, descricao: 'Entrada Edson Monsores', data: '2031-01-01' })] });
   ok(p.items.length === 3 && p.items[0].type === 'card' && p.items[0].amount === 2400 && p.items[0].installments === 10 && p.items[0].card === 'Nubank', 'cartão: valor em texto e parcelas');
   ok(p.items[1].type === 'invest' && p.items[1].investKind === 'resgate' && p.items[2].type === 'in' && p.items[2].description === 'Edson Monsores' && p.items[2].date === TODAY, 'resgate; "Entrada" sai da descrição; data futura vira hoje');
-  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ tipo: 'entrada', parcelas: 7, cartao: 'Nubank' })] });
+  p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ tipo: 'entrada', parcelas: 7, cartao: 'Nubank' })] });
   ok(p.items[0].installments === 1 && p.items[0].card === '', 'parcelas e cartão só valem no tipo cartão');
-  p = P({ acao: 'lancar', faltou: '', lancamentos: [L({ valor: 0, descricao: 'uber' })] });
+  p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ valor: 0, descricao: 'uber' })] });
   ok(p.action === 'falta_valor' && p.description === 'Uber', 'lançar sem valor de verdade = faltou o valor');
-  ok(P({ acao: 'falta_valor', faltou: 'parcela do pai', lancamentos: [] }).description === 'Parcela do pai' && P({ acao: 'consulta', faltou: '', lancamentos: [] }).action === 'consulta', 'faltou o valor e consulta');
+  ok(P({ acao: 'falta_valor', entendido: 'parcela do pai', lancamentos: [] }).description === 'Parcela do pai' && P({ acao: 'consulta', entendido: '', lancamentos: [] }).action === 'consulta', 'faltou o valor e consulta');
   ok(toPlan('não sei', TODAY) === null && P({ acao: 'xyz' }) === null && P({ acao: 'lancar', lancamentos: [L({ tipo: 'roubo' })] }) === null, 'resposta fora do formato: nada');
-  ok(P({ acao: 'lancar', faltou: '', lancamentos: Array.from({ length: 9 }, () => L({})) }).items.length === 5, 'no máximo 5 lançamentos por mensagem');
+  ok(P({ acao: 'lancar', entendido: '', lancamentos: Array.from({ length: 9 }, () => L({})) }).items.length === 5, 'no máximo 5 lançamentos por mensagem');
   ok(cleanDescription('saída terceira parcela celular 22 99105-3813') === 'Terceira parcela celular 22', 'descrição: sem "Saída" e sem telefone');
   // contexto: o jeito da pessoa vai junto
   const { db } = fakeDb(), data = db.data;
@@ -526,23 +526,23 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   db.data.categories.push({ id: 'c-fam', kind: 'out', name: 'Família', icon: 'i:users', legacy_key: null, archived: false, sort: 5 });
   const seen = [];
   const plans = [
-    [/pai.*3\/12.*350|350.*pai/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 350, data: TODAY, descricao: 'Parcela cartão do pai 3/12', categoria: 'Família', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
-    [/pai/, { acao: 'falta_valor', faltou: 'Parcela cartão do pai 3/12', lancamentos: [] }],
-    [/mercado e .*farm/, { acao: 'lancar', faltou: '', lancamentos: [
+    [/pai.*3\/12.*350|350.*pai/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'saida', valor: 350, data: TODAY, descricao: 'Parcela cartão do pai 3/12', categoria: 'Família', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
+    [/pai/, { acao: 'falta_valor', entendido: 'Parcela cartão do pai 3/12', lancamentos: [] }],
+    [/mercado e .*farm/, { acao: 'lancar', entendido: '', lancamentos: [
       { tipo: 'saida', valor: 50, data: TODAY, descricao: 'Mercado', categoria: 'Mercado', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' },
       { tipo: 'saida', valor: 30, data: TODAY, descricao: 'Farmácia', categoria: 'Farmácia', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
-    [/tv/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'cartao', valor: 2400, data: TODAY, descricao: 'TV', categoria: '', pagamento: 'credito', cartao: 'nubank', parcelas: 10, investimento: 'nao', conta_fixa: '' }] }],
-    [/aluguel/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 900, data: TODAY, descricao: 'Aluguel', categoria: '', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: 'Aluguel' }] }],
-    [/quanto/, { acao: 'consulta', faltou: '', lancamentos: [] }],
-    [/apaga/, { acao: 'desfazer', faltou: '', lancamentos: [] }],
-    [/pastel/, { acao: 'lancar', faltou: '', lancamentos: [{ tipo: 'saida', valor: 12, data: TODAY, descricao: 'Pastel', categoria: 'Mercado', pagamento: 'dinheiro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
+    [/tv/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'cartao', valor: 2400, data: TODAY, descricao: 'TV', categoria: '', pagamento: 'credito', cartao: 'nubank', parcelas: 10, investimento: 'nao', conta_fixa: '' }] }],
+    [/aluguel/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'saida', valor: 900, data: TODAY, descricao: 'Aluguel', categoria: '', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: 'Aluguel' }] }],
+    [/quanto/, { acao: 'consulta', entendido: '', lancamentos: [] }],
+    [/apaga/, { acao: 'desfazer', entendido: '', lancamentos: [] }],
+    [/pastel/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'saida', valor: 12, data: TODAY, descricao: 'Pastel', categoria: 'Mercado', pagamento: 'dinheiro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
   ];
   const understand = async (system, context, schema) => {
     seen.push({ system, context, schema });
     if (/quebrada/.test(context)) throw new Error('IA indisponível (Groq 503)');
     const msg = /Mensagem[^:]*: "([\s\S]*)"$/.exec(context)?.[1] ?? '';
     for (const [rx, plan] of plans) if (rx.test(msg)) return JSON.stringify(plan);
-    return '{"acao":"nada","faltou":"","lancamentos":[]}';
+    return '{"acao":"nada","entendido":"","lancamentos":[]}';
   };
   const { deps, asked } = botDeps(rpc, { understand, transcribe: async (id, vocab) => { seen.push({ vocab }); return { p1: 'Pagamento cartão pai parcela com Pix 3/12', p2: 'gastei 50 no mercado e 30 na farmácia', p3: 'apaga isso' }[id] ?? ''; } });
   const u = { user_id: ANA, name: 'Ana Souza', access: true, plan: 'trial', settings: {} };
