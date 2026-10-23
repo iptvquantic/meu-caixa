@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createHmac } from 'node:crypto';
-import { answer, matchCategory, MSG, serve } from './supabase/functions/whatsapp/bot.ts';
+import { answer, matchCategory, MSG, saidPayment, serve } from './supabase/functions/whatsapp/bot.ts';
 import { handle, kindOf, messagesOf, resetPhoneCache, signatureOk } from './supabase/functions/whatsapp/handler.ts';
 import { groq, speechText, toQuick } from './supabase/functions/whatsapp/groq.ts';
 import { cleanDescription, contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf } from './supabase/functions/whatsapp/understand.ts';
@@ -517,7 +517,7 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(!/tocou na aba/.test(contextOf('x', data, TODAY, { hint: { type: 'in' } })), 'aba só lembrada não vai para a IA');
   const voc = vocabOf(data);
   ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 440, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
-  ok(/nunca "cartao", mesmo falando de cartão/.test(UNDERSTAND) && /cartão da Luana/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor por extenso vira número/.test(UNDERSTAND) && /começa com "Entrada"/.test(UNDERSTAND) && UNDERSTAND.length < 3400, 'instruções curtas cobrem PIX x cartão, cartão de outra pessoa, parcela 3/12, valor falado e "Entrada/Saída"');
+  ok(/nunca "cartao", mesmo falando de cartão/.test(UNDERSTAND) && /cartão da Bruna/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor por extenso vira número/.test(UNDERSTAND) && /começa com "Entrada"/.test(UNDERSTAND) && UNDERSTAND.length < 3700, 'instruções curtas cobrem PIX x cartão, cartão de outra pessoa, parcela 3/12, valor falado e "Entrada/Saída"');
 }
 
 // ---------- entender pelo robô: frase com dúvida e áudio passam pela IA ----------
@@ -533,6 +533,7 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
       { tipo: 'saida', valor: 30, data: TODAY, descricao: 'Farmácia', categoria: 'Farmácia', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
     [/tv/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'cartao', valor: 2400, data: TODAY, descricao: 'TV', categoria: '', pagamento: 'credito', cartao: 'nubank', parcelas: 10, investimento: 'nao', conta_fixa: '' }] }],
     [/aluguel/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'saida', valor: 900, data: TODAY, descricao: 'Aluguel', categoria: '', pagamento: 'pix', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: 'Aluguel' }] }],
+    [/internet/, { acao: 'falta_valor', entendido: 'Internet', lancamentos: [] }],
     [/quanto/, { acao: 'consulta', entendido: '', lancamentos: [] }],
     [/apaga/, { acao: 'desfazer', entendido: '', lancamentos: [] }],
     [/pastel/, { acao: 'lancar', entendido: '', lancamentos: [{ tipo: 'saida', valor: 12, data: TODAY, descricao: 'Pastel', categoria: 'Mercado', pagamento: 'dinheiro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' }] }],
@@ -554,8 +555,12 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   // frase simples continua sem IA
   const n0 = seen.length; await answer(msg('mercado 52,90'), deps);
   ok(seen.length === n0 && lastAdd(db).category_id === 'c-merc' && count(db, 'ai_consume_for') === 1, 'frase simples ("mercado 52,90"): lança na hora, sem IA e sem gastar cota');
-  await answer(msg('pastel 12'), deps);
+  const rPastel = await answer(msg('pastel 12'), deps);
   ok(seen.length === n0 + 1 && lastAdd(db).amount === 12, 'sem pista da categoria ("pastel 12"): a IA decide');
+  ok(/💸 \*Saída\* de \*R\$ 12,00\*\n/.test(rPastel) && !/dinheiro/.test(rPastel), 'forma de pagamento que a pessoa não disse (a IA chutou "dinheiro") não aparece');
+  ok(saidPayment('Paguei 52 no pics do mercado', 'pix') === 'pix' && saidPayment('emprestei 500 pro carlos', 'dinheiro') === 'outro' && saidPayment('gasolina 150 no débito', 'debito') === 'debito'
+    && saidPayment('Transferi 500 para a conta da minha esposa.', 'transferencia') === 'transferencia' && saidPayment('Recebi 30 do Fábio', 'pix') === 'outro' && saidPayment('x', 'qualquer') === 'outro',
+    'forma de pagamento só quando dita (inclui "pics" do áudio)');
   // áudio sem o valor: pede o valor; a próxima mensagem completa
   const pend = []; const appDeps = { ...deps, onPending: (x) => pend.push(x), onUndo: () => pend.push('UNDO') };
   r = await serve({ phone: 'app', kind: 'audio', audioId: 'p1' }, u, appDeps);
@@ -575,6 +580,10 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   r = await answer(msg('paguei o aluguel no pix'), deps); t = lastAdd(db);
   ok(t.recurring_id === 'r-alug' && t.amount === 900, 'conta fixa que a IA reconheceu: marcada como paga');
   has(await answer(msg('paguei o aluguel no pix'), deps), 'já estava', '... e não paga 2x');
+  // conta fixa falada sem o valor: se a IA pedir o valor, o valor é o da conta fixa (não pergunta)
+  db.data.recurring.push({ id: 'r-net', type: 'out', name: 'Internet', amount: 99.9, day: 20, start_month: '2026-01', end_month: null, active: true, category_id: null, card_id: null });
+  r = await answer({ phone: PHONE, kind: 'audio', audioId: 'net', lastHour: 1 }, { ...deps, transcribe: async () => 'Paguei a internet.' }); t = lastAdd(db);
+  ok(t.recurring_id === 'r-net' && t.amount === 99.9 && !/faltou o valor/.test(r), 'conta fixa falada sem valor ("paguei a internet"): lança com o valor dela e marca como paga');
   // pergunta: Conselheiro; desfazer pelo app: o app desfaz
   r = await serve({ phone: 'app', kind: 'audio', audioId: 'p3' }, u, appDeps);
   ok(pend.at(-1) === 'UNDO', 'áudio "apaga isso" no app: o próprio app desfaz o último lançamento dele');

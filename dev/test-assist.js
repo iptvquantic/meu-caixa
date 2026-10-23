@@ -2,7 +2,9 @@
 // Chromium), câmera (no celular, a câmera do aparelho pelo campo com capture; no computador, a webcam falsa do
 // Chromium), foto escolhida (reduzida para JPEG no navegador) e texto — no Início, no Novo lançamento e no Assistente.
 // Confere o que vai para o robô (tipo e conteúdo do arquivo), que a câmera desliga e que a foto não fica no app.
-const path = require('path');
+// Voz que envia sozinha: o microfone falso toca um áudio de "fala" (1,2 s) seguida de silêncio, e o app tem que
+// mandar sem ninguém tocar em Enviar; depois, Desfazer e Corrigir no aviso.
+const fs = require('fs'), os = require('os'), path = require('path');
 const { launch, routeSite, appHtml, SITE, checker, sleep } = require('./lib');
 const { ok, done } = checker('Lançar com IA (voz, câmera, foto e texto no navegador)');
 const ICON = path.join(__dirname, '..', 'icon-512.png'), ICON2 = path.join(__dirname, '..', 'icon-192.png');
@@ -38,6 +40,19 @@ async function choose(p, sel, file) {
   await chooser.accept([file]); await sleep(1300);
 }
 const toastText = p => p.$eval('#toast-root', e => e.textContent);
+// WAV de teste: 0,4 s de silêncio, 1,2 s de "fala" (tom que sobe e desce, como sílabas) e 4 s de silêncio
+function speechWav(file) {
+  const rate = 48000, parts = [[0.4, 0], [1.2, 1], [4, 0]], n = parts.reduce((a, [t]) => a + Math.round(t * rate), 0);
+  const b = Buffer.alloc(44 + n * 2);
+  b.write('RIFF', 0); b.writeUInt32LE(36 + n * 2, 4); b.write('WAVEfmt ', 8); b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22);
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28); b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34); b.write('data', 36); b.writeUInt32LE(n * 2, 40);
+  let i = 0;
+  for (const [t, on] of parts) for (let k = 0; k < Math.round(t * rate); k++, i++) {
+    const x = k / rate, v = on ? 0.45 * Math.sin(2 * Math.PI * 220 * x) * (0.55 + 0.45 * Math.sin(2 * Math.PI * 4 * x)) : 0;
+    b.writeInt16LE(Math.round(v * 32767), 44 + i * 2);
+  }
+  fs.writeFileSync(file, b);
+}
 const inputsEmpty = p => p.evaluate(() => ['photo-cam', 'photo-pick'].every(id => { const i = document.getElementById(id); return i.value === '' && (!i.files || i.files.length === 0); }));
 
 (async () => {
@@ -134,5 +149,32 @@ const inputsEmpty = p => p.evaluate(() => ['photo-cam', 'photo-pick'].every(id =
   ok(c && c.image && (await opened()).at(-1) === 'photo-pick' && await p.evaluate(() => window.__mc.CAM.stream === null), 'sem querer a webcam: "Escolher arquivo" usa a galeria e a câmera desliga');
   ok(errs.length === 0, 'computador: sem erros de JavaScript' + (errs.length ? ': ' + errs.join(' | ').slice(0, 300) : ''));
   await br.close();
+
+  // ======================= voz que envia sozinha =======================
+  const wav = path.join(os.tmpdir(), 'mc-fala-teste.wav');
+  speechWav(wav);
+  const br2 = await launch(['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${wav}%noloop`]);
+  ({ p, errs, calls } = await open(br2, true));
+  await p.click('#mnav .fab'); await sleep(400);
+  await p.click('[data-act="asMic"]');
+  // durante a "fala" o medidor sobe; ninguém toca em Enviar
+  let peak = 0;
+  for (let k = 0; k < 14; k++) {
+    await sleep(100);
+    peak = Math.max(peak, await p.evaluate(() => Math.max(0, ...[...document.querySelectorAll('.lvl i')].map(i => +((/scaleY\(([\d.]+)\)/.exec(i.style.transform) || [])[1] || 0)))));
+  }
+  ok(peak > 0.45, 'medidor sobe com a voz (escala ' + peak.toFixed(2) + ')');
+  ok(/envio quando você parar/.test(await p.$eval('#as-row .rec small', e => e.textContent).catch(() => '')), 'avisa que envia quando a pessoa parar de falar');
+  await p.waitForFunction(() => window.__calls.length > 0, { timeout: 7000 }).catch(() => { });
+  c = (await calls())[0];
+  ok(c && c.audio && c.audio.mime === 'audio/wav', 'parou de falar: o áudio foi enviado sozinho, sem tocar em Enviar');
+  await sleep(400);
+  const acts = await p.$$eval('#toast-root [data-act="toastAction"]', b => b.map(x => x.textContent));
+  ok(acts.join(',') === 'Desfazer,Corrigir' && /🎙️ “mercado 52,90” → Saída/.test(await toastText(p)), 'aviso com o que ouviu, Desfazer e Corrigir: ' + acts.join(','));
+  await p.click('#toast-root [data-act="toastAction"][data-i="1"]'); await sleep(500);
+  ok(/Editar lançamento/.test(await p.$eval('#tx-title', e => e.textContent).catch(() => '')), 'Corrigir abre o lançamento para ajustar');
+  ok(errs.length === 0, 'voz automática: sem erros de JavaScript' + (errs.length ? ': ' + errs.join(' | ').slice(0, 300) : ''));
+  await br2.close();
+  try { fs.unlinkSync(wav); } catch { }
   done();
 })().catch(e => { console.log('❌ exceção', e.stack || e.message); process.exit(1); });

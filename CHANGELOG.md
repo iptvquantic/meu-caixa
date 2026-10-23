@@ -10,7 +10,7 @@
   no silêncio ("Obrigado.", "Legendas…") são descartadas.
 - A IA entende a frase inteira, com o jeito de cada pessoa (categorias com exemplos dela, cartões, contas fixas e
   lançamentos parecidos): "pagamento cartão pai parcela com pix 3/12 350" vira saída por PIX com "3/12" na
-  descrição (antes virava compra no cartão), "cartão da Luana 300" é saída, "comprei em 10x no cartão" é compra
+  descrição (antes virava compra no cartão), "cartão da Bruna 300" é saída, "comprei em 10x no cartão" é compra
   parcelada, "Entrada Edson 30" é entrada sem "Entrada" na descrição, valor por extenso ("trezentos e
   cinquenta") vira número, e uma frase com dois valores vira dois lançamentos.
 - Faltou o valor ("Uber", "parcela do pai"): o app pergunta "Quanto foi?" e a resposta completa o lançamento.

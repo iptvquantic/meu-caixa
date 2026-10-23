@@ -146,7 +146,7 @@ function parseAmountBR(s) {
   const v = parseFloat(t);
   return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
 }
-// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Luana", "fatura" ou
+// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Bruna", "fatura" ou
 // "cartão do pai" = pagamento do cartão de outra pessoa (saída), que não é compra no cartão da própria pessoa
 const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei)( |$)| cartao$/;
 const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;

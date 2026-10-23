@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-AZMupJhtuTQqkruHE/mQujAKwap3USZdEo409rnfnGQ=' 'sha256-kXjfb/Y3fw5eLc91vJejlM5Vccn1vbNXeiFiErItn1c=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-AZMupJhtuTQqkruHE/mQujAKwap3USZdEo409rnfnGQ=' 'sha256-92eVXyB5nw0gZgwxVkbXx3a8fdvAxX88qE1o0/R0uIw=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -273,8 +273,12 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .as-out{margin-top:10px;padding:11px 13px;border-radius:12px;background:var(--surface);border:1px solid var(--border);font-size:14.5px;line-height:1.55}
 .as-out .c-muted{margin-bottom:6px}
 .rec,.as-busy{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-weight:700;color:var(--text);padding:10px 0}
-.rec small{color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rec .dot{width:11px;height:11px;border-radius:50%;background:var(--out);flex:none;animation:blink 1s infinite}
+.rec small{color:var(--muted);font-weight:600;font-size:12.5px;line-height:1.3;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.rec-t{font-variant-numeric:tabular-nums;flex:none}
+/* medidor de volume: as barras mexem com a voz */
+.lvl{display:inline-flex;align-items:center;gap:3px;height:26px;flex:none}
+.lvl i{width:4px;height:100%;border-radius:2px;background:var(--out);transform:scaleY(.12);transform-origin:center;transition:transform 70ms linear}
+.lvl.idle i{animation:blink 1s infinite}
 .as-busy{color:var(--text-2)}
 .spin{width:18px;height:18px;border-radius:50%;border:2.5px solid color-mix(in srgb,var(--accent) 28%,transparent);border-top-color:var(--accent);flex:none;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -385,14 +389,15 @@ input[type="month"].input{min-height:44px}
 @keyframes blink{50%{opacity:.25}}
 .composer{display:flex;gap:6px;margin-top:12px;align-items:flex-end}
 .composer .rec,.composer .as-busy{min-height:46px;padding:0 4px}
-.bubble .b-act{margin-top:8px}
+.bubble .b-act{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 18px}
 .bubble .b-act .link{display:inline-flex;align-items:center;gap:6px}
 .bubble .b-act svg.i{width:16px;height:16px}
 .composer textarea{resize:none;min-height:46px;max-height:140px}
 
 /* Toast */
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:12px;background:var(--text);color:var(--bg);padding:11px 14px;border-radius:14px;font-weight:700;font-size:14px;box-shadow:var(--shadow);width:max-content;max-width:min(calc(100vw - 24px),560px);animation:pop .18s ease}
-.toast button{color:var(--bg);text-decoration:underline;font-weight:800}
+.toast button{color:var(--bg);text-decoration:underline;font-weight:800;white-space:nowrap}
+.toast .t-acts{display:flex;gap:14px;flex:none}
 
 canvas{max-width:100%}
 .chartbox{position:relative;height:240px}
@@ -726,7 +731,7 @@ function parseAmountBR(s) {
   const v = parseFloat(t);
   return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
 }
-// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Luana", "fatura" ou
+// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Bruna", "fatura" ou
 // "cartão do pai" = pagamento do cartão de outra pessoa (saída), que não é compra no cartão da própria pessoa
 const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei)( |$)| cartao$/;
 const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;
@@ -2024,12 +2029,14 @@ function closeSheet() {
   if (top.prev && document.contains(top.prev)) top.prev.focus({ preventScroll: true });
 }
 const sheetHead = (id, title) => `<div class="sheet-h"><h3 id="${id}">${esc(title)}</h3><button class="iconbtn" data-act="closeSheet" aria-label="Fechar">${ico('x')}</button></div>`;
-let TOAST_T, TOAST_FN = null;
+let TOAST_T, TOAST_FN = null, TOAST_FNS = [];
+// action: { label, fn } ou uma lista delas (ex.: Desfazer e Corrigir)
 function toast(msg, action) {
-  const root = $('#toast-root');
-  root.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${action ? `<button data-act="toastAction">${esc(action.label)}</button>` : ''}</div>`;
-  TOAST_FN = action ? action.fn : null;
-  clearTimeout(TOAST_T); TOAST_T = setTimeout(() => { root.innerHTML = ''; TOAST_FN = null; }, action ? 8000 : 2800);
+  const root = $('#toast-root'), acts = (Array.isArray(action) ? action : [action]).filter(a => a && a.fn);
+  root.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${acts.length ? `<span class="t-acts">${acts.map((a, i) => `<button data-act="toastAction" data-i="${i}">${esc(a.label)}</button>`).join('')}</span>` : ''}</div>`;
+  TOAST_FNS = acts.map(a => a.fn); TOAST_FN = TOAST_FNS[0] || null;
+  // com ação, fica mais tempo (texto longo: o que o áudio entendeu)
+  clearTimeout(TOAST_T); TOAST_T = setTimeout(() => { root.innerHTML = ''; TOAST_FN = null; TOAST_FNS = []; }, acts.length ? (String(msg).length > 70 ? 10000 : 8000) : 2800);
 }
 function errMsg(e) {
   const m = String(e?.message || e || '');
@@ -2161,7 +2168,7 @@ function txQuickFill(text) {
 // Foto e áudio só passam pela memória do aparelho e pela IA: nada é salvo além do lançamento.
 const AS_UNDO = /^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/;
 const AS = { busy: '', draft: '', last: null, focus: false, pending: '' };
-const REC = { mr: null, chunks: [], t0: 0, tick: null, cancel: false, where: '' };
+const REC = { mr: null, chunks: [], t0: 0, tick: null, cancel: false, where: '', vad: null, hint: '' };
 // *negrito* e _itálico_ do WhatsApp → HTML (o texto é escapado antes)
 function waLite(s) {
   return esc(String(s || '')).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?:;])/gm, '$1<i>$2</i>').replace(/\n/g, '<br>');
@@ -2184,10 +2191,54 @@ async function shrinkImage(file, max = 1600) {
     return toJpeg(img, img.naturalWidth, img.naturalHeight, max);
   } finally { URL.revokeObjectURL(url); }
 }
-// ---------- gravação de voz (toque para gravar, toque em enviar) ----------
+// ---------- gravação de voz: toque para falar; quando você para de falar, envia sozinho ----------
 const recSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 const recTime = () => { const t = Math.floor((Date.now() - REC.t0) / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 function recUI() { if (REC.where === 'ai' || $('#ai-row')) aiRow(); asRow(); }
+// Medidor de volume e fim da fala, pelo próprio áudio do microfone (nada além do áudio que já vai ser enviado).
+// Depois de ~0,4 s de voz, 1,6 s de silêncio = terminou de falar: envia sozinho. Barulho alto o tempo todo (feira,
+// carro): o medidor mostra que está ouvindo e a pessoa toca em Enviar. Sem Web Audio no aparelho: só o botão.
+const VAD = { frame: 60, minSpeech: 400, quiet: 1600, noVoice: 4500 };
+function vadStart(stream) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  try {
+    const ac = new AC(), an = ac.createAnalyser();
+    an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
+    if (ac.state === 'suspended') ac.resume().catch(() => { });
+    return { ac, an, buf: new Float32Array(an.fftSize), noise: -1, voiced: 0, lastVoice: 0, level: 0, heard: false };
+  } catch { return null; }
+}
+// um passo do medidor: devolve true quando a pessoa terminou de falar
+function vadStep(v, now) {
+  v.an.getFloatTimeDomainData(v.buf);
+  let sum = 0;
+  for (let i = 0; i < v.buf.length; i++) sum += v.buf[i] * v.buf[i];
+  const rms = Math.sqrt(sum / v.buf.length);
+  // ruído de fundo: o menor volume recente (desce na hora, sobe devagar)
+  v.noise = v.noise < 0 ? rms : rms < v.noise ? rms : v.noise + (rms - v.noise) * 0.004;
+  if (rms > Math.max(0.012, v.noise * 3)) { v.voiced += VAD.frame; v.lastVoice = now; if (v.voiced >= VAD.minSpeech) v.heard = true; }
+  const lvl = Math.max(0, Math.min(1, (20 * Math.log10(rms + 1e-6) + 55) / 40)); // voz baixa também mexe
+  v.level = v.level * 0.45 + lvl * 0.55;
+  return v.heard && now - v.lastVoice > VAD.quiet;
+}
+function vadStop(v) { if (v && v.ac) try { v.ac.close(); } catch { /* já fechado */ } }
+const REC_BARS = [0.55, 0.85, 1, 0.85, 0.55];
+const recHint = () => {
+  const v = REC.vad, t = Date.now() - REC.t0;
+  if (!v) return 'Fale e toque em enviar';
+  if (v.heard) return 'Ouvindo… envio quando você parar';
+  return t > VAD.noVoice ? 'Não estou ouvindo: fale mais perto' : 'Pode falar';
+};
+// a cada passo: contador, medidor e o aviso (só os textos mudam; os botões ficam, para o toque em Enviar não se perder)
+function recTick() {
+  const now = Date.now(), v = REC.vad, done = v ? vadStep(v, now) : false;
+  for (const el of $$('.rec-t')) el.textContent = recTime();
+  const hint = recHint();
+  if (hint !== REC.hint) { REC.hint = hint; for (const el of $$('.rec small')) el.textContent = hint; }
+  for (const bar of $$('.lvl i')) bar.style.transform = `scaleY(${v ? (0.12 + 0.88 * v.level * REC_BARS[bar.dataset.k | 0]).toFixed(3) : 0.3})`;
+  if (done || now - REC.t0 > 60e3) recStop(false);
+}
 async function recStart(where, onDone) {
   if (REC.mr) return;
   if (!recSupported()) { toast('Este navegador não grava áudio. Escreva a mensagem.'); return; }
@@ -2197,20 +2248,19 @@ async function recStart(where, onDone) {
   const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x)) || '';
   let mr;
   try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch { stream.getTracks().forEach(x => x.stop()); toast('Não consegui gravar neste aparelho.'); return; }
-  Object.assign(REC, { mr, chunks: [], t0: Date.now(), cancel: false, where });
+  Object.assign(REC, { mr, chunks: [], t0: Date.now(), cancel: false, where, vad: vadStart(stream), hint: '' });
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = () => {
-    stream.getTracks().forEach(x => x.stop()); clearInterval(REC.tick);
+    stream.getTracks().forEach(x => x.stop()); clearInterval(REC.tick); vadStop(REC.vad);
     const blob = new Blob(REC.chunks, { type: mr.mimeType || type || 'audio/webm' }), cancel = REC.cancel, secs = (Date.now() - REC.t0) / 1000;
-    Object.assign(REC, { mr: null, chunks: [], where: '' });
+    Object.assign(REC, { mr: null, chunks: [], where: '', vad: null, hint: '' });
     recUI();
     if (cancel) return;
     if (secs < 0.8 || blob.size < 600) { toast('Áudio curto demais: fale o lançamento e toque em enviar.'); return; }
     onDone(blob);
   };
   mr.start(250);
-  // só o contador muda enquanto grava (trocar os botões a cada meio segundo engoliria o toque em Enviar)
-  REC.tick = setInterval(() => { for (const el of $$('.rec-t')) el.textContent = recTime(); if (Date.now() - REC.t0 > 60e3) recStop(false); }, 500);
+  REC.tick = setInterval(recTick, VAD.frame);
   recUI();
 }
 function recStop(cancel) { if (REC.mr && REC.mr.state !== 'inactive') { REC.cancel = !!cancel; REC.mr.stop(); } }
@@ -2247,7 +2297,7 @@ async function audioOf(blob) {
   if (!wav) { toast('Não ouvi nada no áudio. Fale perto do microfone e tente de novo.'); return null; }
   return { mime: (wav.type || 'audio/webm').split(';')[0], data: await blobB64(wav) };
 }
-const recHTML = (hint) => `<div class="rec" role="status"><i class="dot" aria-hidden="true"></i><span class="rec-t">${recTime()}</span><small>${hint}</small></div><button class="iconbtn" data-act="recCancel" aria-label="Cancelar gravação" title="Cancelar">${ico('x')}</button><button class="iconbtn as-go" data-act="recSend" aria-label="Enviar áudio" title="Enviar">${ico('send')}</button>`;
+const recHTML = () => `<div class="rec" role="status"><span class="lvl${REC.vad ? '' : ' idle'}" aria-hidden="true">${REC_BARS.map((_, k) => `<i data-k="${k}"></i>`).join('')}</span><span class="rec-t">${recTime()}</span><small>${esc(REC.hint || recHint())}</small></div><button class="iconbtn" data-act="recCancel" aria-label="Cancelar gravação" title="Cancelar">${ico('x')}</button><button class="iconbtn as-go" data-act="recSend" aria-label="Enviar áudio agora" title="Enviar agora">${ico('send')}</button>`;
 const busyHTML = label => `<div class="as-busy" role="status"><i class="spin" aria-hidden="true"></i><span>${esc(label)}</span></div>`;
 // ---------- foto: câmera agora (celular: a câmera do aparelho; computador: a webcam) ou uma foto/print salvo ----------
 const PHOTO = { where: 'tx' }, CAM = { stream: null, where: 'tx' };
@@ -2311,6 +2361,11 @@ function assistApply(r) {
   return list;
 }
 const txLabel = t => `${{ in: 'Entrada', out: 'Saída', card: 'Cartão', invest: 'Investimento' }[t.type] || 'Lançamento'} de ${money(t.amount)}${S.catMap[t.category_id] ? ' · ' + S.catMap[t.category_id].name : ''}`;
+// depois de lançar: Desfazer e, se algo saiu diferente, Corrigir (abre o lançamento já preenchido) ou Ver (vários)
+const launchedActions = list => [
+  { label: 'Desfazer', fn: () => asUndoMany(list.map(x => x.id)) },
+  list.length === 1 ? { label: 'Corrigir', fn: () => { if (S.txs.some(x => x.id === list[0].id)) openTx(list[0].id); } } : { label: 'Ver', fn: () => go('txs') },
+];
 const txsLabel = list => list.length === 1 ? txLabel(list[0]) : `${list.length} lançamentos: ${list.map(t => `${{ in: 'entrada', out: 'saída', card: 'cartão', invest: 'investimento' }[t.type] || ''} ${money(t.amount)}`).join(' + ')}`;
 // desfaz o que o assistente acabou de lançar (todos os lançamentos da mesma frase)
 async function asUndoMany(ids) {
@@ -2339,7 +2394,7 @@ const asHint = () => TX ? { type: TX.type, sure: !!(TX.touchedType || TX.touched
 const aiKinds = () => `<div class="ai-kinds">${[['in', 'entrada'], ['out', 'saída'], ['card', 'cartão'], ['invest', 'investimento']].map(([k, l]) => `<span style="--k:var(--${k})">${l}</span>`).join('')}</div>`;
 const aiTop = id => `<div class="ai-top"><span class="ai-badge" aria-hidden="true">${ico('sparkles')}</span><div><h4 id="${id}">Lançar com IA${store.get('mc_ai_used', false) ? '' : '<span class="ai-new">Novo</span>'}</h4><p>Fale, escreva ou fotografe o comprovante. Eu descubro se é:</p>${aiKinds()}</div></div>`;
 function asRowHTML() {
-  if (REC.mr && REC.where === 'tx') return `<div class="ai-live">${recHTML('Fale o lançamento')}</div>`;
+  if (REC.mr && REC.where === 'tx') return `<div class="ai-live">${recHTML()}</div>`;
   if (AS.busy) return `<div class="ai-live">${busyHTML(AS.busy)}</div>`;
   return `<div class="ai-btns">
       <button class="ai-btn primary" data-act="asCamera">${ico('camera')}<span>Tirar foto</span></button>
@@ -2374,7 +2429,7 @@ async function asRun(input, label) {
       if (!t.date.startsWith(S.month)) S.month = t.date.slice(0, 7);
       // no áudio, o aviso mostra o que foi entendido (dá para conferir de relance, sem abrir nada)
       const heard = r.heard ? `🎙️ “${r.heard.length > 70 ? r.heard.slice(0, 70) + '…' : r.heard}” → ` : '';
-      render(); toast(heard + txsLabel(list) + (input.image ? ' · foto descartada' : ''), { label: 'Desfazer', fn: () => asUndoMany(list.map(x => x.id)) });
+      render(); toast(heard + txsLabel(list) + (input.image ? ' · foto descartada' : ''), launchedActions(list));
       return;
     }
     if (r.removed) render();
@@ -2667,9 +2722,13 @@ function mdLite(s) {
   return html + (inList ? '</ul>' : '');
 }
 // resposta do robô (formato do WhatsApp) com Desfazer quando lançou algo
-const bubble = m => `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${(m.txIds || (m.txId ? [m.txId] : [])).length ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-ids="${esc((m.txIds || [m.txId]).join(','))}">${ico('undo-2')}Desfazer</button>`}</div>` : ''}</div>`;
+const bubble = m => {
+  const ids = m.txIds || (m.txId ? [m.txId] : []), one = ids.length === 1 && S.txs.some(x => x.id === ids[0]);
+  const acts = ids.length ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-ids="${esc(ids.join(','))}">${ico('undo-2')}Desfazer</button>${one ? `<button class="link" data-act="editTx" data-id="${esc(ids[0])}">${ico('pencil')}Corrigir</button>` : ''}`}</div>` : '';
+  return `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${acts}</div>`;
+};
 function aiRowHTML() {
-  if (REC.mr && REC.where === 'ai') return recHTML('Gravando… fale o lançamento ou a pergunta');
+  if (REC.mr && REC.where === 'ai') return recHTML();
   return `<label class="sr" for="ai-in">Mensagem para o assistente</label><textarea class="input" id="ai-in" rows="1" placeholder="Escreva ou fale: mercado 52,90" data-input="aiin">${esc(S.aiDraft || '')}</textarea>`
     + `<span id="ai-act">${aiActHTML()}</span>`;
 }
@@ -3188,7 +3247,7 @@ const ACT = {
   reseed: () => { Demo.reseed(); startApp(); toast('Dados de exemplo recriados'); },
   logout: async () => { closeAllSheets(); store.del('mc_snap'); await api.signOut(); S.user = null; S.txs = []; S.recs = []; S.goals = []; S.chat = []; if (S.mode === 'demo') location.reload(); },
   closeSheet: () => closeSheet(),
-  toastAction: () => { const fn = TOAST_FN; $('#toast-root').innerHTML = ''; TOAST_FN = null; fn && fn(); },
+  toastAction: el => { const fn = TOAST_FNS[+(el && el.dataset.i) || 0] || TOAST_FN; $('#toast-root').innerHTML = ''; TOAST_FN = null; TOAST_FNS = []; fn && fn(); },
   authTab: el => showAuth(el.dataset.tab),
   forgot: async () => {
     const email = $('#auth-email').value.trim();
@@ -3386,7 +3445,7 @@ async function boot() {
 }
 window.addEventListener('DOMContentLoaded', boot);
 
-if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, buildBackup, restoreV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory, insightItems, periodTotals, compareWindow, autoSteps, sideMini, applySide, resolveTheme, touchFirst, summaryHTML, isoOf, asRun, aiRun, sendAI, waLite, waUsable, localUndoTarget, REC, asRow, aiRow, guessType, explicitType, asHint, photoReady, PHOTO, CAM, openCamera, camStop, homeAiCard, tx: () => TX };
+if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, buildBackup, restoreV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory, insightItems, periodTotals, compareWindow, autoSteps, sideMini, applySide, resolveTheme, touchFirst, summaryHTML, isoOf, asRun, aiRun, sendAI, waLite, waUsable, localUndoTarget, REC, asRow, aiRow, guessType, explicitType, asHint, photoReady, PHOTO, CAM, openCamera, camStop, homeAiCard, tx: () => TX, VAD, vadStep, recTick, recHint, launchedActions, toast, recStart, recStop, toWav };
 })();
 </script>
 </body>

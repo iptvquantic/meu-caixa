@@ -271,7 +271,7 @@ const AMBIGUOUS = /(^| )(parcela|parcelas|prestacao|prestacoes|carne|financiamen
 export function confident(q: Quick, text: string, data: Data, hint?: Hint) {
   const n = norm(text);
   if (AMBIGUOUS.test(n)) return false;
-  if (/(^| )(cartao|credito)( |$)/.test(n)) return false; // "no cartão" x "cartão da Luana" x "cartão Nubank": a IA decide com a lista de cartões
+  if (/(^| )(cartao|credito)( |$)/.test(n)) return false; // "no cartão" x "cartão da Bruna" x "cartão Nubank": a IA decide com a lista de cartões
   if ((n.replace(/(^| )\d{1,2} ?x( |$)/g, ' ').match(/\d+(?:[.,]\d+)*/g) ?? []).length > 1) return false;
   const g = guessType(q, text, data, hint);
   if (g.by === 'padrao') return false;
@@ -289,7 +289,17 @@ function quickEntry(q: Quick, text: string, u: WaUser, d: BotDeps, data: Data, h
 // O que a IA entendeu → lançamentos, pedido do valor, desfazer ou pergunta livre (undefined)
 async function applyPlan(plan: Plan, text: string, u: WaUser, d: BotDeps, data: Data): Promise<string | null | undefined> {
   if (plan.action === 'lancar') return launch(plan.items, text, u, d, data);
-  if (plan.action === 'falta_valor') { d.onPending?.(text); return MSG.missing(plan.description, !!d.onPending); }
+  if (plan.action === 'falta_valor') {
+    // conta fixa do mês citada sem o valor ("paguei o aluguel", falado): o valor é o da conta fixa
+    if (feats(u).bills !== false) {
+      const today = d.today(), kind = /(^| )(recebi|recebido|recebida|recebimento)( |$)/.test(norm(text)) ? 'in' : 'out';
+      const bill = findBill(text, kind, data, today);
+      if (bill) return addEntry(u, d, { type: bill.rec.type, amount: Number(bill.rec.amount), installments: 1, date: today, description: bill.rec.name, investKind: null }, text, data, { bill });
+      const done = findBill(text, kind, data, today, true);
+      if (done) return `✅ *${done.rec.name}* já estava marcada como ${done.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
+    }
+    d.onPending?.(text); return MSG.missing(plan.description, !!d.onPending);
+  }
   if (plan.action === 'fatura') return MSG.invoicePaid;
   if (plan.action === 'desfazer') return d.onUndo ? (d.onUndo(), '↩️') : undo(u, d);
   return undefined; // consulta ou conversa: o Conselheiro responde
@@ -314,7 +324,7 @@ async function launch(items: Item[], text: string, u: WaUser, d: BotDeps, data: 
     const cat = named || (hist ? mine.find((c) => c.id === hist) ?? null : null) || matchCategory(it.description, kind, data);
     const card = it.type === 'card' ? cardByName(it.card, data) || (g.card_id ? data.cards.find((c) => c.id === g.card_id && !c.archived) ?? null : null) : null;
     const bill = it.bill ? bills.find((b) => norm(b.rec.name) === norm(it.bill)) ?? null : null;
-    const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: it.payment });
+    const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: saidPayment(text, it.payment) });
     if (r === MSG.fail || r === MSG.plan(d.appUrl)) return out.length ? out.join('\n\n') + '\n\n' + r : r;
     out.push(r);
   }
@@ -330,6 +340,13 @@ function saldoLine(u: WaUser, data: Data, today: string) {
 type BillMatch = { rec: RecX; due: string; status: string };
 type EntryOpts = { cat?: Category | null; card?: Card | null; bill?: BillMatch | null; head?: string; tail?: string; brief?: boolean; pay?: string };
 const PAY_TXT: Record<string, string> = { pix: 'PIX', debito: 'débito', dinheiro: 'dinheiro', boleto: 'boleto', transferencia: 'transferência' };
+// a forma de pagamento só aparece na confirmação se a pessoa disse (a IA às vezes chuta "pix" ou "dinheiro");
+// inclui o que o áudio costuma trocar ("pics")
+const PAY_SAID: Record<string, RegExp> = {
+  pix: /(^| )(pix|pics|piks|piques|pique|pixe)( |$)/, debito: /(^| )debito( |$)/, dinheiro: /(^| )(dinheiro|especie|em maos|cash)( |$)/,
+  boleto: /(^| )boleto( |$)/, transferencia: /(^| )(transferencia|transferi|transfere|ted|doc)( |$)/, credito: /(^| )(credito|cartao)( |$)/,
+};
+export const saidPayment = (text: string, pay: string) => PAY_SAID[pay]?.test(norm(text).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()) ? pay : 'outro';
 async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loaded?: Data, o: EntryOpts = {}): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
   const data: Data = loaded ?? await d.rpc('wa_data', { p_uid: u.user_id });

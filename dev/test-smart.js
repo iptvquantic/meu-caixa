@@ -66,7 +66,7 @@ eq(q('resgatei 200 do tesouro'), { type: 'invest', amount: 200, inst: 1, date: T
 // parcela de algo que já existe ("3/12") não é data; cartão de outra pessoa não é compra no cartão; "Entrada"/"Saída" saem da descrição
 eq(q('pagamento cartao pai parcela com pix 3/12 350'), { type: 'out', amount: 350, inst: 1, date: T, desc: 'Pagamento cartao pai parcela 3/12', kind: null }, 'parcela 3/12 do cartão do pai no PIX: saída, hoje, 3/12 na descrição');
 eq(q('pagamento cartao pai parcela com pix 3/12'), null, '... sem valor: não lança (3/12 não é valor)');
-eq(q('cartao luana 300'), { type: 'out', amount: 300, inst: 1, date: T, desc: 'Cartao luana', kind: null }, 'cartão da Luana: saída (pagamento do cartão dela)');
+eq(q('cartao bruna 300'), { type: 'out', amount: 300, inst: 1, date: T, desc: 'Cartao bruna', kind: null }, 'cartão da Bruna: saída (pagamento do cartão dela)');
 eq(q('mercado 50 cartão'), { type: 'card', amount: 50, inst: 1, date: T, desc: 'Mercado', kind: null }, '"cartão" no fim: pagou no cartão');
 eq(q('paguei a fatura do cartão 1500').type, 'out', 'fatura não é compra no cartão');
 eq(q('Entrada Edson Monsores 30'), { type: 'in', amount: 30, inst: 1, date: T, desc: 'Edson Monsores', kind: null }, '"Entrada" no começo: entrada, e sai da descrição');

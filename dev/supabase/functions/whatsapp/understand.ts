@@ -53,7 +53,7 @@ acao: "lancar" (1 a 5 lançamentos, um por valor citado); "falta_valor" (quer la
 
 tipo:
 - entrada: dinheiro que entrou (recebi, caiu, vendi, cliente pagou, me pagou, PIX recebido, salário, reembolso, me devolveu). Frase que começa com "Entrada" é entrada.
-- saida: saiu à vista (PIX, débito, dinheiro, boleto, transferência), conta paga, parcela de algo que já existe (empréstimo, carnê, celular, financiamento) e pagamento do cartão ou de conta de OUTRA pessoa ("cartão da Luana", "cartão do pai"). Frase que começa com "Saída" é saída.
+- saida: saiu à vista (PIX, débito, dinheiro, boleto, transferência), conta paga, parcela de algo que já existe (empréstimo, carnê, celular, financiamento) e pagamento do cartão ou de conta de OUTRA pessoa ("cartão da Bruna", "cartão do pai"). Frase que começa com "Saída" é saída.
 - cartao: compra NOVA no cartão de crédito DELA (da lista): "comprei no cartão", "no crédito", "parcelei em 10x", "mercado 50 cartão".
 - investimento: aplicou ou guardou (investi, aporte, poupança, caixinha, CDB, Tesouro, ações, cripto); tirou = investimento "resgate".
 
@@ -64,10 +64,11 @@ Regras:
 4. Valor por extenso vira número: "cinquenta e dois e noventa" = 52.9; "mil e duzentos" = 1200; "trinta conto" = 30. Telefone, data e número da parcela não são valor.
 5. data AAAA-MM-DD: sem data = hoje; "ontem"; "anteontem"; "dia 15" = o dia 15 mais recente já passado; "15/10". Nunca futura.
 6. descricao: 2 a 6 palavras com inicial maiúscula, do jeito dela (cliente, loja, pessoa, o que foi), sem valor, data, forma de pagamento nem as palavras entrada, saída, paguei, recebi. Ex.: "Parcela cartão do pai 3/12", "Edson Monsores", "Mercado Guanabara".
-7. categoria: nome EXATO da lista dela, do lado do tipo (saida e cartao usam as de saída). Os exemplos e os lançamentos parecidos mostram como ELA classifica: siga o mesmo (cliente de "Venda de IPTV" continua lá). Nenhuma serve: "".
-8. pagamento: só o que ela disse (pix, debito, dinheiro, boleto, transferencia, credito); senão "outro". cartao (só no tipo cartao): nome exato do cartão dela; não citou: "". conta_fixa: nome exato da conta fixa paga ou recebida (sem valor dito, use o valor dela); senão "".
-9. Áudio troca palavras de som parecido: corrija pelo contexto e pelos nomes da lista ("pics" = pix).
-10. Aba tocada no app (se informada) decide o tipo quando a frase não diz.
+7. categoria: nome EXATO da lista dela, do lado do tipo (saida e cartao usam as de saída), pelo QUE foi (mercado, ifood, gasolina, cliente) e nunca pela forma de pagamento: "PIX enviado"/"PIX recebido" só para dinheiro de ou para uma pessoa quando nenhuma outra serve. Os exemplos e os lançamentos parecidos mostram como ELA classifica: siga o mesmo (cliente de "Venda de IPTV" continua lá). Nenhuma serve: "".
+8. pagamento: só o que ela disse (pix, debito, dinheiro, boleto, transferencia, credito); senão "outro". cartao (só no tipo cartao): nome exato do cartão dela; não citou: "". conta_fixa: nome exato da conta fixa da lista que ela pagou ou recebeu; senão "".
+9. Pagou ou recebeu uma conta fixa da lista sem dizer o valor ("paguei o aluguel"): "lancar" com o valor da conta fixa, não "falta_valor".
+10. Áudio troca palavras de som parecido: corrija pelo contexto e pelos nomes da lista ("pics" = pix).
+11. Aba tocada no app (se informada) decide o tipo quando a frase não diz.
 Campos sem informação: "" (texto), 1 (parcelas), "nao" (investimento), "outro" (pagamento).`;
 
 const WEEK = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado'];
