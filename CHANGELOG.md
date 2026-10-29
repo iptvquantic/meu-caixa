@@ -1,5 +1,18 @@
 # Histórico de versões
 
+## 2.5.0 — 29/10/2026
+- Painel de clientes (só para o dono, conta master/admin): página Clientes no menu lateral do PC e no Menu do
+  celular. Mostra quantos estão em teste, pagantes, vencem em 7 dias, vencidos e bloqueados (cada número filtra a
+  lista), busca por nome, e-mail ou WhatsApp e, por cliente, plano, validade, cadastro, quantos lançamentos fez, o
+  último e o último acesso. Nunca mostra valores nem descrições dos lançamentos dos clientes.
+- Liberar plano depois do pagamento em dois toques: Mensal, Trimestral ou Anual (cada botão já mostra o preço e até
+  quando fica), +7 dias de cortesia, Bloquear (só leitura, nada é apagado) e Desbloquear, sempre com confirmação.
+  O aviso tem Desfazer: volta exatamente ao que era antes do ajuste.
+- Cobrar no WhatsApp: abre a conversa com o cliente com a data de vencimento e os links de pagamento dos planos.
+- Segurança: tudo passa por funções do banco que conferem se quem pede é o dono e registram cada mudança (quem,
+  em quem, o que era e o que ficou). Conta master/admin não muda pelo painel. Cliente comum não vê nem chama nada
+  disso (testado no Postgres de verdade).
+
 ## 2.4.0 — 29/10/2026
 - Voz que envia sozinha: toque em Falar, fale normalmente e, quando você parar de falar, o app envia (sem
   precisar tocar em Enviar). Um medidor de volume mostra que está ouvindo; com barulho alto o tempo todo, é só

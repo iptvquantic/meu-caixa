@@ -13,6 +13,7 @@ create table if not exists auth.users (
   email text,
   created_at timestamptz not null default now()
 );
+alter table auth.users add column if not exists last_sign_in_at timestamptz;
 create or replace function auth.uid() returns uuid language sql stable as $$
   select nullif(coalesce(
     current_setting('request.jwt.claim.sub', true),

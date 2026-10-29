@@ -18,9 +18,9 @@ Postgres 16 e cria o usuário sozinho.
 
 | Comando | O que confere |
 |---|---|
-| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
-| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
-| `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
+| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.5 (painel de clientes: só o dono vê, filtros, busca, liberar plano com confirmação e Desfazer, bloquear, cobrança no WhatsApp, texto escapado); 2.4 (voz que envia sozinha, Corrigir, microfone); 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
+| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, painel de clientes (RPC com o login do dono, foco e teclado, função ainda não publicada), assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
+| `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); painel de clientes (só master/admin, contas de admin protegidas, datas, desfazer, registro de cada mudança); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
 | `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), entender a frase com a IA (plano conferido, PIX x cartão, parcela 3/12, faltou o valor, vários lançamentos, IA fora do ar), transcrição (modelos, vocabulário, silêncio), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
 | `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta, a foto do comprovante e o assistente do app (texto, áudio e foto gravando no banco). IA: chave publicável, login, limite, plano e leitura de comprovante. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
 | `npm run shots` | Prints em 360/390/1280 px nos 3 temas em `dev/shots/` e aviso se algo vaza na horizontal |
@@ -36,8 +36,9 @@ Postgres 16 e cria o usuário sozinho.
 | `migrations/01_v2_1_contas_fixas_metas.sql` | aplicada (`20261008212825`) |
 | `migrations/02_v2_1_1_desempenho.sql` — índices, regras de acesso mais baratas, menos privilégios | aplicada (`20261009112340`) |
 | `migrations/03_v2_2_whatsapp.sql` — robô do WhatsApp (números conectados, códigos, mensagens recebidas) | aplicada (`20261009151422`) |
+| `migrations/04_v2_5_admin.sql` — painel de clientes (`admin_users`, `admin_set_plan`, registro `admin_log`) | aplicada (`20261029163900`) |
 | `functions/ai/` — função "ai" (`index.ts` entrada mínima, `main.ts` Conselheiro e comprovante, `context.ts`, `receipt.ts`) | publicada do commit `0ba8ef4` (v16, 15/10/2026) |
-| `functions/whatsapp/` — robô e assistente (`index.ts` entrada mínima, `main.ts` ligações, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto, `smart.ts` lançamento rápido e tipo automático) | publicada do commit `132e38a` (v12, 15/10/2026) |
+| `functions/whatsapp/` — robô e assistente (`index.ts` entrada mínima, `main.ts` ligações, `handler.ts` Meta e app, `bot.ts` conversa, `groq.ts` IA/áudio, `receipt.ts` foto, `smart.ts` lançamento rápido e tipo automático) | publicada do commit `cde1864` (v13, 29/10/2026) |
 
 `test/estado.sql` prova que o repositório descreve a produção: monte o banco local só com o que já foi
 aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas por tipo têm que ser iguais
@@ -142,6 +143,21 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
   65 frases (faladas e escritas, no jeito do dono, nomes fictícios) com o `understand.ts` de um commit do GitHub,
   protegida por senha (só o hash vai no código) e desligando sozinha em poucas horas. 23/10/2026: todas certas com
   esforço baixo, contando as conferências do código acima (conta fixa, categoria pelo assunto).
+
+## Painel de clientes (2.5, só master/admin)
+
+- Página `admin` ("Clientes"): no menu lateral do PC e no Menu do celular, só quando `isOwner()`. Dados por
+  `admin_users()` (conta, plano, validade, quantos lançamentos, o último, último login e último ajuste; nunca valores
+  nem descrições). A conta master/admin não entra na lista.
+- Ações por `admin_set_plan(p_user, p_action)`: `mensal`/`trimestral`/`anual` (plano ativo, soma a partir da validade
+  atual ou de hoje se venceu), `mais7`, `bloquear`/`desbloquear` e `desfazer` (volta ao que era antes do último
+  ajuste, até 24 h). As duas funções conferem `is_admin()` (só uso interno) e cada mudança vai para `admin_log`
+  (quem, em quem, antes e depois). Conta master/admin não muda pelo painel.
+- No app: confirmação antes de gravar (com a data que vai ficar), aviso com Desfazer, cobrança no WhatsApp com os
+  links de `CFG.plans`. A prévia das datas usa a mesma conta do Postgres em UTC (`plusMonthsUTC`, `admApply`).
+- Testes: `test/rls_admin.sql` (41 conferências no Postgres de verdade), `test-app25.js` (jsdom, demonstração) e
+  `test-admin-live.js` (Chromium, caminho real com a CSP: parâmetros do RPC, login, foco, função não publicada).
+- Ícones novos (Lucide 1.57.0) entram com `node icons-add.js nome1 nome2…`.
 
 ## Publicar o app
 

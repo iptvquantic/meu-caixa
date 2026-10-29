@@ -71,7 +71,17 @@ SHOTS.push(
   ['m390-ai-corrigir-light', { w: 390, h: 844, theme: 'light', page: 'ai', setup: async p => { await p.evaluate(async () => { const M = window.__mc; M.Demo.assist = async () => { const t = M.Demo._ins('txs', { type: 'out', amount: 350, date: M.isoOf(new Date()), description: 'Parcela cartão do pai 3/12', category_id: null, card_id: null, installments: 1, invest_kind: null }); return { handled: true, txs: [t], tx: t, reply: '💸 *Saída* de *R$ 350,00* (PIX)\n🏷️ PIX enviado · 📅 hoje · Parcela cartão do pai 3/12' }; }; await M.sendAI('pagamento cartão pai parcela com pix 3/12 350'); }); await sleep(300); } }],
   ['m390-ia-lancado-dark', { w: 390, h: 844, theme: 'dark', page: 'home', setup: async p => { await openNew(p); await p.evaluate(() => window.__mc.asRun({ image: { mime: 'image/jpeg', data: 'QUJD' } }, 'Lendo o comprovante…')); await sleep(700); } }],
   ['d1280-camera-dark', { w: 1280, h: 860, theme: 'dark', page: 'home', setup: async p => { await p.click('[data-act="homeCamera"]'); await sleep(1500); } }],
-  ['m390-ai-tools-light', { w: 390, h: 844, theme: 'light', page: 'ai' }]
+  ['m390-ai-tools-light', { w: 390, h: 844, theme: 'light', page: 'ai' }],
+  // 2.5: painel de clientes do dono (lista, filtros, folha do cliente e confirmação)
+  ['m360-clientes-dark', { w: 360, h: 780, theme: 'dark', page: 'admin', full: true, setup: async () => { await sleep(300); } }],
+  ['m390-clientes-light', { w: 390, h: 844, theme: 'light', page: 'admin', full: true, setup: async () => { await sleep(300); } }],
+  ['m390-clientes-vencendo-cyber', { w: 390, h: 844, theme: 'cyber', page: 'admin', setup: async p => { await sleep(300); await p.click('.adm-stat[data-f="soon"]'); await sleep(200); } }],
+  ['d1280-clientes-cyber', { w: 1280, h: 860, theme: 'cyber', page: 'admin', setup: async () => { await sleep(300); } }],
+  ['d1280-clientes-light', { w: 1280, h: 860, theme: 'light', page: 'admin', setup: async () => { await sleep(300); } }],
+  ['m360-cliente-light', { w: 360, h: 780, theme: 'light', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => document.querySelector('#page .adm-row').click()); await sleep(300); } }],
+  ['m390-cliente-confirmar-dark', { w: 390, h: 844, theme: 'dark', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => document.querySelector('#page .adm-row').click()); await sleep(250); await p.click('.sheet [data-a="anual"]'); await sleep(250); } }],
+  ['d1280-cliente-dark', { w: 1280, h: 860, theme: 'dark', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => [...document.querySelectorAll('#page .adm-row')].find(r => /Diego/.test(r.textContent)).click()); await sleep(300); } }],
+  ['m390-cliente-bloquear-cyber', { w: 390, h: 844, theme: 'cyber', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => [...document.querySelectorAll('#page .adm-row')].find(r => /Bruno/.test(r.textContent)).click()); await sleep(250); await p.click('.sheet [data-a="bloquear"]'); await sleep(250); } }]
 );
 
 (async () => {
