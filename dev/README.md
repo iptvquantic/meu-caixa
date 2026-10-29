@@ -151,6 +151,18 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 3. Commit no `main`: o GitHub Pages publica em cerca de 1 minuto.
 4. Conferir no site (versão nova no `app.html` e no `sw.js`), nos logs e nos Advisors do Supabase.
 
+## Monitor diário (`.github/workflows/monitor.yml`)
+
+- Todo dia às 08:17 de Brasília o GitHub confere a página inicial, o app, a versão do `sw.js`, o banco
+  (`whatsapp?health=1` → `"db":true`) e a função `ai` (`ai?health=1` → `"ok":true`). Falhou → e-mail do GitHub
+  ("Run failed: Monitor Meu Caixa") com o que caiu no log.
+- A consulta ao banco também evita a pausa do Supabase grátis (o projeto é pausado depois de 7 dias sem uso; foi o que
+  aconteceu em 29/10/2026 — reativado pelo conector com `restore_project`, sem perder nada).
+- Rodar na hora e ver o resultado: `gh workflow run monitor.yml -R iptvquantic/meu-caixa` e depois
+  `gh run list -R iptvquantic/meu-caixa -w monitor.yml` / `gh run view <id> --log`.
+- O GitHub desliga agendamento de repositório público depois de 60 dias sem commit (avisa por e-mail antes): um
+  commit qualquer ou "Enable workflow" em Actions religa.
+
 ## Regras que não mudam
 
 - No código só a URL e a chave **publicável** do Supabase. Nunca chave secreta (`sb_secret_…`, `service_role`, chave da Groq).
