@@ -29,11 +29,15 @@ jobs:
           FN: https://jgqhtshcuyzytljkmmxd.supabase.co/functions/v1
         run: |
           set -euo pipefail
+          # o resultado vira anotação do GitHub (aparece no resumo da execução e pela API, sem baixar o log)
+          OK=""
+          fail() { echo "::error title=Meu Caixa com problema::$1" >&2; exit 1; }
           # projeto acordando (ou pausado e reativado) pode demorar: tenta de novo por ~2 minutos antes de acusar
-          get() { curl -fsS --retry 6 --retry-delay 20 --retry-all-errors --max-time 30 "$1" || { echo "❌ não respondeu: $1" >&2; return 1; }; }
-          check() { if grep -q -- "$2" <<<"$1"; then echo "✅ $3"; else echo "❌ $3: $(head -c 300 <<<"$1")"; exit 1; fi; }
+          get() { curl -fsS --retry 6 --retry-delay 20 --retry-all-errors --max-time 30 "$1" || fail "não respondeu: $1"; }
+          check() { if grep -q -- "$2" <<<"$1"; then echo "✅ $3"; OK="$OK$3 · "; else fail "$3: $(head -c 200 <<<"$1")"; fi; }
           home=$(get "$SITE/");               check "$home" 'Meu Caixa' 'página inicial'
           app=$(get "$SITE/app.html");        check "$app" 'MC_CONFIG' 'app'
-          sw=$(get "$SITE/sw.js");            check "$sw" "mc-[0-9]" "versão no ar: $(grep -o -m1 "mc-[0-9][0-9.]*" <<<"$sw")"
-          wa=$(get "$FN/whatsapp?health=1");  check "$wa" '"db":true' "banco e função whatsapp ($wa)"
-          ai=$(get "$FN/ai?health=1");        check "$ai" '"ok":true' "função ai ($ai)"
+          sw=$(get "$SITE/sw.js");            check "$sw" "mc-[0-9]" "versão $(grep -o -m1 "mc-[0-9][0-9.]*" <<<"$sw")"
+          wa=$(get "$FN/whatsapp?health=1");  check "$wa" '"db":true' "banco e função whatsapp $wa"
+          ai=$(get "$FN/ai?health=1");        check "$ai" '"ok":true' "função ai $ai"
+          echo "::notice title=Meu Caixa no ar::${OK% · }"
