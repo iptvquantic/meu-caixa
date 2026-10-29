@@ -1,5 +1,5 @@
-// Meu Caixa — o que o robô pede à Groq: responder pergunta, tirar o lançamento de uma frase sem número
-// ("gastei quarenta no uber") e transcrever áudio. A chave fica só nos Secrets (GROQ_API_KEY).
+// Meu Caixa — o que o robô pede à Groq: responder pergunta, entender a frase (understand.ts), tirar o lançamento
+// de uma frase sem número e transcrever áudio. A chave fica só nos Secrets (GROQ_API_KEY).
 import type { Quick } from './bot.ts';
 
 
@@ -35,19 +35,40 @@ export function toQuick(out: string, today: string): Quick | null {
 }
 
 // llama-3.3-70b-versatile saiu do ar na Groq em 16/08/2026: a reserva agora é o gpt-oss-20b
-export function groq(key: string, fetcher: typeof fetch = fetch, models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], base = 'https://api.groq.com/openai/v1') {
+// Áudio: o Whisper completo acerta mais português; o turbo fica de reserva. Trechos de silêncio viram frases
+// inventadas ("Legendas pela comunidade Amara.org", "Obrigado.") — esses são descartados.
+export const AUDIO_MODELS = ['whisper-large-v3', 'whisper-large-v3-turbo'];
+const JUNK = /^(legendas? (pela|por|da) .*|legendado .*|obrigad[oa]( por assistir| pela atenção)?|tchau|inscreva-se.*|ative o sininho.*|música|aplausos|risos|e aí|hum+|ah+|\.+|-+)$/i;
+export function speechText(j: any) {
+  const segs: any[] = Array.isArray(j?.segments) ? j.segments : [];
+  const kept = segs.length
+    ? segs.filter((s) => !(Number(s?.no_speech_prob) > 0.6 && Number(s?.avg_logprob) < -0.6)).map((s) => String(s?.text ?? '').trim())
+    : [String(j?.text ?? '').trim()];
+  const text = kept.filter((t) => t && !JUNK.test(t.replace(/[!.,…]+$/g, '').trim())).join(' ').replace(/\s+/g, ' ').trim();
+  return JUNK.test(text.replace(/[!.,…]+$/g, '').trim()) ? '' : text;
+}
+const errOf = async (r: Response) => { try { const j = await r.json(); return String(j?.error?.message ?? j?.message ?? '').slice(0, 200); } catch { return ''; } };
+
+export function groq(key: string, fetcher: typeof fetch = fetch, models = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'], base = 'https://api.groq.com/openai/v1', log?: (...a: unknown[]) => void) {
   const CHAT = `${base}/chat/completions`, AUDIO = `${base}/audio/transcriptions`;
-  async function chat(messages: { role: string; content: string }[], o: { maxTokens: number; temperature: number; json?: boolean; effort?: string }) {
+  type ChatOpts = { maxTokens: number; temperature: number; json?: boolean; schema?: Record<string, unknown>; effort?: string };
+  async function chat(messages: { role: string; content: string }[], o: ChatOpts) {
     if (!key) throw new Error('GROQ_API_KEY não configurada');
     let last = '';
     for (const model of models) {
-      const body: Record<string, unknown> = { model, messages, temperature: o.temperature, max_tokens: o.maxTokens };
-      if (o.json) body.response_format = { type: 'json_object' };
-      if (o.effort && model.startsWith('openai/gpt-oss')) body.reasoning_effort = o.effort;
-      const r = await fetcher(CHAT, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (r.ok) { const t = (await r.json())?.choices?.[0]?.message?.content?.trim(); if (t) return t as string; last = 'resposta vazia'; continue; }
-      last = `Groq ${r.status}`;
-      if (r.status === 401 || r.status === 403) break;
+      // formato estrito quando há esquema; se o modelo recusar o esquema, tenta só "JSON"
+      for (const fmt of o.schema ? ['schema', 'json'] : [o.json ? 'json' : '']) {
+        const body: Record<string, unknown> = { model, messages, temperature: o.temperature, max_tokens: o.maxTokens };
+        if (fmt === 'schema') body.response_format = { type: 'json_schema', json_schema: o.schema };
+        else if (fmt === 'json') body.response_format = { type: 'json_object' };
+        if (o.effort && model.startsWith('openai/gpt-oss')) body.reasoning_effort = o.effort;
+        const r = await fetcher(CHAT, { method: 'POST', headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (r.ok) { const t = (await r.json())?.choices?.[0]?.message?.content?.trim(); if (t) return t as string; last = 'resposta vazia'; break; }
+        last = `Groq ${r.status}`;
+        log?.('IA recusou', model, fmt || 'texto', r.status, await errOf(r));
+        if (r.status === 401 || r.status === 403) throw new Error('IA indisponível (' + last + ')');
+        if (r.status !== 400) break; // fora do ar ou limite: próximo modelo
+      }
     }
     throw new Error('IA indisponível (' + last + ')');
   }
@@ -55,18 +76,29 @@ export function groq(key: string, fetcher: typeof fetch = fetch, models = ['open
     ask: (system: string, question: string) => chat([{ role: 'system', content: system }, { role: 'user', content: question }], { maxTokens: 900, temperature: 0.5 }),
     extract: async (text: string, today: string) =>
       toQuick(await chat([{ role: 'system', content: EXTRACT }, { role: 'user', content: `Hoje é ${today}. Frase: ${text.slice(0, 500)}` }], { maxTokens: 300, temperature: 0, json: true, effort: 'low' }), today),
-    transcribe: async (audio: Blob, fileName = 'audio.ogg') => {
+    // entende a frase com o contexto da pessoa (understand.ts): resposta no formato estrito do esquema
+    interpret: (system: string, context: string, schema: Record<string, unknown>) =>
+      chat([{ role: 'system', content: system }, { role: 'user', content: context }], { maxTokens: 2000, temperature: 0, schema, effort: 'low' }),
+    // áudio → texto. vocab = nomes e termos da pessoa (o Whisper acerta mais o que já conhece)
+    transcribe: async (audio: Blob, fileName = 'audio.ogg', vocab = '') => {
       if (!key) throw new Error('GROQ_API_KEY não configurada');
-      const form = new FormData();
-      form.append('file', audio, fileName);
-      form.append('model', 'whisper-large-v3-turbo');
-      form.append('language', 'pt');
-      form.append('temperature', '0');
-      form.append('response_format', 'json');
-      form.append('prompt', 'Lançamentos em reais: mercado 52,90; uber 23 ontem; recebi 300 pix; notebook 3.600 em 12x.');
-      const r = await fetcher(AUDIO, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
-      if (!r.ok) throw new Error(`transcrição falhou (Groq ${r.status})`);
-      return String((await r.json())?.text ?? '').trim();
+      let last = '';
+      for (const model of AUDIO_MODELS) {
+        const form = new FormData();
+        form.append('file', audio, fileName);
+        form.append('model', model);
+        form.append('language', 'pt');
+        form.append('temperature', '0');
+        form.append('response_format', 'verbose_json');
+        form.append('prompt', (vocab || 'Lançamentos de dinheiro em reais: mercado 52,90; uber 23 ontem; recebi 300 no PIX; parcela 3/12; notebook 3.600 em 12x no cartão.').slice(0, 440));
+        const r = await fetcher(AUDIO, { method: 'POST', headers: { Authorization: `Bearer ${key}` }, body: form });
+        if (r.ok) return speechText(await r.json());
+        const why = await errOf(r);
+        last = `Groq ${r.status}${why ? ': ' + why : ''}`;
+        log?.('transcrição recusada', model, fileName, audio.size, r.status, why); // sem o áudio, sem a chave
+        if (r.status === 401 || r.status === 403) break;
+      }
+      throw new Error(`transcrição falhou (${last})`);
     },
   };
 }

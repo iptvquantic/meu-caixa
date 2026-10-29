@@ -1,7 +1,9 @@
-// Meu Caixa — robô do WhatsApp: entende a mensagem e devolve a resposta (lançar, pagar conta fixa,
-// ler comprovante por foto, consultar, desfazer, perguntar à IA). Tudo que fala com o mundo (banco, IA,
-// áudio, imagem) chega por "deps", então dá para testar sem internet (dev/test-bot.mjs).
+// Meu Caixa — robô do WhatsApp e "Lançar com IA" do app: entende a mensagem e devolve a resposta (lançar,
+// pagar conta fixa, ler comprovante por foto, consultar, desfazer, perguntar à IA). Frase simples e clara é
+// lançada na hora pelo lançamento rápido; áudio e frase com dúvida passam pela IA com o contexto da pessoa
+// (understand.ts). Tudo que fala com o mundo (banco, IA, áudio, imagem) chega por "deps" (dev/test-bot.mjs).
 import { explicitType, familyOf, guessType, iconIsSpecific, norm, parseQuick, suggestIcon } from './smart.ts';
+import { contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf, type Item, type Plan } from './understand.ts';
 import {
   addMonths, billsOfMonth, brl, buildContext, cardParts, goalValue, invoiceMonth, monthByCat, monthSums, r2, splitInstallments,
   type Card, type Cat, type Goal, type Rec, type TxR,
@@ -15,18 +17,24 @@ export type WaUser = { user_id: string; name: string; access: boolean; plan: str
 export type Quick = { type: string; amount: number; installments: number; date: string; description: string; investKind: string | null };
 // O que a tela do app diz sobre o tipo: a aba (sure = a pessoa tocou nela; pay = escolheu como pagou; card = qual cartão)
 export type Hint = { type: 'in' | 'out' | 'card' | 'invest'; sure?: boolean; pay?: boolean; card?: string };
-// image = foto ou imagem enviada como documento (text = legenda); doc = outro documento (PDF…); hint = só pelo app
-export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'doc' | 'other'; text?: string; audioId?: string; mediaId?: string; lastHour?: number; hint?: Hint };
+// image = foto ou imagem enviada como documento (text = legenda); doc = outro documento (PDF…); hint e context = só pelo app
+// (context = a frase anterior que ficou sem valor: "parcela do pai" + agora "350")
+export type Incoming = { phone: string; kind: 'text' | 'audio' | 'image' | 'doc' | 'other'; text?: string; audioId?: string; mediaId?: string; lastHour?: number; hint?: Hint; context?: string };
 export type BotDeps = {
   rpc: (fn: string, args: Record<string, unknown>) => Promise<any>;
   ask: (system: string, question: string) => Promise<string>;            // pergunta livre (Groq)
-  extract: (text: string, today: string) => Promise<Quick | null>;       // frase sem número ("gastei quarenta no uber")
-  transcribe: (audioId: string) => Promise<string>;                      // áudio → texto (Groq Whisper)
+  extract: (text: string, today: string) => Promise<Quick | null>;       // frase sem número (reserva, quando não há understand)
+  transcribe: (audioId: string, vocab?: string) => Promise<string>;      // áudio → texto (Groq Whisper; vocab = nomes da pessoa)
+  understand?: (system: string, context: string, schema: Record<string, unknown>) => Promise<string>; // entende a frase (IA)
   // foto do comprovante → tipo, valor, data, quem e categoria (null: não é comprovante legível; 'grande'/'tipo': imagem recusada)
   readReceipt: (mediaId: string, today: string, cats: ReceiptCats, note: string, userName: string) => Promise<Receipt | null | 'grande' | 'tipo'>;
   deleteTx: (uid: string, id: string) => Promise<boolean>;               // "desfazer": apaga o lançamento (id + dono)
   today: () => string;                                                   // AAAA-MM-DD em São Paulo
   appUrl: string;
+  // só pelo app: "desfazer" é feito pelo próprio app (último lançamento dele); faltou o valor → a próxima mensagem completa
+  onUndo?: () => void;
+  onPending?: (text: string) => void;
+  log?: (...a: unknown[]) => void;
 };
 
 const MONTHS = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
@@ -53,9 +61,12 @@ export const MSG = {
   pdf: 'Ainda não leio PDF. Mande uma *foto* ou um *print* do comprovante 📷',
   noReceipt: 'Não consegui ler esse comprovante 🧐 Tente uma foto mais de perto, com boa luz e o valor total aparecendo, ou escreva: _mercado 52,90_',
   bigImage: 'Essa imagem é grande demais para eu ler. Mande como *foto* (não como documento) ou um *print* da tela.',
-  noAudio: 'Não consegui entender o áudio. Pode repetir mais devagar ou escrever? Ex.: _uber 23 ontem_',
+  noAudio: 'Não ouvi nada no áudio 🎙️ Fale perto do microfone e tente de novo, ou escreva. Ex.: _uber 23 ontem_',
+  missing: (what: string, app: boolean) => `Entendi${what ? ` *${what}*` : ''}, mas faltou o valor. ${app ? 'Quanto foi? Fale ou escreva só o valor (ex.: _350_).' : `Mande de novo com o valor, ex.: _${(what || 'mercado').toLowerCase()} 50_.`}`,
   limit: (n: number) => `Você já usou as ${n} perguntas/áudios de hoje. Amanhã libera de novo.\nLançar por texto e consultar (*saldo*, *fatura*, *contas*) continuam funcionando.`,
   fail: 'Tive um problema agora e não consegui terminar. Tente de novo em instantes.',
+  audioFail: 'Não consegui ouvir esse áudio agora 🎙️ Grave de novo ou escreva. Ex.: _uber 23 ontem_',
+  busy: 'A IA está ocupada agora 😅 Tente de novo em 1 minuto ou escreva com o valor, ex.: _mercado 52,90_.',
   invoicePaid: '💳 Pagar a fatura não precisa de lançamento: as compras do cartão já contam no saldo (cada parcela no mês da fatura). Para conferir, mande *fatura*.',
 };
 const HELP_BODY = '*Para lançar*, mande:\n• mercado 52,90\n• recebi 300 pix\n• notebook 3.600 12x _(cartão)_\n• uber 23 ontem\n• investi 500\n• paguei aluguel _(conta fixa)_\n🎙️ Também entendo *áudio*.\n📷 Mande a *foto ou o print de um comprovante* (compra, PIX enviado ou recebido) e eu lanço.\n\n*Para consultar*: saldo · fatura · contas · metas\n*Errou?* desfazer\n\nOu pergunte o que quiser: _posso gastar 300 este mês?_';
@@ -153,78 +164,222 @@ export async function serve(m: Incoming, u: WaUser, d: BotDeps, o: { noAI?: bool
   if (m.kind === 'doc') return MSG.pdf;
   if (m.kind === 'other') return null;
 
-  let text = (m.text ?? '').trim(), heard = '';
+  let text = (m.text ?? '').trim(), heard = '', data: Data | undefined;
   if (m.kind === 'audio') {
     const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
     if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
-    text = (await d.transcribe(m.audioId ?? '')).trim();
+    data = await d.rpc('wa_data', { p_uid: u.user_id }) as Data;
+    try { text = (await d.transcribe(m.audioId ?? '', vocabOf(data))).trim(); } // os nomes da pessoa ajudam a transcrição
+    catch (e) { d.log?.('áudio', e instanceof Error ? e.message : e); return MSG.audioFail; }
     if (!text) return MSG.noAudio;
     heard = `🎙️ _"${text.length > 200 ? text.slice(0, 200) + '…' : text}"_\n\n`;
   }
   if (!text) return null;
-  const reply = await route(text, u, d, m.kind === 'audio', !!o.noAI, m.hint);
+  const context = (m.context ?? '').replace(/\s+/g, ' ').trim().slice(0, 300);
+  const reply = await route(text, u, d, { fromAudio: m.kind === 'audio', noAI: !!o.noAI, hint: m.hint, data, context });
   return reply ? heard + reply : null;
 }
 
-async function route(text: string, u: WaUser, d: BotDeps, fromAudio: boolean, noAI = false, hint?: Hint): Promise<string | null> {
-  const n = norm(text).replace(/[!.?…]+$/g, '').trim(), today = d.today();
-  let loaded: Data | undefined;
+const UNDO_RX = /^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/;
+type RouteOpts = { fromAudio?: boolean; noAI?: boolean; hint?: Hint; data?: Data; context?: string };
+async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): Promise<string | null> {
+  const n = norm(text).replace(/[!.?…]+$/g, '').trim(), today = d.today(), noAI = !!ro.noAI;
+  let loaded = ro.data;
   const load = async () => loaded ??= await d.rpc('wa_data', { p_uid: u.user_id }) as Data;
   if (!/[\p{L}\p{N}]/u.test(n) || ACK.test(n)) return null; // "ok", "obrigado", só emoji: não precisa responder
   if (/^(oi|ola|ola robo|bom dia|boa tarde|boa noite|ajuda|menu|comandos|help|inicio)$/.test(n)) return MSG.help(u.name);
-  if (/^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/.test(n)) return undo(u, d);
+  if (UNDO_RX.test(n)) return d.onUndo ? (d.onUndo(), '↩️') : undo(u, d);
   if (/^(saldo|resumo|balanco|como estou|como to|meu mes|o mes|mes)$/.test(n)) return summary(u, d, today);
   if (/^(fatura|faturas|cartao|cartoes|fatura do cartao)$/.test(n)) return invoices(u, d, today);
   if (/^(contas|contas fixas|a pagar|a receber|vencimentos|boletos|contas do mes)$/.test(n)) return feats(u).bills === false ? 'As *contas fixas* estão desligadas nos Ajustes do app.' : bills(u, d, today);
   if (/^(metas|meta|limites|objetivos)$/.test(n)) return feats(u).goals === false ? 'As *metas* estão desligadas nos Ajustes do app.' : goals(u, d, today);
 
-  let counted = fromAudio; // o áudio já gastou 1 da cota de IA do dia
-  if (!isQuestion(text)) {
-    let q = parseQuick(text, today) as Quick | null;
+  // a frase anterior que ficou sem valor + esta ("parcela do pai" + "350")
+  const full = ro.context ? `${ro.context}. ${text}` : text, fn = norm(full).replace(/[!.?…]+$/g, '').trim();
+  let counted = !!ro.fromAudio; // o áudio já gastou 1 da cota de IA do dia
+  if (ro.fromAudio || ro.context || !isQuestion(text)) {
+    const q = parseQuick(full, today) as Quick | null;
+    const simple = !ro.fromAudio && !ro.context;
     // "paguei aluguel" / "recebi mensalidade rogério": conta fixa do mês, sem precisar do valor
-    if (!q && PAY_VERB.test(n) && feats(u).bills !== false) {
+    if (simple && !q && PAY_VERB.test(fn) && feats(u).bills !== false) {
       const data = await load();
-      const bill = findBill(text, /^(recebi|recebido)/.test(n) ? 'in' : 'out', data, today);
+      const bill = findBill(text, /^(recebi|recebido)/.test(fn) ? 'in' : 'out', data, today);
       if (bill) return addEntry(u, d, { type: bill.rec.type, amount: Number(bill.rec.amount), installments: 1, date: today, description: bill.rec.name, investKind: null }, text, data);
-      const done = findBill(text, /^(recebi|recebido)/.test(n) ? 'in' : 'out', data, today, true);
+      const done = findBill(text, /^(recebi|recebido)/.test(fn) ? 'in' : 'out', data, today, true);
       if (done) return `✅ *${done.rec.name}* já estava marcada como ${done.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
     }
-    // "paguei a fatura": as compras do cartão já contam (a não ser que a fatura seja uma conta fixa cadastrada)
-    if (/(^| )faturas?( |$)/.test(n) && INVOICE_PAY.test(n)) {
+    // "paguei a fatura" / "paguei o cartão 1500": as compras do próprio cartão já contam (a não ser que a fatura seja
+    // uma conta fixa cadastrada, ou que a pessoa não tenha cartão no app: aí é uma saída como outra qualquer)
+    if ((/(^| )faturas?( |$)/.test(fn) && INVOICE_PAY.test(fn) && !/(^| )(pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|amigo|amiga|namorada|namorado|tio|tia|avo)( |$)/.test(fn))
+      || ownCardPayment(fn, await load())) {
       const data = await load();
-      if (feats(u).bills === false || !(findBill(text, 'out', data, today) || findBill(text, 'out', data, today, true))) return MSG.invoicePaid;
+      if (data.cards.some((c) => !c.archived) && (feats(u).bills === false || !(findBill(full, 'out', data, today) || findBill(full, 'out', data, today, true)))) return MSG.invoicePaid;
     }
-    // frase de lançamento sem número ("gastei quarenta no uber", comum em áudio): a IA extrai
-    if (!q && (fromAudio || ENTRY_VERB.test(n))) {
+    // frase simples e clara ("mercado 52,90", "josimar 30"): lança na hora, sem gastar IA
+    if (simple && q && q.amount > 0) {
+      const data = await load();
+      if (confident(q, full, data, ro.hint)) return quickEntry(q, full, u, d, data, ro.hint);
+    }
+    if (d.understand) {
+      // áudio e frase com dúvida: a IA entende com o contexto da pessoa
       if (!counted) {
         const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
-        if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
+        if (!quota?.ok) {
+          if (q && q.amount > 0) return quickEntry(q, full, u, d, await load(), ro.hint); // sem cota: o lançamento rápido resolve
+          return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
+        }
         counted = true;
       }
-      q = await d.extract(text, today);
-    }
-    if (q && q.amount > 0) {
-      // tipo automático: a frase, o histórico da pessoa, as categorias dela e a aba do app (guessType, igual no app)
-      const data = await load(), g = guessType(q, text, data, hint);
-      const cat = g.category_id ? data.categories.find((c) => c.id === g.category_id) ?? null : null;
-      const card = g.card_id ? data.cards.find((c) => c.id === g.card_id) ?? null : null;
-      return addEntry(u, d, { ...q, type: g.type, investKind: g.investKind }, text, data, { cat, card });
+      const data = await load();
+      let plan: Plan | null = null, down = false;
+      try { plan = toPlan(await d.understand(UNDERSTAND, contextOf(full, data, today, { hint: ro.hint, fromAudio: ro.fromAudio }), SCHEMA), today); }
+      catch (e) { down = true; d.log?.('entender falhou', e instanceof Error ? e.message : e); }
+      if (plan) {
+        const r = await applyPlan(plan, full, u, d, data);
+        if (r !== undefined) return r;
+      } else if (q && q.amount > 0) return quickEntry(q, full, u, d, data, ro.hint); // IA fora do ar: lançamento rápido
+      else if (down) return MSG.busy; // IA fora do ar e sem valor na frase: diz o que fazer (não fica pedindo para repetir)
+    } else {
+      // sem o "entender" (robô antigo): frase sem número pela IA de extração e o lançamento rápido
+      let x = q;
+      if (!x && (ro.fromAudio || ENTRY_VERB.test(fn))) {
+        if (!counted) {
+          const quota = await d.rpc('ai_consume_for', { p_uid: u.user_id });
+          if (!quota?.ok) return quota?.reason === 'limit' ? MSG.limit(quota.limit) : MSG.plan(d.appUrl);
+          counted = true;
+        }
+        x = await d.extract(full, today);
+      }
+      if (x && x.amount > 0) return quickEntry(x, full, u, d, await load(), ro.hint);
     }
   }
   return noAI ? null : askAI(text, u, d, today, counted);
 }
 
+// "paguei o cartão 1500", "pagamento do meu cartão", "paguei o Nubank": só palavras de pagar o cartão da própria pessoa
+const OWN_CARD = new Set(['paguei', 'pago', 'paga', 'quitei', 'pagamento', 'pagar', 'o', 'a', 'do', 'da', 'de', 'meu', 'minha', 'cartao', 'credito', 'fatura', 'reais', 'real', 'r', 'hoje', 'ontem']);
+function ownCardPayment(n: string, data: Data) {
+  const words = n.replace(/[\d.,$]+/g, ' ').split(/\s+/).filter(Boolean);
+  if (!words.some((w) => /^(paguei|pago|paga|quitei|pagamento|pagar)$/.test(w))) return false;
+  const cardWords = new Set(data.cards.filter((c) => !c.archived).flatMap((c) => norm(c.name).split(' ')));
+  if (!words.some((w) => w === 'cartao' || w === 'fatura' || (cardWords.has(w) && w.length > 3))) return false;
+  return words.every((w) => OWN_CARD.has(w) || cardWords.has(w));
+}
+// Frase que o lançamento rápido resolve sem dúvida: um valor só, sem parcela/fatura/pessoa da família, sem falar de
+// cartão, e com o tipo e a categoria já conhecidos (pelas palavras, pelo histórico ou pela aba tocada).
+const AMBIGUOUS = /(^| )(parcela|parcelas|prestacao|prestacoes|carne|financiamento|consorcio|fatura|emprestimo|emprestei|emprestou|emprestado|devolvi|devolveu|devolucao|estorno|reembolso|troco|metade|dividi|dividido|dividimos|cada|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|vo|avo)( |$)|\d+ ?\/ ?\d+|\d+ de \d+/;
+export function confident(q: Quick, text: string, data: Data, hint?: Hint) {
+  const n = norm(text);
+  if (AMBIGUOUS.test(n)) return false;
+  if (/(^| )(cartao|credito)( |$)/.test(n)) return false; // "no cartão" x "cartão da Bruna" x "cartão Nubank": a IA decide com a lista de cartões
+  if ((n.replace(/(^| )\d{1,2} ?x( |$)/g, ' ').match(/\d+(?:[.,]\d+)*/g) ?? []).length > 1) return false;
+  const g = guessType(q, text, data, hint);
+  if (g.by === 'padrao') return false;
+  const kind = g.type === 'in' ? 'in' : g.type === 'invest' ? 'invest' : 'out';
+  return !!(g.category_id || matchCategory(q.description, kind, data));
+}
+function quickEntry(q: Quick, text: string, u: WaUser, d: BotDeps, data: Data, hint?: Hint) {
+  // tipo automático: a frase, o histórico da pessoa, as categorias dela e a aba do app (guessType, igual no app)
+  const g = guessType(q, text, data, hint);
+  const cat = g.category_id ? data.categories.find((c) => c.id === g.category_id) ?? null : null;
+  const card = g.card_id ? data.cards.find((c) => c.id === g.card_id) ?? null : null;
+  return addEntry(u, d, { ...q, type: g.type, investKind: g.investKind }, text, data, { cat, card });
+}
+
+// O que a IA entendeu → lançamentos, pedido do valor, desfazer ou pergunta livre (undefined)
+async function applyPlan(plan: Plan, text: string, u: WaUser, d: BotDeps, data: Data): Promise<string | null | undefined> {
+  if (plan.action === 'lancar') return launch(plan.items, text, u, d, data);
+  if (plan.action === 'falta_valor') {
+    // conta fixa do mês citada sem o valor ("paguei o aluguel", falado): o valor é o da conta fixa
+    if (feats(u).bills !== false) {
+      const today = d.today(), kind = /(^| )(recebi|recebido|recebida|recebimento)( |$)/.test(norm(text)) ? 'in' : 'out';
+      const bill = findBill(text, kind, data, today);
+      if (bill) return addEntry(u, d, { type: bill.rec.type, amount: Number(bill.rec.amount), installments: 1, date: today, description: bill.rec.name, investKind: null }, text, data, { bill });
+      const done = findBill(text, kind, data, today, true);
+      if (done) return `✅ *${done.rec.name}* já estava marcada como ${done.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
+    }
+    d.onPending?.(text); return MSG.missing(plan.description, !!d.onPending);
+  }
+  if (plan.action === 'fatura') return MSG.invoicePaid;
+  if (plan.action === 'desfazer') return d.onUndo ? (d.onUndo(), '↩️') : undo(u, d);
+  return undefined; // consulta ou conversa: o Conselheiro responde
+}
+const PAY_CATS = new Set(['pix', 'pix_recebido']);
+// categoria pelo assunto da frase ("pix 35 ifood" → "Lanche / ifood"), sem as categorias de forma de pagamento nem "Outros"
+export function subjectCategory(text: string, kind: string, data: Data): Category | null {
+  const clean = norm(text).replace(/[^a-z0-9 ]+/g, ' ').replace(/(^| )(pix|pics|ted|doc|transferencia|transferi|debito|credito|dinheiro|boleto|enviado|recebido)(?= |$)/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!clean) return null;
+  const words = new Set(clean.split(' '));
+  const ok = (c: Category | null) => !!c && !PAY_CATS.has(String(c.legacy_key ?? '')) && c.legacy_key !== 'outros';
+  const byName = catsOfKind(kind, data).find((c) => ok(c) && norm(c.name).split(/[^a-z0-9]+/).some((w) => w.length >= 4 && words.has(w)));
+  if (byName) return byName;
+  const m = matchCategory(clean, kind, data);
+  return ok(m) ? m : null;
+}
+const cardByName = (name: string, data: Data) => {
+  const n = norm(name);
+  if (!n) return null;
+  const list = data.cards.filter((c) => !c.archived);
+  return list.find((c) => norm(c.name) === n) ?? list.find((c) => norm(c.name).includes(n) || n.includes(norm(c.name))) ?? null;
+};
+async function launch(items: Item[], text: string, u: WaUser, d: BotDeps, data: Data): Promise<string> {
+  if (!u.access) return MSG.plan(d.appUrl);
+  const today = d.today(), multi = items.length > 1, out: string[] = [];
+  const bills = feats(u).bills === false ? [] : billsOfMonth(data.recurring, data.transactions, today.slice(0, 7), today);
+  for (const it of items) {
+    const kind = it.type === 'in' ? 'in' : it.type === 'invest' ? 'invest' : 'out';
+    const mine = data.categories.filter((c) => c.kind === kind && !c.archived);
+    const q: Quick = { type: it.type, amount: it.amount, installments: it.installments, date: it.date, description: it.description, investKind: it.investKind };
+    // categoria: a que a IA escolheu da lista da pessoa > a que ela costuma usar para esse nome > a do ícone
+    const named = it.category ? mine.find((c) => norm(c.name) === norm(it.category)) ?? null : null;
+    const g = guessType(q, it.description, data, null), hist = g.catFor(kind);
+    let cat = named || (hist ? mine.find((c) => c.id === hist) ?? null : null) || matchCategory(it.description, kind, data);
+    // "PIX enviado"/"PIX recebido" dizem COMO foi, não O QUE foi: se a pessoa costuma pôr essas palavras em outra
+    // categoria, ou o nome de outra categoria está na frase, vale a outra. Se ela mesma usa o PIX para isso, fica.
+    if (cat && PAY_CATS.has(String(cat.legacy_key ?? '')) && hist !== cat.id) {
+      const habit = hist ? mine.find((c) => c.id === hist && !PAY_CATS.has(String(c.legacy_key ?? ''))) ?? null : null;
+      cat = habit || subjectCategory(multi ? it.description : `${it.description} ${text}`, kind, data) || cat;
+    }
+    const card = it.type === 'card' ? cardByName(it.card, data) || (g.card_id ? data.cards.find((c) => c.id === g.card_id && !c.archived) ?? null : null) : null;
+    const bill = it.bill ? bills.find((b) => norm(b.rec.name) === norm(it.bill)) ?? null : null;
+    const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: saidPayment(text, it.payment) });
+    if (r === MSG.fail || r === MSG.plan(d.appUrl)) return out.length ? out.join('\n\n') + '\n\n' + r : r;
+    out.push(r);
+  }
+  if (multi) out.push(saldoLine(u, data, today) + '\n_Errou? Responda *desfazer*._');
+  return out.join('\n\n');
+}
+function saldoLine(u: WaUser, data: Data, today: string) {
+  const month = today.slice(0, 7), parts = cardParts(data.transactions, data.categories, data.cards);
+  return `📊 Saldo de ${MONTHS[Number(month.slice(5, 7)) - 1]}: *${money(monthSums(data.transactions, parts, month, cardModeOf(u)).saldo)}*`;
+}
+
 // ---------------- lançar ----------------
-type EntryOpts = { cat?: Category | null; card?: Card | null; head?: string; tail?: string };
+type BillMatch = { rec: RecX; due: string; status: string };
+type EntryOpts = { cat?: Category | null; card?: Card | null; bill?: BillMatch | null; head?: string; tail?: string; brief?: boolean; pay?: string };
+const PAY_TXT: Record<string, string> = { pix: 'PIX', debito: 'débito', dinheiro: 'dinheiro', boleto: 'boleto', transferencia: 'transferência' };
+// a forma de pagamento só aparece na confirmação se a pessoa disse (a IA às vezes chuta "pix" ou "dinheiro");
+// inclui o que o áudio costuma trocar ("pics")
+const PAY_SAID: Record<string, RegExp> = {
+  pix: /(^| )(pix|pics|piks|piques|pique|pixe)( |$)/, debito: /(^| )debito( |$)/, dinheiro: /(^| )(dinheiro|especie|em maos|cash)( |$)/,
+  boleto: /(^| )boleto( |$)/, transferencia: /(^| )(transferencia|transferi|transfere|ted|doc)( |$)/, credito: /(^| )(credito|cartao)( |$)/,
+};
+export const saidPayment = (text: string, pay: string) => PAY_SAID[pay]?.test(norm(text).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()) ? pay : 'outro';
 async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loaded?: Data, o: EntryOpts = {}): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
   const data: Data = loaded ?? await d.rpc('wa_data', { p_uid: u.user_id });
   const today = d.today();
   let type = q.type, note = '';
-  // é uma conta fixa do mês? Só com "paguei/recebi…" ou com o mesmo valor da conta ("aluguel 900"),
-  // para uma compra comum ("mercado 50") não virar pagamento da conta "Mercado do mês"
-  let bill = type !== 'invest' && feats(u).bills !== false ? findBill(q.description || original, type === 'in' ? 'in' : 'out', data, today) : null;
-  if (bill && !(PAY_VERB.test(norm(original)) || Math.abs(Number(bill.rec.amount) - q.amount) < 0.005)) bill = null;
+  // é uma conta fixa do mês? A IA diz qual; sem ela, só com "paguei/recebi…" ou com o mesmo valor da conta
+  // ("aluguel 900"), para uma compra comum ("mercado 50") não virar pagamento da conta "Mercado do mês"
+  let bill: BillMatch | null = null;
+  if (o.bill && feats(u).bills !== false) {
+    if (o.bill.status === 'paid') return `✅ *${o.bill.rec.name}* já estava marcada como ${o.bill.rec.type === 'in' ? 'recebida' : 'paga'} este mês.`;
+    bill = o.bill;
+  } else {
+    bill = type !== 'invest' && feats(u).bills !== false ? findBill(q.description || original, type === 'in' ? 'in' : 'out', data, today) : null;
+    if (bill && !(PAY_VERB.test(norm(original)) || Math.abs(Number(bill.rec.amount) - q.amount) < 0.005)) bill = null;
+  }
   if (bill) type = bill.rec.type;
   const billCard = bill?.rec.card_id ? data.cards.find((c) => c.id === bill!.rec.card_id && !c.archived) : null;
   const card = type === 'card' ? billCard || (o.card && !o.card.archived ? o.card : null) || defaultCard(data) : null;
@@ -244,11 +399,12 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
     throw e;
   }
   if (!r?.ok) return r?.reason === 'plan' ? MSG.plan(d.appUrl) : MSG.fail;
+  data.transactions.unshift({ ...tx, ...(r.tx ?? {}) } as TxR & { id?: string }); // os próximos cálculos já contam com ele
 
   const lines: string[] = o.head ? [o.head] : [];
-  const v = `*${money(tx.amount)}*`;
+  const v = `*${money(tx.amount)}*`, how = type === 'out' && o.pay && PAY_TXT[o.pay] ? ` (${PAY_TXT[o.pay]})` : '';
   if (type === 'in') lines.push(`💰 *Entrada* de ${v}`);
-  else if (type === 'out') lines.push(`💸 *Saída* de ${v}`);
+  else if (type === 'out') lines.push(`💸 *Saída* de ${v}${how}`);
   else if (type === 'invest') lines.push(tx.invest_kind === 'resgate' ? `📤 *Resgate* de ${v}` : `📈 *Aporte* de ${v}`);
   else {
     const parts = splitInstallments(tx.amount, tx.installments);
@@ -257,10 +413,10 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
   }
   lines.push(`🏷️ ${cat?.name ?? 'Sem categoria'} · 📅 ${dayLabel(tx.date, today)}${tx.description && norm(tx.description) !== norm(cat?.name ?? '') ? ' · ' + tx.description : ''}`);
   if (bill) lines.push(`🗓️ Conta fixa *${bill.rec.name}* marcada como ${bill.rec.type === 'in' ? 'recebida' : 'paga'} em ${MONTHS[Number(today.slice(5, 7)) - 1]}.`);
+  if (o.brief) return lines.join('\n') + note;
 
   // saldo do mês já com o lançamento + aviso de limite da categoria
-  const month = today.slice(0, 7);
-  const txs = [{ ...tx, ...(r.tx ?? {}) } as TxR, ...data.transactions];
+  const month = today.slice(0, 7), txs = data.transactions;
   const parts = cardParts(txs, data.categories, data.cards);
   const T = monthSums(txs, parts, month, cardModeOf(u));
   lines.push(`📊 Saldo de ${MONTHS[Number(month.slice(5, 7)) - 1]}: *${money(T.saldo)}*`);

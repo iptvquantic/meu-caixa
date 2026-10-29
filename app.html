@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-XYIKViObcNASLTpVMyamw+/Af5IpB1eQF8TltstDU2U=' 'sha256-gqNnUtnE6DaNQESwIWmdozs6kawmp/0zjhNG28QERoQ=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-+QGt+ya4A8CUlukX9ESzCnH9Ml/nt/5F8z/A1LDdwDY=' 'sha256-IfsCLPuZfh2y06Jm1yFn69RBrytVMxvfOxx9fSJQOzc=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -273,8 +273,14 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .as-out{margin-top:10px;padding:11px 13px;border-radius:12px;background:var(--surface);border:1px solid var(--border);font-size:14.5px;line-height:1.55}
 .as-out .c-muted{margin-bottom:6px}
 .rec,.as-busy{display:flex;align-items:center;gap:10px;flex:1;min-width:0;font-weight:700;color:var(--text);padding:10px 0}
-.rec small{color:var(--muted);font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rec .dot{width:11px;height:11px;border-radius:50%;background:var(--out);flex:none;animation:blink 1s infinite}
+/* gravando: medidor e tempo em cima; o aviso embaixo, com a largura toda */
+.rec{flex-wrap:wrap;row-gap:3px;column-gap:10px}
+.rec small{flex-basis:100%;color:var(--muted);font-weight:600;font-size:12.5px;line-height:1.3;min-width:0;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.rec-t{font-variant-numeric:tabular-nums;flex:none}
+/* medidor de volume: as barras mexem com a voz */
+.lvl{display:inline-flex;align-items:center;gap:3px;height:26px;flex:none}
+.lvl i{width:4px;height:100%;border-radius:2px;background:var(--out);transform:scaleY(.12);transform-origin:center;transition:transform 70ms linear}
+.lvl.idle i{animation:blink 1s infinite}
 .as-busy{color:var(--text-2)}
 .spin{width:18px;height:18px;border-radius:50%;border:2.5px solid color-mix(in srgb,var(--accent) 28%,transparent);border-top-color:var(--accent);flex:none;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -385,14 +391,18 @@ input[type="month"].input{min-height:44px}
 @keyframes blink{50%{opacity:.25}}
 .composer{display:flex;gap:6px;margin-top:12px;align-items:flex-end}
 .composer .rec,.composer .as-busy{min-height:46px;padding:0 4px}
-.bubble .b-act{margin-top:8px}
+.bubble .b-act{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 18px}
 .bubble .b-act .link{display:inline-flex;align-items:center;gap:6px}
 .bubble .b-act svg.i{width:16px;height:16px}
 .composer textarea{resize:none;min-height:46px;max-height:140px}
 
 /* Toast */
 .toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:12px;background:var(--text);color:var(--bg);padding:11px 14px;border-radius:14px;font-weight:700;font-size:14px;box-shadow:var(--shadow);width:max-content;max-width:min(calc(100vw - 24px),560px);animation:pop .18s ease}
-.toast button{color:var(--bg);text-decoration:underline;font-weight:800}
+.toast button{color:var(--bg);text-decoration:underline;font-weight:800;white-space:nowrap}
+.toast .t-acts{display:flex;gap:14px;flex:none;margin-left:auto}
+/* texto longo (o que o áudio entendeu): os botões descem para a linha de baixo em vez de espremer o texto */
+.toast{flex-wrap:wrap;row-gap:8px}
+.toast>span:first-child{flex:1 1 210px;min-width:0}
 
 canvas{max-width:100%}
 .chartbox{position:relative;height:240px}
@@ -557,7 +567,7 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.3.2',
+  version: '2.4.0',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
@@ -726,44 +736,55 @@ function parseAmountBR(s) {
   const v = parseFloat(t);
   return isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
 }
+// "no cartão", "no crédito", "parcelado" ou "cartão" no fim = pagou no cartão; "cartão da Bruna", "fatura" ou
+// "cartão do pai" = pagamento do cartão de outra pessoa (saída), que não é compra no cartão da própria pessoa
+const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei)( |$)| cartao$/;
+const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;
 function parseQuick(text, today) {
   // pontuação de frase ("…uber ontem.", "uber, ontem") não atrapalha; "3.600" e "52,90" continuam valores
   const raw = String(text || '').replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim();
   if (!raw) return null;
   const n = norm(raw);
   const out = { type: 'out', amount: null, installments: 1, date: today, description: '', investKind: null };
-  // valor: primeiro número "de dinheiro" (ignora "10x" e datas tipo 05/10)
+  // "parcela 3/12" (ou "3/12" com "parcela" na frase): número da parcela de algo que já existe — não é data nem valor
+  const nm = /(?:^|[^\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/.exec(raw);
+  const inst = nm && /(^| )(parcela|parcelas|prestacao|prestacoes|carne)( |$)/.test(n) && +nm[1] >= 1 && +nm[1] <= +nm[2] && +nm[2] <= 60 ? `${+nm[1]}/${+nm[2]}` : '';
+  // valor: primeiro número "de dinheiro" (ignora "10x", datas tipo 05/10 e a parcela 3/12)
   const amtRx = /(?:r\$\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?(?:\s?k\b)?)(?![\d/x])/i;
   const parcRx = /(\d{1,2})\s*x\b/i;
   const pm = parcRx.exec(n);
   if (pm) { out.installments = Math.min(48, Math.max(1, +pm[1])); out.type = 'card'; }
-  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ');
+  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ');
   const am = amtRx.exec(cleanForAmt);
   if (am) out.amount = parseAmountBR(am[1].replace(/\s+/g, ''));
   // tipo
   if (/(^| )(recebi|recebido|entrada|ganhei|vendi|venda|faturei|pix recebido|caiu|salario|pagamento recebido)( |$)/.test(n)) out.type = 'in';
   if (/(^| )(apliquei|aporte|investi|investimento|guardei)( |$)/.test(n)) { out.type = 'invest'; out.investKind = 'aporte'; }
   if (/(^| )(resgatei|resgate|saquei do investimento)( |$)/.test(n)) { out.type = 'invest'; out.investKind = 'resgate'; }
-  if (/(^| )(cartao|credito|no credito|parcelado)( |$)/.test(n) && out.type === 'out') out.type = 'card';
+  const cardPaid = CARD_CUE.test(n) && !NOT_MY_CARD.test(n);
+  if (cardPaid && out.type === 'out') out.type = 'card';
   // data
   const d = new Date(today + 'T12:00:00');
   if (/(^| )anteontem( |$)/.test(n)) d.setDate(d.getDate() - 2);
   else if (/(^| )ontem( |$)/.test(n)) d.setDate(d.getDate() - 1);
-  const dm = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(raw);
+  const dm = inst ? null : /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(raw);
   if (dm) {
     const y = dm[3] ? (+dm[3] < 100 ? 2000 + +dm[3] : +dm[3]) : d.getFullYear();
     const cand = new Date(y, +dm[2] - 1, +dm[1], 12);
     if (cand.getMonth() === +dm[2] - 1) d.setTime(cand.getTime());
   }
   out.date = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-  // descrição: o texto sem valor/datas/palavras de comando
+  // descrição: o texto sem valor/datas/palavras de comando ("Entrada"/"Saída" no começo também saem); a parcela 3/12 fica
   let desc = raw
     .replace(am ? am[0].trim() : '', ' ')
     .replace(parcRx, ' ')
-    .replace(/\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/g, ' ')
-    .replace(/\b(r\$|reais|real|ontem|anteontem|hoje|no cart[aã]o|cart[aã]o|cr[eé]dito|no cr[eé]dito|parcelado|em|de|no|na|com|gastei|paguei|comprei|recebi|recebido|ganhei|apliquei|investi|resgatei|aporte|resgate|pix)\b/gi, ' ')
+    .replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ')
+    .replace(cardPaid ? /\b((no|pelo|com o|com|no meu|pelo meu|com meu)\s+)?(cart[aã]o|cr[eé]dito)( de cr[eé]dito)?\b/gi : /\bcr[eé]dito\b/gi, ' ')
+    .replace(/\b(r\$|reais|real|ontem|anteontem|hoje|parcelado|em|de|no|na|com|gastei|paguei|comprei|recebi|recebido|ganhei|apliquei|investi|resgatei|aporte|resgate|pix)\b/gi, ' ')
     .replace(/\s+/g, ' ').trim()
+    .replace(/^(entrada|sa[ií]da|gasto|despesa|receita)\s+/i, '')
     .replace(/^(do|da|dos|das|pro|pra|pelo|pela)\s+/i, '');
+  if (inst) desc = (desc ? desc + ' ' : '') + inst;
   out.description = desc ? desc.charAt(0).toUpperCase() + desc.slice(1) : '';
   return out.amount ? out : null;
 }
@@ -799,7 +820,7 @@ const familyOf = (icon, kind) => { const name = String(icon || '').replace(/^i:/
 const TYPE_RX = {
   invest: /(^| )(apliquei|aplicacao|aporte|aportei|investi|guardei|resgatei|resgate)( |$)/,
   in: /(^| )(recebi|recebido|recebida|recebimento|ganhei|vendi|venda|vendas|faturei|caiu|entrou|pix recebido|pagamento recebido)( |$)/,
-  card: /(^| )(cartao|credito|parcelado|parcelei|\d{1,2} ?x)( |$)/,
+  card: /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credito)( |$)|(^| )(credito|parcelado|parcelei|\d{1,2} ?x)( |$)| cartao$/,
   out: /(^| )(gastei|paguei|comprei|gasto|despesa|saida|pago)( |$)/,
   cash: /(^| )(pix|debito|dinheiro|especie|boleto|a vista)( |$)/,
   product: /(^| )(cdb|lci|lca|tesouro|selic|ipca|poupanca|acoes|fii|fiis|etf|bitcoin|btc|cripto|criptomoeda|previdencia|pgbl|vgbl)( |$)/
@@ -807,12 +828,12 @@ const TYPE_RX = {
 const typeText = s => norm(s).replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
 function explicitType(text) {
   const n = typeText(text);
-  for (const k of ['invest', 'in', 'card', 'out']) if (TYPE_RX[k].test(n)) return k;
+  for (const k of ['invest', 'in', 'card', 'out']) if (TYPE_RX[k].test(n) && !(k === 'card' && NOT_MY_CARD.test(n))) return k;
   return null;
 }
 const TYPE_STOP = new Set(('de da do das dos para pra pro com sem por pelo pela uma um uns umas no na nos nas em que meu minha meus minhas seu sua seus suas '
   + 'reais real pix ted doc valor mes dia hoje ontem anteontem cartao credito debito dinheiro especie parcelado vista boleto '
-  + 'gastei paguei comprei recebi recebido recebida ganhei vendi apliquei investi resgatei aporte resgate gasto pago').split(' '));
+  + 'gastei paguei comprei recebi recebido recebida ganhei vendi apliquei investi resgatei aporte resgate gasto pago entrada saida despesa receita').split(' '));
 // palavras que ajudam a reconhecer o lançamento ("Venda de IPTV" → venda, iptv); plural vira singular
 const typeWords = s => typeText(s).split(' ').filter(w => w.length >= 3 && !/^\d/.test(w) && !TYPE_STOP.has(w)).map(w => w.length > 4 && w.endsWith('s') ? w.slice(0, -1) : w);
 // palavras dos nomes das categorias que todo mundo começa tendo: valem menos que um nome criado pela pessoa
@@ -1460,9 +1481,11 @@ const Demo = {
       const tx = this._ins('txs', { type: 'out', amount: 52.9, date: today, description: 'Drogasil', category_id: c ? c.id : null, card_id: null, installments: 1, invest_kind: null });
       return { handled: true, tx, reply: `🧾 Li o comprovante (PIX):\n💸 *Saída* de *R$ 52,90*\n🏷️ ${c ? c.name : 'Sem categoria'} · 📅 hoje · Drogasil\n_Demonstração: no app de verdade a IA lê a sua foto._` };
     }
-    const text = heard || b.text || '', n = norm(text);
+    // faltou o valor na frase anterior: ela vai junto ("parcela do pai" + "350")
+    const said = heard || b.text || '', text = b.context ? `${b.context} ${said}` : said, n = norm(said);
     if (/^(saldo|resumo|como estou)$/.test(n)) { const T = totals(monthKey(new Date())); return { handled: true, heard, reply: `📊 *${monthLabel(monthKey(new Date()))}*\n💰 Entradas: ${money(T.in)}\n💸 Saídas: ${money(T.out)}\n💳 Cartão: ${money(T.card)}\n*Saldo: ${money(T.saldo)}*` }; }
     const q = parseQuick(text, today);
+    if (!q && /[a-z]{3}/i.test(said) && !/\?\s*$/.test(said) && !b.context) return { handled: true, heard, pending: said, reply: `Entendi *${said.replace(/[*_]/g, '').slice(0, 60)}*, mas faltou o valor. Quanto foi? Fale ou escreva só o valor (ex.: _350_).` };
     if (!q) return b.noAI ? { handled: false, reply: null, heard } : { handled: true, heard, reply: 'Na demonstração eu lanço frases como *mercado 52,90* e respondo *saldo*.' };
     // o mesmo tipo automático do robô: a frase, o histórico, as categorias e a aba
     const g = guessType(q, text, { txs: this.db.txs, cats: this.db.cats, recs: this.db.recs, cards: this.db.cards }, b.hint);
@@ -2004,19 +2027,21 @@ function openSheet(html, labelId, onClose) {
 }
 function closeSheet() {
   const top = SHEETS.pop(); if (!top) return;
-  if (top.bg.querySelector('#as-row')) { if (REC.mr && REC.where === 'tx') recStop(true); AS.busy = ''; AS.draft = ''; }
+  if (top.bg.querySelector('#as-row')) { if (REC.mr && REC.where === 'tx') recStop(true); AS.busy = ''; AS.draft = ''; AS.pending = ''; }
   if (top.onClose) try { top.onClose(); } catch (e) { /* fechar nunca falha */ }
   top.bg.remove();
   if (!SHEETS.length) document.body.style.overflow = '';
   if (top.prev && document.contains(top.prev)) top.prev.focus({ preventScroll: true });
 }
 const sheetHead = (id, title) => `<div class="sheet-h"><h3 id="${id}">${esc(title)}</h3><button class="iconbtn" data-act="closeSheet" aria-label="Fechar">${ico('x')}</button></div>`;
-let TOAST_T, TOAST_FN = null;
+let TOAST_T, TOAST_FN = null, TOAST_FNS = [];
+// action: { label, fn } ou uma lista delas (ex.: Desfazer e Corrigir)
 function toast(msg, action) {
-  const root = $('#toast-root');
-  root.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${action ? `<button data-act="toastAction">${esc(action.label)}</button>` : ''}</div>`;
-  TOAST_FN = action ? action.fn : null;
-  clearTimeout(TOAST_T); TOAST_T = setTimeout(() => { root.innerHTML = ''; TOAST_FN = null; }, action ? 8000 : 2800);
+  const root = $('#toast-root'), acts = (Array.isArray(action) ? action : [action]).filter(a => a && a.fn);
+  root.innerHTML = `<div class="toast" role="status"><span>${esc(msg)}</span>${acts.length ? `<span class="t-acts">${acts.map((a, i) => `<button data-act="toastAction" data-i="${i}">${esc(a.label)}</button>`).join('')}</span>` : ''}</div>`;
+  TOAST_FNS = acts.map(a => a.fn); TOAST_FN = TOAST_FNS[0] || null;
+  // com ação, fica mais tempo (texto longo: o que o áudio entendeu)
+  clearTimeout(TOAST_T); TOAST_T = setTimeout(() => { root.innerHTML = ''; TOAST_FN = null; TOAST_FNS = []; }, acts.length ? (String(msg).length > 70 ? 10000 : 8000) : 2800);
 }
 function errMsg(e) {
   const m = String(e?.message || e || '');
@@ -2147,8 +2172,8 @@ function txQuickFill(text) {
 // No Início e no Novo lançamento lança na hora com Desfazer; no Assistente vira conversa.
 // Foto e áudio só passam pela memória do aparelho e pela IA: nada é salvo além do lançamento.
 const AS_UNDO = /^(desfazer|desfaz|desfaca|apagar|apaga|cancelar|cancela|apaga o ultimo|desfazer o ultimo|apagar o ultimo)( lancamento)?$/;
-const AS = { busy: '', draft: '', last: null, focus: false };
-const REC = { mr: null, chunks: [], t0: 0, tick: null, cancel: false, where: '' };
+const AS = { busy: '', draft: '', last: null, focus: false, pending: '' };
+const REC = { mr: null, chunks: [], t0: 0, tick: null, cancel: false, where: '', vad: null, hint: '', opening: false };
 // *negrito* e _itálico_ do WhatsApp → HTML (o texto é escapado antes)
 function waLite(s) {
   return esc(String(s || '')).replace(/\*([^*\n]+)\*/g, '<b>$1</b>').replace(/(^|[\s(])_([^_\n]+)_(?=$|[\s).,!?:;])/gm, '$1<i>$2</i>').replace(/\n/g, '<br>');
@@ -2171,38 +2196,124 @@ async function shrinkImage(file, max = 1600) {
     return toJpeg(img, img.naturalWidth, img.naturalHeight, max);
   } finally { URL.revokeObjectURL(url); }
 }
-// ---------- gravação de voz (toque para gravar, toque em enviar) ----------
+// ---------- gravação de voz: toque para falar; quando você para de falar, envia sozinho ----------
 const recSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 const recTime = () => { const t = Math.floor((Date.now() - REC.t0) / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 function recUI() { if (REC.where === 'ai' || $('#ai-row')) aiRow(); asRow(); }
+// Medidor de volume e fim da fala, pelo próprio áudio do microfone (nada além do áudio que já vai ser enviado).
+// Depois de ~0,4 s de voz, 1,6 s de silêncio = terminou de falar: envia sozinho. Barulho alto o tempo todo (feira,
+// carro): o medidor mostra que está ouvindo e a pessoa toca em Enviar. Sem Web Audio no aparelho: só o botão.
+const VAD = { frame: 60, minSpeech: 400, quiet: 1600, noVoice: 4500, wake: 1500 };
+// O áudio do medidor nasce ainda dentro do toque no microfone: o iPhone só deixa ele rodar assim.
+function audioCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  try { const ac = new AC(); if (ac.state === 'suspended') ac.resume().catch(() => { }); return ac; } catch { return null; }
+}
+function vadStart(stream, ac) {
+  if (!ac) return null;
+  try {
+    const an = ac.createAnalyser();
+    an.fftSize = 1024; ac.createMediaStreamSource(stream).connect(an);
+    if (ac.state === 'suspended') ac.resume().catch(() => { });
+    return { ac, an, buf: new Float32Array(an.fftSize), noise: -1, voiced: 0, lastVoice: 0, level: 0, heard: false };
+  } catch { vadStop({ ac }); return null; }
+}
+// um passo do medidor: devolve true quando a pessoa terminou de falar
+function vadStep(v, now) {
+  v.an.getFloatTimeDomainData(v.buf);
+  let sum = 0;
+  for (let i = 0; i < v.buf.length; i++) sum += v.buf[i] * v.buf[i];
+  const rms = Math.sqrt(sum / v.buf.length);
+  // ruído de fundo: o menor volume recente (desce na hora, sobe devagar)
+  v.noise = v.noise < 0 ? rms : rms < v.noise ? rms : v.noise + (rms - v.noise) * 0.004;
+  if (rms > Math.max(0.012, v.noise * 3)) { v.voiced += VAD.frame; v.lastVoice = now; if (v.voiced >= VAD.minSpeech) v.heard = true; }
+  const lvl = Math.max(0, Math.min(1, (20 * Math.log10(rms + 1e-6) + 55) / 40)); // voz baixa também mexe
+  v.level = v.level * 0.45 + lvl * 0.55;
+  return v.heard && now - v.lastVoice > VAD.quiet;
+}
+function vadStop(v) { if (v && v.ac) try { v.ac.close(); } catch { /* já fechado */ } }
+const REC_BARS = [0.55, 0.85, 1, 0.85, 0.55];
+const recHint = () => {
+  const v = REC.vad, t = Date.now() - REC.t0;
+  if (!v) return 'Fale e toque em enviar';
+  if (v.heard) return 'Ouvindo… envio quando você parar';
+  return t > VAD.noVoice ? 'Não estou ouvindo: fale mais perto' : 'Pode falar';
+};
+// a cada passo: contador, medidor e o aviso (só os textos mudam; os botões ficam, para o toque em Enviar não se perder)
+function recTick() {
+  let now = Date.now(), v = REC.vad;
+  // o aparelho não liberou o medidor: fica só o botão Enviar (sem "não estou ouvindo" por engano)
+  if (v && v.ac && v.ac.state !== 'running' && now - REC.t0 > VAD.wake) { vadStop(v); REC.vad = v = null; for (const el of $$('.lvl')) el.classList.add('idle'); }
+  const done = v ? vadStep(v, now) : false;
+  for (const el of $$('.rec-t')) el.textContent = recTime();
+  const hint = recHint();
+  if (hint !== REC.hint) { REC.hint = hint; for (const el of $$('.rec small')) el.textContent = hint; }
+  for (const bar of $$('.lvl i')) bar.style.transform = `scaleY(${v ? (0.12 + 0.88 * v.level * REC_BARS[bar.dataset.k | 0]).toFixed(3) : 0.3})`;
+  if (done || now - REC.t0 > 60e3) recStop(false);
+}
 async function recStart(where, onDone) {
-  if (REC.mr) return;
+  if (REC.mr || REC.opening) return; // dois toques seguidos não abrem dois microfones
   if (!recSupported()) { toast('Este navegador não grava áudio. Escreva a mensagem.'); return; }
+  const ac = audioCtx();
   let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
-  catch { toast('Libere o microfone para o Meu Caixa nas permissões do navegador.'); return; }
+  REC.opening = true;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+  catch { vadStop({ ac }); toast('Libere o microfone para o Meu Caixa nas permissões do navegador.'); return; }
+  finally { REC.opening = false; }
   const type = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus', 'audio/webm'].find(x => MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(x)) || '';
   let mr;
-  try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch { stream.getTracks().forEach(x => x.stop()); toast('Não consegui gravar neste aparelho.'); return; }
-  Object.assign(REC, { mr, chunks: [], t0: Date.now(), cancel: false, where });
+  try { mr = new MediaRecorder(stream, type ? { mimeType: type } : undefined); } catch { stream.getTracks().forEach(x => x.stop()); vadStop({ ac }); toast('Não consegui gravar neste aparelho.'); return; }
+  Object.assign(REC, { mr, chunks: [], t0: Date.now(), cancel: false, where, vad: vadStart(stream, ac), hint: '' });
   mr.ondataavailable = e => { if (e.data && e.data.size) REC.chunks.push(e.data); };
   mr.onstop = () => {
-    stream.getTracks().forEach(x => x.stop()); clearInterval(REC.tick);
+    stream.getTracks().forEach(x => x.stop()); clearInterval(REC.tick); vadStop(REC.vad);
     const blob = new Blob(REC.chunks, { type: mr.mimeType || type || 'audio/webm' }), cancel = REC.cancel, secs = (Date.now() - REC.t0) / 1000;
-    Object.assign(REC, { mr: null, chunks: [], where: '' });
+    Object.assign(REC, { mr: null, chunks: [], where: '', vad: null, hint: '' });
     recUI();
     if (cancel) return;
     if (secs < 0.8 || blob.size < 600) { toast('Áudio curto demais: fale o lançamento e toque em enviar.'); return; }
     onDone(blob);
   };
   mr.start(250);
-  // só o contador muda enquanto grava (trocar os botões a cada meio segundo engoliria o toque em Enviar)
-  REC.tick = setInterval(() => { for (const el of $$('.rec-t')) el.textContent = recTime(); if (Date.now() - REC.t0 > 60e3) recStop(false); }, 500);
+  REC.tick = setInterval(recTick, VAD.frame);
   recUI();
 }
 function recStop(cancel) { if (REC.mr && REC.mr.state !== 'inactive') { REC.cancel = !!cancel; REC.mr.stop(); } }
-const audioOf = async blob => ({ mime: (blob.type || 'audio/webm').split(';')[0], data: await blobB64(blob) });
-const recHTML = (hint) => `<div class="rec" role="status"><i class="dot" aria-hidden="true"></i><span class="rec-t">${recTime()}</span><small>${hint}</small></div><button class="iconbtn" data-act="recCancel" aria-label="Cancelar gravação" title="Cancelar">${ico('x')}</button><button class="iconbtn as-go" data-act="recSend" aria-label="Enviar áudio" title="Enviar">${ico('send')}</button>`;
+// Áudio gravado → WAV 16 kHz mono (o formato do reconhecimento de voz), sem o silêncio do começo e do fim e com o
+// volume ajustado: a transcrição acerta mais e o arquivo é sempre aceito (o WebM do celular às vezes era recusado).
+// Sem fala nenhuma: null (nem manda). Se o aparelho não converter, vai o áudio original.
+async function toWav(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext, OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+  if (!AC || !OAC) return blob;
+  const ac = new AC();
+  let buf;
+  try { buf = await ac.decodeAudioData(await blob.arrayBuffer()); } finally { try { ac.close(); } catch { } }
+  const rate = 16000, off = new OAC(1, Math.max(1, Math.ceil(buf.duration * rate)), rate);
+  const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  let peak = 0;
+  for (let i = 0; i < pcm.length; i++) { const v = Math.abs(pcm[i]); if (v > peak) peak = v; }
+  if (peak < 0.004) return null;
+  const thr = Math.max(0.008, peak * 0.05), pad = Math.round(rate * 0.35);
+  let a = 0, b = pcm.length - 1;
+  while (a < b && Math.abs(pcm[a]) < thr) a++;
+  while (b > a && Math.abs(pcm[b]) < thr) b--;
+  a = Math.max(0, a - pad); b = Math.min(pcm.length - 1, b + pad);
+  const gain = Math.min(10, 0.92 / peak), n = b - a + 1, dv = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, t) => { for (let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  str(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); str(8, 'WAVE'); str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); str(36, 'data'); dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) { const v = Math.max(-1, Math.min(1, pcm[a + i] * gain)); dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true); }
+  return new Blob([dv.buffer], { type: 'audio/wav' });
+}
+async function audioOf(blob) {
+  let wav = blob;
+  try { wav = await toWav(blob); } catch { wav = blob; }
+  if (!wav) { toast('Não ouvi nada no áudio. Fale perto do microfone e tente de novo.'); return null; }
+  return { mime: (wav.type || 'audio/webm').split(';')[0], data: await blobB64(wav) };
+}
+const recHTML = () => `<div class="rec" role="status"><span class="lvl${REC.vad ? '' : ' idle'}" aria-hidden="true">${REC_BARS.map((_, k) => `<i data-k="${k}"></i>`).join('')}</span><span class="rec-t">${recTime()}</span><small>${esc(REC.hint || recHint())}</small></div><button class="iconbtn" data-act="recCancel" aria-label="Cancelar gravação" title="Cancelar">${ico('x')}</button><button class="iconbtn as-go" data-act="recSend" aria-label="Enviar áudio agora" title="Enviar agora">${ico('send')}</button>`;
 const busyHTML = label => `<div class="as-busy" role="status"><i class="spin" aria-hidden="true"></i><span>${esc(label)}</span></div>`;
 // ---------- foto: câmera agora (celular: a câmera do aparelho; computador: a webcam) ou uma foto/print salvo ----------
 const PHOTO = { where: 'tx' }, CAM = { stream: null, where: 'tx' };
@@ -2256,67 +2367,95 @@ function assistErr(e) {
   if (e.status === 429 || e.status === 413 || e.status === 400) return e.message;
   return errMsg(e);
 }
+// o que o robô lançou (uma frase pode ter vários lançamentos) entra na tela na hora
 function assistApply(r) {
-  let t = null;
-  if (r.tx && r.tx.id) { t = normTx(r.tx); if (!S.txs.some(x => x.id === t.id)) S.txs.push(t); AS.last = { id: t.id, at: Date.now() }; }
+  const list = (Array.isArray(r.txs) && r.txs.length ? r.txs : r.tx ? [r.tx] : []).filter(x => x && x.id).map(normTx);
+  for (const t of list) if (!S.txs.some(x => x.id === t.id)) S.txs.push(t);
+  if (list.length) AS.last = { ids: list.map(t => t.id), id: list[list.length - 1].id, at: Date.now() };
   if (r.removed) S.txs = S.txs.filter(x => x.id !== r.removed);
-  if (t || r.removed) indexData();
-  return t;
+  if (list.length || r.removed) indexData();
+  return list;
 }
 const txLabel = t => `${{ in: 'Entrada', out: 'Saída', card: 'Cartão', invest: 'Investimento' }[t.type] || 'Lançamento'} de ${money(t.amount)}${S.catMap[t.category_id] ? ' · ' + S.catMap[t.category_id].name : ''}`;
-async function asUndo(id) {
+// depois de lançar: Desfazer e, se algo saiu diferente, Corrigir (abre o lançamento já preenchido) ou Ver (vários)
+const launchedActions = list => [
+  { label: 'Desfazer', fn: () => asUndoMany(list.map(x => x.id)) },
+  list.length === 1 ? { label: 'Corrigir', fn: () => { if (S.txs.some(x => x.id === list[0].id)) openTx(list[0].id); } } : { label: 'Ver', fn: () => go('txs') },
+];
+const txsLabel = list => list.length === 1 ? txLabel(list[0]) : `${list.length} lançamentos: ${list.map(t => `${{ in: 'entrada', out: 'saída', card: 'cartão', invest: 'investimento' }[t.type] || ''} ${money(t.amount)}`).join(' + ')}`;
+// desfaz o que o assistente acabou de lançar (todos os lançamentos da mesma frase)
+async function asUndoMany(ids) {
+  let ok = true;
+  for (const id of ids) ok = (await asUndo(id, true)) && ok;
+  if (ok) { render(); toast(ids.length > 1 ? `${ids.length} lançamentos desfeitos` : 'Lançamento desfeito'); }
+  return ok;
+}
+async function asUndo(id, quiet) {
   try {
     await api.deleteTx(id);
     S.txs = S.txs.filter(x => x.id !== id); indexData();
-    for (const m of S.chat) if (m.txId === id) m.undone = true;
-    if (AS.last && AS.last.id === id) AS.last = null;
-    render(); toast('Lançamento desfeito');
+    for (const m of S.chat) if (m.txId === id || (m.txIds || []).includes(id)) m.undone = true;
+    if (AS.last && (AS.last.id === id || (AS.last.ids || []).includes(id))) AS.last = null;
+    if (!quiet) { render(); toast('Lançamento desfeito'); }
     return true;
   } catch (e) { toast(errMsg(e)); return false; }
 }
+// "desfazer" (escrito, falado ou entendido pelo robô): o último lançamento do assistente neste aparelho, até 30 min
+const recentUndo = () => AS.last && Date.now() - AS.last.at < 30 * 60e3 ? (AS.last.ids || [AS.last.id]) : null;
 // "desfazer" escrito ou falado: o último lançamento feito pelo assistente neste aparelho (até 30 min)
-const localUndoTarget = text => AS_UNDO.test(norm(String(text || '')).replace(/[!.?…]+$/g, '').trim()) && AS.last && Date.now() - AS.last.at < 30 * 60e3 ? AS.last.id : null;
+const localUndoTarget = text => AS_UNDO.test(norm(String(text || '')).replace(/[!.?…]+$/g, '').trim()) && recentUndo() ? AS.last.id : null;
 // a aba do formulário ajuda a decidir o tipo (tocada pela pessoa vale mais que a lembrada)
 const asHint = () => TX ? { type: TX.type, sure: !!(TX.touchedType || TX.touchedPay), pay: !!TX.touchedPay, ...(TX.type === 'card' && TX.card_id ? { card: TX.card_id } : {}) } : undefined;
 // ---------- cartão "Lançar com IA" (Novo lançamento e Início) ----------
 const aiKinds = () => `<div class="ai-kinds">${[['in', 'entrada'], ['out', 'saída'], ['card', 'cartão'], ['invest', 'investimento']].map(([k, l]) => `<span style="--k:var(--${k})">${l}</span>`).join('')}</div>`;
 const aiTop = id => `<div class="ai-top"><span class="ai-badge" aria-hidden="true">${ico('sparkles')}</span><div><h4 id="${id}">Lançar com IA${store.get('mc_ai_used', false) ? '' : '<span class="ai-new">Novo</span>'}</h4><p>Fale, escreva ou fotografe o comprovante. Eu descubro se é:</p>${aiKinds()}</div></div>`;
 function asRowHTML() {
-  if (REC.mr && REC.where === 'tx') return `<div class="ai-live">${recHTML('Fale o lançamento')}</div>`;
+  if (REC.mr && REC.where === 'tx') return `<div class="ai-live">${recHTML()}</div>`;
   if (AS.busy) return `<div class="ai-live">${busyHTML(AS.busy)}</div>`;
   return `<div class="ai-btns">
       <button class="ai-btn primary" data-act="asCamera">${ico('camera')}<span>Tirar foto</span></button>
       <button class="ai-btn" data-act="asPhoto">${ico('image')}<span>Escolher foto</span></button>
       <button class="ai-btn" data-act="asMic">${ico('mic')}<span>Falar</span></button>
     </div>
-    <div class="ai-write"><label class="sr" for="as-text">Escrever o lançamento</label><input id="as-text" placeholder="Ou escreva: mercado 52,90" autocomplete="off" enterkeyhint="send" maxlength="300" value="${esc(AS.draft)}"${AS.focus ? ' data-autofocus' : ''}><span id="as-act">${asActHTML()}</span></div>`;
+    <div class="ai-write"><label class="sr" for="as-text">${AS.pending ? 'Quanto foi' : 'Escrever o lançamento'}</label><input id="as-text" placeholder="${AS.pending ? 'Quanto foi? Ex.: 350' : 'Ou escreva: mercado 52,90'}" autocomplete="off" enterkeyhint="send" maxlength="300" value="${esc(AS.draft)}"${AS.focus || AS.pending ? ' data-autofocus' : ''}${AS.pending ? ' inputmode="decimal"' : ''}><span id="as-act">${asActHTML()}</span></div>`;
 }
 const asActHTML = () => `<button class="iconbtn as-go" data-act="asSend" aria-label="Lançar o que escrevi" title="Lançar"${AS.draft.trim() ? '' : ' data-empty'}>${ico('send')}</button>`;
 function asRow() { const el = $('#as-row'); if (el) el.innerHTML = asRowHTML(); }
 async function asRun(input, label) {
   if (AS.busy || !$('#as-row')) return;
-  const undoId = input.text && !input.image ? localUndoTarget(input.text) : null;
-  if (undoId) { AS.draft = ''; asRow(); if (await asUndo(undoId)) closeSheet(); return; }
+  if (input.text && !input.image && localUndoTarget(input.text)) { AS.draft = ''; asRow(); if (await asUndoMany(recentUndo())) closeSheet(); return; }
   AS.busy = label; asRow(); const out = $('#as-out'); if (out) out.innerHTML = '';
   try {
-    const r = await api.assist({ ...input, noAI: false, hint: asHint() });
+    // faltou o valor na frase anterior: ela vai junto ("parcela do pai 3/12" + "350")
+    const r = await api.assist({ ...input, noAI: false, hint: asHint(), ...(AS.pending ? { context: AS.pending } : {}) });
     const open = !!$('#as-row'); // a pessoa pode ter fechado a folha enquanto esperava
-    AS.busy = ''; AS.draft = '';
+    AS.busy = ''; AS.draft = ''; AS.pending = r.pending || '';
     store.set('mc_ai_used', true);
-    const t = assistApply(r);
-    if (t) {
+    if (r.undo) {
+      const ids = recentUndo();
+      if (ids && await asUndoMany(ids)) { if (open) closeSheet(); return; }
+      if (open) asRow();
+      toast('Nada recente para desfazer por aqui. Para outros lançamentos, use o Extrato.');
+      return;
+    }
+    const list = assistApply(r);
+    if (list.length) {
       if (open) { closeSheet(); TX = null; }
+      const t = list[list.length - 1];
       if (!t.date.startsWith(S.month)) S.month = t.date.slice(0, 7);
-      render(); toast(txLabel(t) + (input.image ? ' · foto descartada' : ''), { label: 'Desfazer', fn: () => asUndo(t.id) });
+      // no áudio, o aviso mostra o que foi entendido (dá para conferir de relance, sem abrir nada)
+      const heard = r.heard ? `🎙️ “${r.heard.length > 70 ? r.heard.slice(0, 70) + '…' : r.heard}” → ` : '';
+      render(); toast(heard + txsLabel(list) + (input.image ? ' · foto descartada' : ''), launchedActions(list));
       return;
     }
     if (r.removed) render();
     if (!open) return;
     asRow();
     const o = $('#as-out'); if (o) o.innerHTML = `${r.heard ? `<p class="c-muted">🎙️ “${esc(r.heard)}”</p>` : ''}${waLite(r.reply || 'Não entendi. Tente assim: mercado 52,90')}`;
+    if (AS.pending) $('#as-text')?.focus({ preventScroll: true });
   } catch (e) {
     AS.busy = ''; asRow();
-    if (input.text && !input.image && (S.offline || e.status === undefined) && txQuickFill(input.text)) { toast('Sem internet: preenchi o formulário. Confira e toque em Salvar.'); return; }
+    if (input.text && !input.image && (S.offline || e.status === undefined) && txQuickFill((AS.pending ? AS.pending + ' ' : '') + input.text)) { AS.pending = ''; toast('Sem internet: preenchi o formulário. Confira e toque em Salvar.'); return; }
     toast(assistErr(e));
   }
 }
@@ -2599,9 +2738,13 @@ function mdLite(s) {
   return html + (inList ? '</ul>' : '');
 }
 // resposta do robô (formato do WhatsApp) com Desfazer quando lançou algo
-const bubble = m => `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${m.txId ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-id="${esc(m.txId)}">${ico('undo-2')}Desfazer</button>`}</div>` : ''}</div>`;
+const bubble = m => {
+  const ids = m.txIds || (m.txId ? [m.txId] : []), one = ids.length === 1 && S.txs.some(x => x.id === ids[0]);
+  const acts = ids.length ? `<div class="b-act">${m.undone ? '<small class="c-muted">Desfeito.</small>' : `<button class="link" data-act="asUndo" data-ids="${esc(ids.join(','))}">${ico('undo-2')}Desfazer</button>${one ? `<button class="link" data-act="editTx" data-id="${esc(ids[0])}">${ico('pencil')}Corrigir</button>` : ''}`}</div>` : '';
+  return `<div class="bubble${m.role === 'user' ? ' me' : ''}">${m.typing ? '<span class="typing" aria-label="Digitando"><i></i><i></i><i></i></span>' : m.wa ? waLite(m.content) : mdLite(m.content)}${acts}</div>`;
+};
 function aiRowHTML() {
-  if (REC.mr && REC.where === 'ai') return recHTML('Gravando… fale o lançamento ou a pergunta');
+  if (REC.mr && REC.where === 'ai') return recHTML();
   return `<label class="sr" for="ai-in">Mensagem para o assistente</label><textarea class="input" id="ai-in" rows="1" placeholder="Escreva ou fale: mercado 52,90" data-input="aiin">${esc(S.aiDraft || '')}</textarea>`
     + `<span id="ai-act">${aiActHTML()}</span>`;
 }
@@ -2656,18 +2799,30 @@ async function advisorReply(text) {
     return 'A IA não respondeu agora. Resumo calculado aqui mesmo:\n' + localAnswer(text);
   }
 }
+// resposta do robô na conversa: lançamentos (com Desfazer), "desfazer" e o pedido do valor que faltou
+async function robotMsg(r) {
+  S.aiPending = r.pending || '';
+  if (r.undo) {
+    const ids = recentUndo();
+    return { role: 'assistant', content: ids && await asUndoMany(ids) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não há lançamento recente feito por aqui para desfazer. Para outros, use o Extrato.', wa: true };
+  }
+  const list = assistApply(r);
+  if (list.length || r.removed) renderShell();
+  return { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txIds: list.map(t => t.id) };
+}
 async function sendAI(text) {
   text = String(text || '').trim(); if (!text || S.aiBusy) return;
   S.aiBusy = true; S.chat.push({ role: 'user', content: text }); chatShow(true);
-  const undoId = localUndoTarget(text);
   let msg;
-  if (undoId) msg = { role: 'assistant', content: (await asUndo(undoId)) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
+  if (localUndoTarget(text)) msg = { role: 'assistant', content: (await asUndoMany(recentUndo())) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
   else {
     // 1º o robô: lançamento, conta fixa, saldo, fatura, contas, metas (pergunta livre volta sem resposta)
     let r = null;
-    if (!/\?\s*$/.test(text)) { try { r = await api.assist({ text, noAI: true }); } catch (e) { if (e.status === 429) r = { handled: true, reply: e.message }; } }
-    if (r && r.handled) { const t = assistApply(r); msg = { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txId: t ? t.id : null }; if (t || r.removed) renderShell(); }
-    else msg = { role: 'assistant', content: (await advisorReply(text)) || 'Sem resposta.' };
+    if (S.aiPending || !/\?\s*$/.test(text)) {
+      try { r = await api.assist({ text, noAI: true, ...(S.aiPending ? { context: S.aiPending } : {}) }); } catch (e) { if (e.status === 429) r = { handled: true, reply: e.message }; }
+    }
+    if (r && r.handled) msg = await robotMsg(r);
+    else { S.aiPending = ''; msg = { role: 'assistant', content: (await advisorReply(text)) || 'Sem resposta.' }; }
   }
   S.chat.push(msg); S.aiBusy = false; chatShow(false);
 }
@@ -2678,12 +2833,11 @@ async function aiRun(input, label) {
   S.aiBusy = true; S.chat.push(me); chatShow(true);
   let msg;
   try {
-    const r = await api.assist({ ...input, noAI: true });
+    const r = await api.assist({ ...input, noAI: true, ...(S.aiPending && !input.image ? { context: S.aiPending } : {}) });
     if (r.heard) me.content = `🎙️ “${r.heard}”`;
-    const undoId = r.heard ? localUndoTarget(r.heard) : null;
-    if (undoId) msg = { role: 'assistant', content: (await asUndo(undoId)) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
-    else if (r.handled) { const t = assistApply(r); msg = { role: 'assistant', content: r.reply || 'Pronto.', wa: true, txId: t ? t.id : null }; if (t || r.removed) renderShell(); }
-    else if (r.heard) { chatShow(true); msg = { role: 'assistant', content: (await advisorReply(r.heard)) || 'Sem resposta.' }; }
+    if (r.heard && localUndoTarget(r.heard)) msg = { role: 'assistant', content: (await asUndoMany(recentUndo())) ? '↩️ Pronto, desfiz o último lançamento.' : 'Não consegui desfazer agora.', wa: true };
+    else if (r.handled) msg = await robotMsg(r);
+    else if (r.heard) { S.aiPending = ''; chatShow(true); msg = { role: 'assistant', content: (await advisorReply(r.heard)) || 'Sem resposta.' }; }
     else msg = { role: 'assistant', content: 'Não consegui entender. Tente de novo ou escreva: mercado 52,90', wa: true };
   } catch (e) { msg = { role: 'assistant', content: assistErr(e), wa: true }; }
   S.chat.push(msg); S.aiBusy = false; chatShow(false);
@@ -3109,7 +3263,7 @@ const ACT = {
   reseed: () => { Demo.reseed(); startApp(); toast('Dados de exemplo recriados'); },
   logout: async () => { closeAllSheets(); store.del('mc_snap'); await api.signOut(); S.user = null; S.txs = []; S.recs = []; S.goals = []; S.chat = []; if (S.mode === 'demo') location.reload(); },
   closeSheet: () => closeSheet(),
-  toastAction: () => { const fn = TOAST_FN; $('#toast-root').innerHTML = ''; TOAST_FN = null; fn && fn(); },
+  toastAction: el => { const fn = TOAST_FNS[+(el && el.dataset.i) || 0] || TOAST_FN; $('#toast-root').innerHTML = ''; TOAST_FN = null; TOAST_FNS = []; fn && fn(); },
   authTab: el => showAuth(el.dataset.tab),
   forgot: async () => {
     const email = $('#auth-email').value.trim();
@@ -3123,7 +3277,7 @@ const ACT = {
   txNewCat: () => showNewCat(catKindOf(TX.type)),
   txDate: el => { const d = new Date(); d.setDate(d.getDate() - +el.dataset.d); $('#tx-date').value = isoOf(d); updDateChips(); updInstInfo(); },
   asSend: () => { const i = $('#as-text'), v = (i?.value || '').trim(); if (v) asRun({ text: v }, 'Lançando…'); else if (i) { i.focus(); toast('Escreva o lançamento. Ex.: mercado 52,90'); } },
-  asMic: () => recStart('tx', async blob => asRun({ audio: await audioOf(blob) }, 'Ouvindo e lançando…')),
+  asMic: () => recStart('tx', async blob => { const audio = await audioOf(blob); if (audio) asRun({ audio }, 'Ouvindo e lançando…'); }),
   asCamera: () => photoCam('tx'),
   asPhoto: () => photoPick('tx'),
   homeCamera: () => photoCam('tx'),
@@ -3131,7 +3285,7 @@ const ACT = {
   homeWrite: () => openTx(null, null, { write: true }),
   camShot: () => camShot(),
   camFile: () => { const where = CAM.where; closeSheet(); photoPick(where); },
-  asUndo: el => asUndo(el.dataset.id),
+  asUndo: el => { const ids = String(el.dataset.ids || el.dataset.id || '').split(',').filter(Boolean); if (ids.length) asUndoMany(ids).then(() => chatShow(false)); },
   recSend: () => recStop(false),
   recCancel: () => recStop(true),
   txSave: () => saveTx(),
@@ -3201,7 +3355,7 @@ const ACT = {
   installLater: () => { store.set('mc_install_dismiss', Date.now()); render(); },
   aiAsk: el => sendAI(el.dataset.q),
   aiSend: () => { const i = $('#ai-in'); if (!i) return; const v = i.value; i.value = ''; i.style.height = ''; S.aiDraft = ''; const a = $('#ai-act'); if (a) a.innerHTML = aiActHTML(); sendAI(v); },
-  aiMic: () => recStart('ai', async blob => aiRun({ audio: await audioOf(blob) }, '🎙️ Áudio')),
+  aiMic: () => recStart('ai', async blob => { const audio = await audioOf(blob); if (audio) aiRun({ audio }, '🎙️ Áudio'); }),
   aiCamera: () => photoCam('ai'),
   aiPhoto: () => photoPick('ai')
 };
@@ -3307,7 +3461,7 @@ async function boot() {
 }
 window.addEventListener('DOMContentLoaded', boot);
 
-if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, buildBackup, restoreV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory, insightItems, periodTotals, compareWindow, autoSteps, sideMini, applySide, resolveTheme, touchFirst, summaryHTML, isoOf, asRun, aiRun, sendAI, waLite, waUsable, localUndoTarget, REC, asRow, aiRow, guessType, explicitType, asHint, photoReady, PHOTO, CAM, openCamera, camStop, homeAiCard, tx: () => TX };
+if (window.__MC_TEST__) window.__mc = { feat, recItems, recSummary, goalProgress, autoRecurring, chargeLink, budgetAlert, payRec, S, api: () => api, Demo, totals, invoiceMonth, installmentsOf, splitInstallments, cardItemsFor, spendByCat, insights, buildLegacyPlan, applyLegacyPlan, buildBackup, restoreV2, parseQuick, suggestIcon, render, go, openTx, saveTx, setTheme, esc, startApp, ACT, localAnswer, matchCategory, insightItems, periodTotals, compareWindow, autoSteps, sideMini, applySide, resolveTheme, touchFirst, summaryHTML, isoOf, asRun, aiRun, sendAI, waLite, waUsable, localUndoTarget, REC, asRow, aiRow, guessType, explicitType, asHint, photoReady, PHOTO, CAM, openCamera, camStop, homeAiCard, tx: () => TX, VAD, vadStep, recTick, recHint, launchedActions, toast, recStart, recStop, toWav, audioCtx, vadStart };
 })();
 </script>
 </body>

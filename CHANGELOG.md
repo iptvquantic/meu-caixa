@@ -1,5 +1,34 @@
 # Histórico de versões
 
+## 2.4.0 — 29/10/2026
+- Voz que envia sozinha: toque em Falar, fale normalmente e, quando você parar de falar, o app envia (sem
+  precisar tocar em Enviar). Um medidor de volume mostra que está ouvindo; com barulho alto o tempo todo, é só
+  tocar em Enviar. Sem voz nenhuma, ele avisa para falar mais perto. No iPhone, se o aparelho não liberar o
+  medidor, fica o botão Enviar; dois toques seguidos em Falar não abrem dois microfones.
+- Voz que funciona de primeira: o áudio vira WAV de 16 kHz no próprio celular (o formato do reconhecimento de
+  voz), sem o silêncio das pontas e com o volume ajustado. Antes, o primeiro áudio às vezes era recusado pelo
+  serviço de transcrição ("erro 413") e o app pedia para repetir. Microfone com redução de ruído e de eco.
+- Transcrição mais precisa: modelo completo de reconhecimento de voz (o rápido fica de reserva), com o vocabulário
+  da pessoa (nomes de clientes, lojas, cartões e categorias criadas por ela); frases que o reconhecimento inventa
+  no silêncio ("Obrigado.", "Legendas…") são descartadas.
+- A IA entende a frase inteira, com o jeito de cada pessoa (categorias com exemplos dela, cartões, contas fixas e
+  lançamentos parecidos):
+  - "pagamento cartão pai parcela com pix 3/12 350" vira saída por PIX com "3/12" na descrição (antes virava
+    compra no cartão de crédito da pessoa);
+  - "cartão da Bruna 300" (cartão de outra pessoa) é saída; "comprei em 10x no cartão" é compra parcelada;
+  - "Entrada Edson 30" é entrada, sem "Entrada" na descrição; valor por extenso ("trezentos e cinquenta") vira
+    número; uma frase com dois valores vira dois lançamentos;
+  - "paguei o aluguel", sem valor, marca a conta fixa com o valor dela;
+  - a categoria é pelo que foi ("pix 35 ifood" vai para o iFood, não para "PIX enviado");
+  - a forma de pagamento só aparece na confirmação quando foi dita.
+- Faltou o valor ("Uber", "parcela do pai"): o app pergunta "Quanto foi?" e a resposta completa o lançamento.
+- Depois de lançar, o aviso mostra o que foi ouvido e tem Desfazer e Corrigir (abre o lançamento já preenchido);
+  com vários lançamentos, Desfazer e Ver. Na conversa do Assistente também.
+- Frase simples e clara ("mercado 52,90", "josimar 30") continua lançando na hora, sem gastar a IA; IA ocupada ou
+  fora do ar: o lançamento rápido resolve o que der e, sem valor, a mensagem diz o que fazer.
+- "Apaga isso" falado desfaz o último lançamento do assistente.
+- Avaliação com o modelo de verdade antes de publicar: 65 frases no jeito do dono (faladas e escritas).
+
 ## 2.3.2 — 15/10/2026
 - "Lançar com IA" em destaque: cartão dourado no Início (logo abaixo do saldo) e no topo do Novo lançamento,
   com botões grandes para Tirar foto, Escolher foto, Falar e Escrever. Pode ser desligado em Ajustes →
