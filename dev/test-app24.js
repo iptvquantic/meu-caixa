@@ -25,15 +25,15 @@ const rep = (n, a) => Array(n).fill(a);
   await sleep(50);
 
   // ---- fim da fala ----
-  // 0,5 s de silêncio, 1,2 s de voz, depois silêncio: envia ~1,6 s depois da última voz
+  // 0,5 s de silêncio, 1,2 s de voz, depois silêncio: envia ~2 s depois da última voz
   let r = runVad(M, [...rep(8, 0.002), ...rep(20, 0.15), ...rep(60, 0.002)]);
   const lastVoiceStep = 8 + 20 - 1;
-  ok(r.at > lastVoiceStep && (r.at - lastVoiceStep) * M.VAD.frame >= M.VAD.quiet && (r.at - lastVoiceStep) * M.VAD.frame <= M.VAD.quiet + 2 * M.VAD.frame, 'silêncio depois da fala: envia sozinho ~1,6 s depois (passo ' + r.at + ')');
+  ok(r.at > lastVoiceStep && (r.at - lastVoiceStep) * M.VAD.frame >= M.VAD.quiet && (r.at - lastVoiceStep) * M.VAD.frame <= M.VAD.quiet + 2 * M.VAD.frame, 'silêncio depois da fala: envia sozinho ~2 s depois (passo ' + r.at + ')');
   // fala com pausas curtas entre as palavras ("mercado... cinquenta... e dois") não corta no meio
   const words = [];
-  for (let k = 0; k < 4; k++) words.push(...rep(8, 0.12), ...rep(12, 0.002)); // pausas de 0,7 s
+  for (let k = 0; k < 4; k++) words.push(...rep(8, 0.12), ...rep(25, 0.002)); // pausas de 1,5 s (pensando no meio da frase)
   r = runVad(M, [...words, ...rep(40, 0.002)]);
-  ok(r.at >= words.length, 'pausas curtas entre as palavras não cortam a frase');
+  ok(r.at >= words.length, 'pausas de até 1,5 s no meio da frase não cortam');
   // só um estalo (menos de 0,4 s de som) não conta como fala: não envia sozinho
   r = runVad(M, [...rep(5, 0.002), ...rep(3, 0.2), ...rep(60, 0.002)]);
   ok(r.at === -1 && !r.v.heard, 'um estalo não é fala: não envia sozinho');

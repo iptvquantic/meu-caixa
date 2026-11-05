@@ -4,6 +4,8 @@
 // Gerar e publicar: node avaliar-ia.js <commit> <senha> [horas]  → out/deploy/mc-avaliar/index.ts (deploy pelo conector)
 // Usar: GET …/functions/v1/mc-avaliar/<senha>/<casos: 1,5,7 ou 3-9>/<esforço: low|medium>/<modelo: 120|20>
 import { contextOf, SCHEMA, SYSTEM, toPlan } from '__UNDERSTAND__';
+// o que o robô faz depois da IA: centavos falados e a descrição com tudo o que foi dito (o que fica gravado)
+import { moneySaid, personalDescription } from '__SMART__';
 
 const HASH = '__HASH__';
 const ATE = Date.parse('__ATE__');
@@ -108,6 +110,15 @@ const CASES: Case[] = [
   { t: 'Pagamento cartão pai parcela com pix 3/12, 194 reais.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 194, pay: 'pix', desc: /3\/12/ } },
   { t: 'trinta e cinco reais de uber ontem', a: true, x: { acao: 'lancar', tipo: 'out', valor: 35, cat: 'Transporte', data: '2026-10-21' } },
   { t: 'Paguei 89,90 da internet no débito.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 89.9, pay: 'debito', cat: 'Contas da casa' } },
+  // 05/11: a descrição tem que guardar tudo o que foi dito (o cliente, a loja, para quem); centavos falados (fdesc = o que fica gravado)
+  { t: 'Entrada 30 venda IPTV cliente Odair', a: true, x: { acao: 'lancar', tipo: 'in', valor: 30, cat: 'Venda de IPTV', fdesc: /^(?=.*IPTV)(?=.*Odair)/i } },
+  { t: 'Gastei 20 reais e 50 centavos na farmácia Drogasil, remédio da minha mãe.', a: true, x: { acao: 'lancar', n: 1, tipo: 'out', valor: 20.5, cat: 'Farmácia', fdesc: /^(?=.*drogasil)(?=.*rem[eé]dio)(?=.*m[aã]e)/i } },
+  { t: 'Vendi três meses de IPTV pro cliente José Carlos por noventa reais.', a: true, x: { acao: 'lancar', tipo: 'in', valor: 90, cat: 'Venda de IPTV', fdesc: /^(?=.*meses)(?=.*Jos[eé] Carlos)/i } },
+  { t: 'Uber da minha mãe, vinte e três reais.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 23, cat: 'Transporte', fdesc: /^(?=.*uber)(?=.*m[aã]e)/i } },
+  { t: 'shopee 77 capinha do celular', x: { acao: 'lancar', valor: 77, cat: 'Shopee', fdesc: /capinha/i } },
+  { t: 'Recebi cento e vinte do cliente Rafael pela instalação da antena.', a: true, x: { acao: 'lancar', tipo: 'in', valor: 120, fdesc: /^(?=.*Rafael)(?=.*antena)/i } },
+  { t: 'Paguei quinze reais de lanche pro meu filho na escola.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 15, fdesc: /^(?=.*lanche)(?=.*filho)/i } },
+  { t: 'entrada 50 iptv 2 telas cliente Marta', x: { acao: 'lancar', tipo: 'in', valor: 50, cat: 'Venda de IPTV', fdesc: /^(?=.*2 telas)(?=.*Marta)/i } },
 ];
 const enc = new TextEncoder();
 const sha = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -125,6 +136,9 @@ function check(c: Case, p: any): string[] {
   if (x.valor && Math.abs(it.amount - x.valor) > 0.005) bad.push('valor ' + it.amount + '≠' + x.valor);
   if (x.pay && it.payment !== x.pay) bad.push('pag ' + it.payment + '≠' + x.pay);
   if (x.desc && !x.desc.test(it.description)) bad.push('desc "' + it.description + '"');
+  // a descrição que fica gravada (a da IA, completada com o que foi dito)
+  const fd = p.items.length === 1 ? personalDescription(it.description, moneySaid(c.t), null, data) : it.description;
+  if (x.fdesc && !x.fdesc.test(fd)) bad.push('gravada "' + fd + '"');
   // como no app: conta fixa reconhecida sem categoria usa a categoria da conta fixa
   const billCat = it.bill ? cats.find((c) => c.id === data.recurring.find((r: any) => r.name === it.bill)?.category_id)?.name ?? '' : '';
   if (x.cat && !like(x.cat, it.category || billCat)) bad.push('cat "' + it.category + '"≠' + x.cat);
@@ -150,7 +164,7 @@ Deno.serve(async (req) => {
     const i = ids[k] - 1, c = CASES[i];
     if (!c) continue;
     if (Date.now() - t0 > 40e3) { out.push('… parou antes do ' + ids[k] + ' (tempo)'); break; }
-    const ctx = contextOf(c.t, data, TODAY, { hint: c.hint, fromAudio: !!c.a });
+    const ctx = contextOf(moneySaid(c.t), data, TODAY, { hint: c.hint, fromAudio: !!c.a });
     const s0 = Date.now();
     const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST', headers: { Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
@@ -167,8 +181,9 @@ Deno.serve(async (req) => {
     if (!r.ok) { out.push('#' + (i + 1) + ' ERRO ' + r.status + ' ' + (await r.text()).slice(0, 160)); continue; }
     const j = await r.json(), raw = j?.choices?.[0]?.message?.content ?? '', us = j?.usage ?? {};
     const p = toPlan(raw, TODAY), bad = check(c, p);
+    const fd = p && p.action === 'lancar' && p.items.length === 1 ? personalDescription(p.items[0].description, moneySaid(c.t), null, data) : '';
     const show = p ? (p.action === 'lancar' ? p.items.map((x: any) => x.type + ' ' + fmt(x.amount) + ' ' + x.date.slice(5) + ' "' + x.description + '" [' + x.category + ']' + (x.payment !== 'outro' ? ' ' + x.payment : '') + (x.card ? ' cartão:' + x.card : '') + (x.installments > 1 ? ' ' + x.installments + 'x' : '') + (x.investKind ? ' ' + x.investKind : '') + (x.bill ? ' conta:' + x.bill : '')).join(' + ') : p.action + ((p as any).description ? ' "' + (p as any).description + '"' : '')) : 'NULO ' + raw.slice(0, 120);
-    out.push('#' + (i + 1) + (bad.length ? ' FALHOU ' + bad.join('; ') : ' OK') + ' | ' + ms + 'ms ' + (us.prompt_tokens ?? '?') + '+' + (us.completion_tokens ?? '?') + 't | ' + show);
+    out.push('#' + (i + 1) + (bad.length ? ' FALHOU ' + bad.join('; ') : ' OK') + ' | ' + ms + 'ms ' + (us.prompt_tokens ?? '?') + '+' + (us.completion_tokens ?? '?') + 't | ' + show + (fd && fd !== p.items[0].description ? ' → gravada "' + fd + '"' : ''));
   }
   return new Response(model + ' esforço=' + effort + ' | ' + limits + '\n' + out.join('\n') + '\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } });
 });

@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ov4q5zIS/nhmJOFoBnrZuV7xE/1MrkdAnNU/mUD4hOc=' 'sha256-DZejbZyUUjs2gSivTnVvPe5WAU1EJbBBFPQCioDcE4M=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-ov4q5zIS/nhmJOFoBnrZuV7xE/1MrkdAnNU/mUD4hOc=' 'sha256-rOZjCpeSclAt84U4+4eMrdVd912caQ9IfXCwquuETps=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -773,7 +773,7 @@ const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credi
 const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;
 function parseQuick(text, today) {
   // pontuação de frase ("…uber ontem.", "uber, ontem") não atrapalha; "3.600" e "52,90" continuam valores
-  const raw = String(text || '').replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim();
+  const raw = moneySaid(String(text || '')).replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim(); // "20 reais e 50 centavos" = 20,50
   if (!raw) return null;
   const n = norm(raw);
   const out = { type: 'out', amount: null, installments: 1, date: today, description: '', investKind: null };
@@ -940,6 +940,98 @@ function guessType(q, text, data, hint) {
   };
   const investKind = dir === 'invest' ? ((q && q.investKind === 'resgate') || /(^| )(resgatei|resgate|saquei)( |$)/.test(n) ? 'resgate' : 'aporte') : null;
   return { type, investKind, category_id: catFor(dir), card_id, by, votes: vote, catFor };
+}
+// ---------- descrição: tudo o que a pessoa disse ----------
+// A IA às vezes resume ("Venda IPTV", "Farmácia") e perde o que importa (o cliente, a loja, para quem foi). Quando a
+// descrição dela deixa de fora alguma palavra que a pessoa disse, vale a frase da pessoa, na ordem dela, sem o valor,
+// a data, a forma de pagamento, o cartão e as palavras de comando: "entrada 30 venda iptv cliente odair" →
+// "Venda IPTV cliente Odair". O nome depois de "cliente" sai com inicial maiúscula.
+const NAME_STOP = new Set(('de da do das dos e o a os as no na nos nas em com pix via valor reais real hoje ontem anteontem pagou pago paga '
+  + 'pagamento pagando mensal mensalidade renovou renovacao entrada saida venda vendi recebi recebido novo nova antigo antiga fixo fixa').split(' '));
+const NAME_WORD = /^\p{L}[\p{L}'’-]*$/u;
+const titleName = s => String(s || '').replace(/\p{L}[\p{L}'’-]*/gu, (w, i) => i && /^(de|da|do|das|dos|e)$/i.test(w) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1));
+// "cliente odair", "do cliente José Carlos", "clienta Ana": o nome que vem depois (até 3 palavras)
+function clientName(text) {
+  const words = String(text || '').replace(/[.,;:!?()"“”]/g, ' ').split(/\s+/).filter(Boolean);
+  const i = words.findIndex(w => /^(cliente|clienta|fregues|freguesa)$/.test(norm(w)));
+  if (i < 0) return '';
+  let j = i + 1;
+  if (words[j] && /^(o|a|do|da|de)$/.test(norm(words[j]))) j++;
+  const out = [];
+  for (; j < words.length && out.length < 3; j++) {
+    if (!NAME_WORD.test(words[j]) || NAME_STOP.has(norm(words[j])) || SAID_FUNC.has(norm(words[j]))) break;
+    out.push(words[j]);
+  }
+  return out.join(' ');
+}
+// valor falado com centavos: "20 reais e 50 centavos" / "20 e 50 centavos" → "20,50" (um valor só)
+const moneySaid = s => String(s || '').replace(/(\d+)\s*(?:reais|real|conto|contos)?\s+e\s+(\d{1,2})\s*centavos?/gi, (m, a, b) => `${a},${b.padStart(2, '0')}`);
+// palavras que não são "o que foi": números falados, comando, pagamento, tempo, muleta da fala
+const NUM_WORDS = new Set('zero dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta oitenta noventa cem cento duzentos duzentas trezentos quatrocentos quinhentos seiscentos setecentos oitocentos novecentos mil milhao milhoes'.split(' '));
+const SAID_SKIP = new Set(('lanca lancar lance lancado coloca colocar coloque bota botar registra registrar registre anota anotar anote ai mim favor ' +
+  'reais real conto contos pila centavo centavos vez vezes x entrada saida gasto gastei gastou paguei pago paga pagou recebi recebido recebeu ganhei comprei comprou vendi vendeu ' +
+  'foi teve tive hoje ontem anteontem agora dia mes semana passada passado ah eh hum hmm entao tipo ne bom olha assim oi ola ok okay beleza pronto isso aqui la so mais tambem ' +
+  'valor pix pics piks debito dinheiro especie boleto transferencia ted doc cartao credito vista parcelado parcelei').split(' '));
+const SAID_UNITS = /^(meses|mes|telas|tela|telinhas|unidades|unidade|kg|quilos|kilos|litros|litro|caixas|caixa|pacotes|pacote|horas|hora|pecas|itens|pontos|pessoas|semanas)$/;
+// palavras de ligação: não contam como "o que foi"
+const SAID_FUNC = new Set('de da do das dos no na nos nas em com sem e o a os as um uma uns umas que pelo pela pelos pelas por pra pro para eu ele ela meu minha meus minhas seu sua nosso nossa esse essa este esta isso aquele aquela ja ainda muito pouco'.split(' '));
+// não precisam estar na descrição (a IA pode tirar): dizem o tipo, não o que foi
+const SAID_GENERIC = new Set('cliente clienta pagamento pagamentos compra compras valor gasto gastos despesa despesas coisa coisas lancamento lancamentos referente'.split(' '));
+const sayKey = w => { const n = norm(w).replace(/[^a-z0-9]/g, ''); return n.length > 4 && n.endsWith('s') ? n.slice(0, -1) : n; };
+const sayLike = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) || (a.length >= 5 && b.length >= 5 && editDist1(a, b));
+function editDist1(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, d = 0;
+  while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+  return d + (a.length - i) + (b.length - j) <= 1;
+}
+// a frase da pessoa, limpa: sem valor, data, parcelas "10x", forma de pagamento, cartão e comando (o "3/12" da parcela fica)
+function saidPhrase(text, data) {
+  const cards = new Set(((data && data.cards) || []).flatMap(c => norm(c.name).split(' ')).filter(w => w.length > 2));
+  const parc = /(^| )(parcela|parcelas|prestacao|prestacoes|carne)( |$)/.test(norm(text));
+  const toks = moneySaid(text).replace(/[“”"!?;:…()]+/g, ' ').replace(/,(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean);
+  const out = [];
+  for (let k = 0; k < toks.length; k++) {
+    const w = toks[k], n = norm(w).replace(/[.,]+$/, '');
+    if (parc && /^\d{1,2}\/\d{1,2}$/.test(n)) { out.push(n); continue; }
+    if (/^\d{1,3}$/.test(n) && SAID_UNITS.test(norm(toks[k + 1] || ''))) { out.push(n); continue; } // "3 meses", "2 telas": quantidade, não valor
+    if (/\d/.test(n) || /^r\$/.test(n) || NUM_WORDS.has(n) || SAID_SKIP.has(n) || cards.has(n)) { out.push(null); continue; }
+    if (n === 'e' && (out.at(-1) === null || NUM_WORDS.has(norm(toks[k + 1] || '')))) { out.push(null); continue; } // "trinta e cinco"
+    out.push(w.replace(/[.,]+$/, ''));
+  }
+  // tira a palavra de ligação que ficou solta: no começo, no fim ou antes de um buraco ("no pix pro joão" → "joão")
+  const link = w => SAID_FUNC.has(norm(w));
+  for (let again = true; again;) { // "que eu [comprei]": tira "eu", depois "que"
+    again = false;
+    for (let k = out.length - 1; k >= 0; k--) if (out[k] !== null && link(out[k]) && (k === out.length - 1 || out[k + 1] === null)) { out[k] = null; again = true; }
+  }
+  const words = out.filter(w => w !== null);
+  while (words.length && link(words[0])) words.shift();
+  return words.join(' ');
+}
+// descrição final do assistente: a da IA se ela guardou tudo o que foi dito; senão a frase da pessoa
+function personalDescription(desc, text, cat, data) {
+  desc = String(desc || '').trim();
+  const said = saidPhrase(text, data);
+  const want = said.split(/\s+/).filter(w => w && NAME_WORD.test(w)).map(sayKey).filter(k => k.length > 1 && !SAID_GENERIC.has(k) && !TYPE_STOP.has(k) && !SAID_FUNC.has(k));
+  const have = desc.split(/[\s/]+/).map(sayKey).filter(Boolean);
+  const missing = want.filter(k => !have.some(h => sayLike(k, h)));
+  let out = desc;
+  if (missing.length && said) {
+    const n = said.split(/\s+/).length;
+    // a frase da pessoa (com os acentos dela), com as maiúsculas que a IA usou (IPTV, Drogasil)
+    const aiCase = new Map(desc.split(/\s+/).filter(w => /\p{Lu}/u.test(w)).map(w => [sayKey(w), w]));
+    const phrase = said.split(/\s+/).map(w => { const a = aiCase.get(sayKey(w)); return !a ? w : a.length > 1 && a === a.toUpperCase() ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+    out = n <= 12 ? phrase : `${desc} ${said.split(/\s+/).filter(w => missing.includes(sayKey(w))).join(' ')}`.trim();
+    out = out.charAt(0).toUpperCase() + out.slice(1);
+  }
+  // o nome do cliente com inicial maiúscula ("cliente odair" → "cliente Odair")
+  const name = clientName(text);
+  if (name) {
+    const nw = new Set(name.split(/\s+/).map(norm));
+    out = norm(out).includes(norm(name)) ? out.split(/\s+/).map(w => nw.has(norm(w)) ? titleName(w) : w).join(' ') : `${out} ${titleName(name)}`.trim();
+  }
+  return out.slice(0, 140);
 }
 
 (() => {
@@ -1557,6 +1649,7 @@ const Demo = {
     const card = this.db.cards.find(x => x.id === g.card_id && !x.archived) || this.db.cards.find(x => !x.archived), type = g.type === 'card' && !card ? 'out' : g.type;
     const named = g.category_id ? this.db.cats.find(x => x.id === g.category_id && x.kind === catKindOf(type)) : null;
     const c = named || (q.description ? matchCategory(q.description, catKindOf(type)) : null);
+    q.description = personalDescription(q.description, text, c, { txs: this.db.txs }); // o nome do cliente dito, do jeito da pessoa
     const tx = this._ins('txs', { type, amount: q.amount, date: q.date, description: q.description, category_id: c ? c.id : null, card_id: type === 'card' ? card.id : null, installments: type === 'card' ? q.installments : 1, invest_kind: type === 'invest' ? (g.investKind || 'aporte') : null });
     const head = { in: '💰 *Entrada*', out: '💸 *Saída*', card: '💳 *Cartão*', invest: tx.invest_kind === 'resgate' ? '📤 *Resgate*' : '📈 *Aporte*' }[type];
     return { handled: true, heard, tx, reply: `${head} de *${money(q.amount)}*${type === 'card' && q.installments > 1 ? ` em ${q.installments}x` : ''}\n🏷️ ${c ? c.name : 'Sem categoria'} · 📅 ${q.date === today ? 'hoje' : q.date.slice(8, 10) + '/' + q.date.slice(5, 7)}${q.description ? ' · ' + q.description : ''}` };
@@ -2300,7 +2393,7 @@ function openTx(id, prefill, o = {}) {
   if (prefill) Object.assign(TX, prefill, { amountText: prefill.amount ? String(prefill.amount).replace('.', ',') : '', touchedCat: !!prefill.category_id });
   if (TX.type === 'card' && !firstCard && !t) TX.type = 'out';
   const withAI = !t && !prefill && feat('assist');
-  AS.focus = withAI && (o.write || !touchFirst()); // no computador já dá para escrever; no celular, só quando a pessoa pede
+  AS.focus = withAI && !!o.write; // só quando a pessoa tocou em Escrever; senão o cursor fica no valor (R$)
   const html = `${sheetHead('tx-title', t ? 'Editar lançamento' : prefill && prefill.recurring_id ? (prefill.type === 'in' ? 'Confirmar recebimento' : 'Confirmar pagamento') : 'Novo lançamento')}
     ${withAI ? `<section class="ai-card" aria-labelledby="as-title">${aiTop('as-title')}
       <div id="as-row">${asRowHTML()}</div>
@@ -2308,7 +2401,7 @@ function openTx(id, prefill, o = {}) {
       <div class="as-out" id="as-out" aria-live="polite"></div></section>
     <div class="or"><span>ou preencha você mesmo</span></div>` : ''}
     <div class="seg" id="tx-seg" role="group" aria-label="Tipo" style="margin-top:12px"></div>
-    <label class="amount" id="tx-amount-wrap"><span>R$</span><input id="tx-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Valor" value="${esc(TX.amountText)}" ${t || touchFirst() || withAI ? '' : 'data-autofocus'}><i class="caret" aria-hidden="true"></i></label>
+    <label class="amount" id="tx-amount-wrap"><span>R$</span><input id="tx-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" aria-label="Valor" value="${esc(TX.amountText)}" ${t || touchFirst() || (withAI && o.write) ? '' : 'data-autofocus'}><i class="caret" aria-hidden="true"></i></label>
     <div id="tx-pay"></div>
     <div class="field"><span id="tx-cat-label">Categoria</span><div class="catgrid" id="tx-cats" role="group" aria-labelledby="tx-cat-label"></div><div id="tx-newcat"></div></div>
     <label class="field"><span>Descrição (opcional)</span><input class="input" id="tx-desc" maxlength="140" value="${esc(TX.description)}" placeholder="Ex.: Drogasil, cliente João, conta de luz" autocomplete="off"></label>
@@ -2392,8 +2485,8 @@ function txQuickFill(text) {
   TX.installments = TX.type === 'card' ? r.installments : 1;
   $('#tx-amount').value = r.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   $('#tx-date').value = r.date;
-  $('#tx-desc').value = r.description;
   const c = (g.category_id && S.catMap[g.category_id]?.kind === catKindOf(TX.type) && S.catMap[g.category_id]) || (r.description ? matchCategory(r.description, catKindOf(TX.type)) : null);
+  $('#tx-desc').value = personalDescription(r.description, text, c, { txs: S.txs });
   TX.category_id = c ? c.id : null; TX.touchedCat = false;
   updTxAll();
   if (g.type === 'card' && TX.type === 'out') toast('Cadastre um cartão para lançar no crédito.');
@@ -2436,9 +2529,9 @@ const recSupported = () => !!(navigator.mediaDevices && navigator.mediaDevices.g
 const recTime = () => { const t = Math.floor((Date.now() - REC.t0) / 1000); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`; };
 function recUI() { if (REC.where === 'ai' || $('#ai-row')) aiRow(); asRow(); }
 // Medidor de volume e fim da fala, pelo próprio áudio do microfone (nada além do áudio que já vai ser enviado).
-// Depois de ~0,4 s de voz, 1,6 s de silêncio = terminou de falar: envia sozinho. Barulho alto o tempo todo (feira,
+// Depois de ~0,4 s de voz, 2 s de silêncio = terminou de falar: envia sozinho. Barulho alto o tempo todo (feira,
 // carro): o medidor mostra que está ouvindo e a pessoa toca em Enviar. Sem Web Audio no aparelho: só o botão.
-const VAD = { frame: 60, minSpeech: 400, quiet: 1600, noVoice: 4500, wake: 1500 };
+const VAD = { frame: 60, minSpeech: 400, quiet: 2000, noVoice: 4500, wake: 1500 }; // 2 s de silêncio: dá para pensar no meio da frase
 // O áudio do medidor nasce ainda dentro do toque no microfone: o iPhone só deixa ele rodar assim.
 function audioCtx() {
   const AC = window.AudioContext || window.webkitAudioContext;
@@ -2611,7 +2704,7 @@ function assistApply(r) {
   if (list.length || r.removed) indexData();
   return list;
 }
-const txLabel = t => `${{ in: 'Entrada', out: 'Saída', card: 'Cartão', invest: 'Investimento' }[t.type] || 'Lançamento'} de ${money(t.amount)}${S.catMap[t.category_id] ? ' · ' + S.catMap[t.category_id].name : ''}`;
+const txLabel = t => { const c = S.catMap[t.category_id], d = String(t.description || '').trim(); return `${{ in: 'Entrada', out: 'Saída', card: 'Cartão', invest: 'Investimento' }[t.type] || 'Lançamento'} de ${money(t.amount)}${c ? ' · ' + c.name : ''}${d && norm(d) !== norm(c ? c.name : '') ? ' · ' + d : ''}`; };
 // depois de lançar: Desfazer e, se algo saiu diferente, Corrigir (abre o lançamento já preenchido) ou Ver (vários)
 const launchedActions = list => [
   { label: 'Desfazer', fn: () => asUndoMany(list.map(x => x.id)) },

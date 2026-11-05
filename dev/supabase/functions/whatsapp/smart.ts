@@ -152,7 +152,7 @@ const CARD_CUE = /(^| )(no|pelo|com o|com|no meu|pelo meu|com meu) (cartao|credi
 const NOT_MY_CARD = /(^| )(fatura|pai|mae|irma|irmao|filho|filha|esposa|marido|sogra|sogro|namorada|namorado|amigo|amiga|tio|tia|avo|vo)( |$)/;
 function parseQuick(text, today) {
   // pontuação de frase ("…uber ontem.", "uber, ontem") não atrapalha; "3.600" e "52,90" continuam valores
-  const raw = String(text || '').replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim();
+  const raw = moneySaid(String(text || '')).replace(/[!?.;…]+(?=\s|$)/g, ' ').replace(/,(?=\s)/g, ' ').trim(); // "20 reais e 50 centavos" = 20,50
   if (!raw) return null;
   const n = norm(raw);
   const out = { type: 'out', amount: null, installments: 1, date: today, description: '', investKind: null };
@@ -320,5 +320,97 @@ function guessType(q, text, data, hint) {
   const investKind = dir === 'invest' ? ((q && q.investKind === 'resgate') || /(^| )(resgatei|resgate|saquei)( |$)/.test(n) ? 'resgate' : 'aporte') : null;
   return { type, investKind, category_id: catFor(dir), card_id, by, votes: vote, catFor };
 }
+// ---------- descrição: tudo o que a pessoa disse ----------
+// A IA às vezes resume ("Venda IPTV", "Farmácia") e perde o que importa (o cliente, a loja, para quem foi). Quando a
+// descrição dela deixa de fora alguma palavra que a pessoa disse, vale a frase da pessoa, na ordem dela, sem o valor,
+// a data, a forma de pagamento, o cartão e as palavras de comando: "entrada 30 venda iptv cliente odair" →
+// "Venda IPTV cliente Odair". O nome depois de "cliente" sai com inicial maiúscula.
+const NAME_STOP = new Set(('de da do das dos e o a os as no na nos nas em com pix via valor reais real hoje ontem anteontem pagou pago paga '
+  + 'pagamento pagando mensal mensalidade renovou renovacao entrada saida venda vendi recebi recebido novo nova antigo antiga fixo fixa').split(' '));
+const NAME_WORD = /^\p{L}[\p{L}'’-]*$/u;
+const titleName = s => String(s || '').replace(/\p{L}[\p{L}'’-]*/gu, (w, i) => i && /^(de|da|do|das|dos|e)$/i.test(w) ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1));
+// "cliente odair", "do cliente José Carlos", "clienta Ana": o nome que vem depois (até 3 palavras)
+function clientName(text) {
+  const words = String(text || '').replace(/[.,;:!?()"“”]/g, ' ').split(/\s+/).filter(Boolean);
+  const i = words.findIndex(w => /^(cliente|clienta|fregues|freguesa)$/.test(norm(w)));
+  if (i < 0) return '';
+  let j = i + 1;
+  if (words[j] && /^(o|a|do|da|de)$/.test(norm(words[j]))) j++;
+  const out = [];
+  for (; j < words.length && out.length < 3; j++) {
+    if (!NAME_WORD.test(words[j]) || NAME_STOP.has(norm(words[j])) || SAID_FUNC.has(norm(words[j]))) break;
+    out.push(words[j]);
+  }
+  return out.join(' ');
+}
+// valor falado com centavos: "20 reais e 50 centavos" / "20 e 50 centavos" → "20,50" (um valor só)
+const moneySaid = s => String(s || '').replace(/(\d+)\s*(?:reais|real|conto|contos)?\s+e\s+(\d{1,2})\s*centavos?/gi, (m, a, b) => `${a},${b.padStart(2, '0')}`);
+// palavras que não são "o que foi": números falados, comando, pagamento, tempo, muleta da fala
+const NUM_WORDS = new Set('zero dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta oitenta noventa cem cento duzentos duzentas trezentos quatrocentos quinhentos seiscentos setecentos oitocentos novecentos mil milhao milhoes'.split(' '));
+const SAID_SKIP = new Set(('lanca lancar lance lancado coloca colocar coloque bota botar registra registrar registre anota anotar anote ai mim favor ' +
+  'reais real conto contos pila centavo centavos vez vezes x entrada saida gasto gastei gastou paguei pago paga pagou recebi recebido recebeu ganhei comprei comprou vendi vendeu ' +
+  'foi teve tive hoje ontem anteontem agora dia mes semana passada passado ah eh hum hmm entao tipo ne bom olha assim oi ola ok okay beleza pronto isso aqui la so mais tambem ' +
+  'valor pix pics piks debito dinheiro especie boleto transferencia ted doc cartao credito vista parcelado parcelei').split(' '));
+const SAID_UNITS = /^(meses|mes|telas|tela|telinhas|unidades|unidade|kg|quilos|kilos|litros|litro|caixas|caixa|pacotes|pacote|horas|hora|pecas|itens|pontos|pessoas|semanas)$/;
+// palavras de ligação: não contam como "o que foi"
+const SAID_FUNC = new Set('de da do das dos no na nos nas em com sem e o a os as um uma uns umas que pelo pela pelos pelas por pra pro para eu ele ela meu minha meus minhas seu sua nosso nossa esse essa este esta isso aquele aquela ja ainda muito pouco'.split(' '));
+// não precisam estar na descrição (a IA pode tirar): dizem o tipo, não o que foi
+const SAID_GENERIC = new Set('cliente clienta pagamento pagamentos compra compras valor gasto gastos despesa despesas coisa coisas lancamento lancamentos referente'.split(' '));
+const sayKey = w => { const n = norm(w).replace(/[^a-z0-9]/g, ''); return n.length > 4 && n.endsWith('s') ? n.slice(0, -1) : n; };
+const sayLike = (a, b) => a === b || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) || (a.length >= 5 && b.length >= 5 && editDist1(a, b));
+function editDist1(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, d = 0;
+  while (i < a.length && j < b.length) { if (a[i] === b[j]) { i++; j++; continue; } if (++d > 1) return false; if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; } }
+  return d + (a.length - i) + (b.length - j) <= 1;
+}
+// a frase da pessoa, limpa: sem valor, data, parcelas "10x", forma de pagamento, cartão e comando (o "3/12" da parcela fica)
+function saidPhrase(text, data) {
+  const cards = new Set(((data && data.cards) || []).flatMap(c => norm(c.name).split(' ')).filter(w => w.length > 2));
+  const parc = /(^| )(parcela|parcelas|prestacao|prestacoes|carne)( |$)/.test(norm(text));
+  const toks = moneySaid(text).replace(/[“”"!?;:…()]+/g, ' ').replace(/,(?=\s|$)/g, ' ').split(/\s+/).filter(Boolean);
+  const out = [];
+  for (let k = 0; k < toks.length; k++) {
+    const w = toks[k], n = norm(w).replace(/[.,]+$/, '');
+    if (parc && /^\d{1,2}\/\d{1,2}$/.test(n)) { out.push(n); continue; }
+    if (/^\d{1,3}$/.test(n) && SAID_UNITS.test(norm(toks[k + 1] || ''))) { out.push(n); continue; } // "3 meses", "2 telas": quantidade, não valor
+    if (/\d/.test(n) || /^r\$/.test(n) || NUM_WORDS.has(n) || SAID_SKIP.has(n) || cards.has(n)) { out.push(null); continue; }
+    if (n === 'e' && (out.at(-1) === null || NUM_WORDS.has(norm(toks[k + 1] || '')))) { out.push(null); continue; } // "trinta e cinco"
+    out.push(w.replace(/[.,]+$/, ''));
+  }
+  // tira a palavra de ligação que ficou solta: no começo, no fim ou antes de um buraco ("no pix pro joão" → "joão")
+  const link = w => SAID_FUNC.has(norm(w));
+  for (let again = true; again;) { // "que eu [comprei]": tira "eu", depois "que"
+    again = false;
+    for (let k = out.length - 1; k >= 0; k--) if (out[k] !== null && link(out[k]) && (k === out.length - 1 || out[k + 1] === null)) { out[k] = null; again = true; }
+  }
+  const words = out.filter(w => w !== null);
+  while (words.length && link(words[0])) words.shift();
+  return words.join(' ');
+}
+// descrição final do assistente: a da IA se ela guardou tudo o que foi dito; senão a frase da pessoa
+function personalDescription(desc, text, cat, data) {
+  desc = String(desc || '').trim();
+  const said = saidPhrase(text, data);
+  const want = said.split(/\s+/).filter(w => w && NAME_WORD.test(w)).map(sayKey).filter(k => k.length > 1 && !SAID_GENERIC.has(k) && !TYPE_STOP.has(k) && !SAID_FUNC.has(k));
+  const have = desc.split(/[\s/]+/).map(sayKey).filter(Boolean);
+  const missing = want.filter(k => !have.some(h => sayLike(k, h)));
+  let out = desc;
+  if (missing.length && said) {
+    const n = said.split(/\s+/).length;
+    // a frase da pessoa (com os acentos dela), com as maiúsculas que a IA usou (IPTV, Drogasil)
+    const aiCase = new Map(desc.split(/\s+/).filter(w => /\p{Lu}/u.test(w)).map(w => [sayKey(w), w]));
+    const phrase = said.split(/\s+/).map(w => { const a = aiCase.get(sayKey(w)); return !a ? w : a.length > 1 && a === a.toUpperCase() ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+    out = n <= 12 ? phrase : `${desc} ${said.split(/\s+/).filter(w => missing.includes(sayKey(w))).join(' ')}`.trim();
+    out = out.charAt(0).toUpperCase() + out.slice(1);
+  }
+  // o nome do cliente com inicial maiúscula ("cliente odair" → "cliente Odair")
+  const name = clientName(text);
+  if (name) {
+    const nw = new Set(name.split(/\s+/).map(norm));
+    out = norm(out).includes(norm(name)) ? out.split(/\s+/).map(w => nw.has(norm(w)) ? titleName(w) : w).join(' ') : `${out} ${titleName(name)}`.trim();
+  }
+  return out.slice(0, 140);
+}
 
-export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords };
+export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords, personalDescription, clientName, titleName, saidPhrase, moneySaid };

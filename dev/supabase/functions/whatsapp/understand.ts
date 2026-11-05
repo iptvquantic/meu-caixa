@@ -61,9 +61,9 @@ Regras:
 1. PIX, débito, dinheiro, boleto ou transferência citados = à vista: nunca "cartao", mesmo falando de cartão.
 2. "parcela 3/12", "3 de 12", "terceira parcela" = parcela de algo que já existe: o valor só desta parcela e "3/12" na descrição; não é data nem compra parcelada.
 3. Compra nova "em 10x" no crédito: tipo cartao, parcelas 10, valor TOTAL ("10x de 240" = 2400).
-4. Valor por extenso vira número: "cinquenta e dois e noventa" = 52.9; "mil e duzentos" = 1200; "trinta conto" = 30. Telefone, data e número da parcela não são valor.
+4. Valor por extenso vira número: "cinquenta e dois e noventa" = 52.9; "mil e duzentos" = 1200; "trinta conto" = 30; "20 reais e 50 centavos" = 20.5 (um valor). Telefone, data e número da parcela não são valor.
 5. data AAAA-MM-DD: sem data = hoje; "ontem"; "anteontem"; "dia 15" = o dia 15 mais recente já passado; "15/10". Nunca futura.
-6. descricao: 2 a 6 palavras com inicial maiúscula, do jeito dela (cliente, loja, pessoa, o que foi), sem valor, data, forma de pagamento nem as palavras entrada, saída, paguei, recebi. Ex.: "Parcela cartão do pai 3/12", "Edson Monsores", "Mercado Guanabara".
+6. descricao: TUDO o que ela disse sobre o lançamento, com as palavras dela e inicial maiúscula (o que foi, cliente, pessoa, loja, para quem); não resuma nem troque pelo nome da categoria; sem valor, data, forma de pagamento, cartão e as palavras entrada, saída, gastei, paguei, recebi. Ex.: "Venda IPTV cliente João", "Farmácia Drogasil remédio da mãe", "Parcela cartão do pai 3/12", "Pedro Alencar".
 7. categoria: nome EXATO da lista dela, do lado do tipo (saida e cartao usam as de saída), pelo QUE foi (mercado, ifood, gasolina, cliente) e nunca pela forma de pagamento: "PIX enviado"/"PIX recebido" só para dinheiro de ou para uma pessoa quando nenhuma outra serve. Os exemplos e os lançamentos parecidos mostram como ELA classifica: siga o mesmo (cliente de "Venda de IPTV" continua lá). Nenhuma serve: "".
 8. pagamento: só o que ela disse (pix, debito, dinheiro, boleto, transferencia, credito); senão "outro". cartao (só no tipo cartao): nome exato do cartão dela; não citou: "". conta_fixa: nome exato da conta fixa da lista que ela pagou ou recebeu; senão "".
 9. Pagou ou recebeu uma conta fixa da lista sem dizer o valor ("paguei o aluguel"): "lancar" com o valor da conta fixa, não "falta_valor".

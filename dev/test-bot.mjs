@@ -10,6 +10,7 @@ import { handle, kindOf, messagesOf, resetPhoneCache, signatureOk } from './supa
 import { groq, speechText, toQuick } from './supabase/functions/whatsapp/groq.ts';
 import { cleanDescription, contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf } from './supabase/functions/whatsapp/understand.ts';
 import { b64, readReceipt, toReceipt } from './supabase/functions/whatsapp/receipt.ts';
+import { clientName, moneySaid, norm, personalDescription, saidPhrase, titleName } from './supabase/functions/whatsapp/smart.ts';
 
 const require = createRequire(import.meta.url);
 let pass = 0, fail = 0;
@@ -465,9 +466,9 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(ex.amount === 40 && body.response_format?.type === 'json_object' && body.reasoning_effort === 'low' && body.temperature === 0, 'extração pede JSON, esforço baixo, temperatura 0');
   sent.length = 0;
   g = groq('k', fake([{ status: 200, body: { text: ' mercado 52,90 ' } }]));
-  const tx = await g.transcribe(new Blob(['x'], { type: 'audio/ogg' }), 'audio.ogg', 'Nubank, Venda de IPTV, Josimar.'), form = sent[0].init.body;
+  const tx = await g.transcribe(new Blob(['x'], { type: 'audio/ogg' }), 'audio.ogg', 'Nubank, Venda de IPTV, Joaquim.'), form = sent[0].init.body;
   ok(tx === 'mercado 52,90' && form.get('model') === 'whisper-large-v3' && form.get('language') === 'pt' && form.get('response_format') === 'verbose_json' && form.get('temperature') === '0' && sent[0].url.endsWith('/audio/transcriptions'), 'transcrição: Whisper completo, em português, com os trechos (para tirar o silêncio)');
-  ok(form.get('prompt') === 'Nubank, Venda de IPTV, Josimar.', 'transcrição recebe o vocabulário da pessoa (nomes de clientes, cartões, categorias)');
+  ok(form.get('prompt') === 'Nubank, Venda de IPTV, Joaquim.', 'transcrição recebe o vocabulário da pessoa (nomes de clientes, cartões, categorias)');
   sent.length = 0; const logged = [];
   g = groq('k', fake([{ status: 413, body: { error: { message: 'Request Entity Too Large' } } }, { status: 200, body: { text: 'uber 23' } }]), undefined, undefined, (...a) => logged.push(a.join(' ')));
   ok(await g.transcribe(new Blob(['x']), 'audio.wav') === 'uber 23' && sent[1].init.body.get('model') === 'whisper-large-v3-turbo' && /413 Request Entity Too Large/.test(logged.join('|')), 'transcrição recusada (o 413 de 15 a 17/10): registra o motivo e tenta o outro modelo');
@@ -494,9 +495,9 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   const L = (x) => ({ tipo: 'saida', valor: 10, data: TODAY, descricao: 'x', categoria: '', pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '', ...x });
   let p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ valor: 350, descricao: 'parcela cartão do pai 3/12', pagamento: 'pix' })] });
   ok(p.action === 'lancar' && p.items[0].type === 'out' && p.items[0].amount === 350 && p.items[0].description === 'Parcela cartão do pai 3/12' && p.items[0].payment === 'pix' && p.items[0].installments === 1, 'plano: saída por PIX com a descrição limpa');
-  p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ tipo: 'cartao', valor: '2.400,00', parcelas: 10, cartao: 'Nubank' }), L({ tipo: 'investimento', investimento: 'resgate', valor: 200 }), L({ tipo: 'entrada', valor: 30, descricao: 'Entrada Edson Monsores', data: '2031-01-01' })] });
+  p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ tipo: 'cartao', valor: '2.400,00', parcelas: 10, cartao: 'Nubank' }), L({ tipo: 'investimento', investimento: 'resgate', valor: 200 }), L({ tipo: 'entrada', valor: 30, descricao: 'Entrada Pedro Alencar', data: '2031-01-01' })] });
   ok(p.items.length === 3 && p.items[0].type === 'card' && p.items[0].amount === 2400 && p.items[0].installments === 10 && p.items[0].card === 'Nubank', 'cartão: valor em texto e parcelas');
-  ok(p.items[1].type === 'invest' && p.items[1].investKind === 'resgate' && p.items[2].type === 'in' && p.items[2].description === 'Edson Monsores' && p.items[2].date === TODAY, 'resgate; "Entrada" sai da descrição; data futura vira hoje');
+  ok(p.items[1].type === 'invest' && p.items[1].investKind === 'resgate' && p.items[2].type === 'in' && p.items[2].description === 'Pedro Alencar' && p.items[2].date === TODAY, 'resgate; "Entrada" sai da descrição; data futura vira hoje');
   p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ tipo: 'entrada', parcelas: 7, cartao: 'Nubank' })] });
   ok(p.items[0].installments === 1 && p.items[0].card === '', 'parcelas e cartão só valem no tipo cartão');
   p = P({ acao: 'lancar', entendido: '', lancamentos: [L({ valor: 0, descricao: 'uber' })] });
@@ -508,15 +509,15 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   // contexto: o jeito da pessoa vai junto
   const { db } = fakeDb(), data = db.data;
   data.categories.push({ id: 'c-iptv', kind: 'in', name: 'Venda de IPTV', icon: 'i:tv', legacy_key: 'iptv', archived: false, sort: 5 });
-  data.transactions.push({ id: 'h1', type: 'in', amount: 30, date: '2026-10-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null },
-    { id: 'h2', type: 'in', amount: 30, date: '2026-09-05', description: 'Josimar', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null });
-  const cx = contextOf('josimar trinta', data, TODAY, { hint: { type: 'in', sure: true }, fromAudio: true });
-  ok(/Hoje: sexta-feira, 09\/10\/2026 \(2026-10-09\)/.test(cx) && /Venda de IPTV \(ex\.: Josimar\)/.test(cx) && /Cartões de crédito dela: Nubank/.test(cx), 'contexto: data, categorias com exemplos da pessoa e cartões');
-  ok(/Contas fixas do mês: Aluguel \(saída, R\$\s?900,00, dia 5, a pagar\)/.test(cx) && /Lançamentos parecidos.*\n- 05\/10 entrada R\$\s?30,00 "Josimar" → Venda de IPTV/.test(cx), 'contexto: contas fixas e lançamentos parecidos');
-  ok(/tocou na aba: Entrada/.test(cx) && /Mensagem \(áudio transcrito\): "josimar trinta"/.test(cx), 'contexto: aba tocada e a mensagem');
+  data.transactions.push({ id: 'h1', type: 'in', amount: 30, date: '2026-10-05', description: 'Joaquim', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null },
+    { id: 'h2', type: 'in', amount: 30, date: '2026-09-05', description: 'Joaquim', category_id: 'c-iptv', card_id: null, installments: 1, invest_kind: null });
+  const cx = contextOf('joaquim trinta', data, TODAY, { hint: { type: 'in', sure: true }, fromAudio: true });
+  ok(/Hoje: sexta-feira, 09\/10\/2026 \(2026-10-09\)/.test(cx) && /Venda de IPTV \(ex\.: Joaquim\)/.test(cx) && /Cartões de crédito dela: Nubank/.test(cx), 'contexto: data, categorias com exemplos da pessoa e cartões');
+  ok(/Contas fixas do mês: Aluguel \(saída, R\$\s?900,00, dia 5, a pagar\)/.test(cx) && /Lançamentos parecidos.*\n- 05\/10 entrada R\$\s?30,00 "Joaquim" → Venda de IPTV/.test(cx), 'contexto: contas fixas e lançamentos parecidos');
+  ok(/tocou na aba: Entrada/.test(cx) && /Mensagem \(áudio transcrito\): "joaquim trinta"/.test(cx), 'contexto: aba tocada e a mensagem');
   ok(!/tocou na aba/.test(contextOf('x', data, TODAY, { hint: { type: 'in' } })), 'aba só lembrada não vai para a IA');
   const voc = vocabOf(data);
-  ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Josimar/.test(voc) && voc.length <= 440, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
+  ok(/Nubank/.test(voc) && /Venda de IPTV/.test(voc) && /Joaquim/.test(voc) && voc.length <= 440, 'vocabulário do áudio: cartões, categorias e nomes que a pessoa usa');
   ok(/nunca "cartao", mesmo falando de cartão/.test(UNDERSTAND) && /cartão da Bruna/.test(UNDERSTAND) && /"parcela 3\/12"/.test(UNDERSTAND) && /Valor por extenso vira número/.test(UNDERSTAND) && /começa com "Entrada"/.test(UNDERSTAND) && UNDERSTAND.length < 3700, 'instruções curtas cobrem PIX x cartão, cartão de outra pessoa, parcela 3/12, valor falado e "Entrada/Saída"');
 }
 
@@ -617,6 +618,63 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   db.quotaLimit = 0; const nUse = seen.length;
   await answer(msg('cartao pai pix 77'), deps); t = lastAdd(db);
   ok(t.amount === 77 && seen.length === nUse, 'sem cota de IA: o lançamento rápido lança mesmo assim');
+}
+
+// ---------- a descrição guarda tudo o que a pessoa disse (o nome do cliente nunca fica de fora) ----------
+{
+  const { db, rpc } = linked();
+  db.data.categories.push({ id: 'c-iptv', kind: 'in', name: 'Venda de IPTV', icon: 'i:tv', legacy_key: null, archived: false, sort: 5 },
+    { id: 'c-serv', kind: 'in', name: 'Serviços', icon: 'i:briefcase', legacy_key: 'servicos', archived: false, sort: 6 });
+  const item = (tipo, valor, descricao, categoria) => ({ tipo, valor, data: TODAY, descricao, categoria, pagamento: 'outro', cartao: '', parcelas: 1, investimento: 'nao', conta_fixa: '' });
+  const plans = [
+    // a IA resumiu e deixou o nome do cliente de fora (o caso do dono)
+    [/odair/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 30, 'Venda IPTV', 'Venda de IPTV')] }],
+    [/telma/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 35, 'Venda IPTV Telma', 'Venda de IPTV')] }],
+    [/instalacao/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 120, 'Instalação', 'Serviços')] }],
+    [/drogasil/, { acao: 'lancar', entendido: '', lancamentos: [item('saida', 20.5, 'Farmacia', 'Farmácia')] }],
+    [/ciro.*dora/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 30, 'Cliente Ciro', 'Venda de IPTV'), item('entrada', 50, 'Cliente Dora', 'Venda de IPTV')] }],
+  ];
+  const seen = [];
+  const understand = async (system, context) => {
+    seen.push(context);
+    const m = norm(/Mensagem[^:]*: "([\s\S]*)"$/.exec(context)?.[1] ?? '');
+    for (const [rx, plan] of plans) if (rx.test(m)) return JSON.stringify(plan);
+    return '{"acao":"nada","entendido":"","lancamentos":[]}';
+  };
+  const { deps } = botDeps(rpc, { understand });
+  const said = (x) => answer({ phone: PHONE, kind: 'audio', audioId: 'x', lastHour: 1 }, { ...deps, transcribe: async () => x });
+  // falado: a IA tirou o cliente; volta a frase dele, sem "Entrada" e sem o valor
+  let r = await said('Entrada 30 venda IPTV cliente odair'), t = lastAdd(db);
+  ok(t.type === 'in' && t.amount === 30 && t.category_id === 'c-iptv' && t.description === 'Venda IPTV cliente Odair', '"entrada 30 venda IPTV cliente odair" (falado): "Venda IPTV cliente Odair": ' + JSON.stringify(t));
+  has(r, '🏷️ Venda de IPTV · 📅 hoje · Venda IPTV cliente Odair', 'a confirmação mostra tudo o que foi dito');
+  // escrito (lançamento rápido, sem IA): a mesma frase, com o nome do cliente em maiúscula
+  await answer(msg('entrada 30 venda iptv cliente odair'), deps); t = lastAdd(db);
+  ok(t.category_id === 'c-iptv' && t.description === 'Venda iptv cliente Odair', 'escrito: "Venda iptv cliente Odair": ' + JSON.stringify(t));
+  // a IA guardou tudo: fica a dela
+  await said('entrada 35 venda iptv telma'); t = lastAdd(db);
+  ok(t.description === 'Venda IPTV Telma', 'a IA já guardou tudo ("Venda IPTV Telma"): fica a dela: ' + JSON.stringify(t));
+  await said('recebi 120 instalação cliente josé silva'); t = lastAdd(db);
+  ok(t.category_id === 'c-serv' && t.description === 'Instalação cliente José Silva', 'serviço e cliente: "Instalação cliente José Silva": ' + JSON.stringify(t));
+  // reais e centavos falados = um valor só; a descrição leva a loja e para quem foi
+  await said('Gastei 20 reais e 50 centavos na farmácia Drogasil, remédio da minha mãe.'); t = lastAdd(db);
+  ok(t.amount === 20.5 && t.description === 'Farmácia Drogasil remédio da minha mãe', '"20 reais e 50 centavos na farmácia Drogasil, remédio da minha mãe": R$ 20,50 e tudo na descrição: ' + JSON.stringify(t));
+  ok(/Mensagem \(áudio transcrito\): "Gastei 20,50 na farmácia Drogasil/.test(seen.at(-1)), 'a IA recebe "20,50" (não "20 reais e 50 centavos")');
+  await answer(msg('farmacia 20 reais e 50 centavos'), deps); t = lastAdd(db);
+  ok(t.amount === 20.5, 'escrito "20 reais e 50 centavos": R$ 20,50');
+  // vários na mesma frase: cada um com o seu nome (não a frase inteira)
+  const nAdd = count(db, 'wa_add_tx');
+  await said('cliente ciro 30 e cliente dora 50');
+  const two = db.calls.filter(([f]) => f === 'wa_add_tx').slice(nAdd).map(([, a]) => a.p_tx.description);
+  ok(two.join(',') === 'Cliente Ciro,Cliente Dora', 'dois clientes na frase: cada um com o seu nome: ' + JSON.stringify(two));
+  // as regras (código do app, o mesmo no robô)
+  ok(clientName('do cliente da Lúcia 30 pix') === 'Lúcia' && clientName('cliente pagou 50') === '' && clientName('clienta Ana Maria Souza Lima') === 'Ana Maria Souza'
+    && clientName('cliente novo 40') === '' && clientName('cliente josé carlos por 90') === 'josé carlos' && titleName('joão da silva') === 'João da Silva', 'nome depois de "cliente" (até 3 palavras, sem "pagou"/"novo"/"por")');
+  ok(saidPhrase('Lança aí pra mim um lanche de quinze reais que eu comprei pro meu filho na escola', {}) === 'lanche pro meu filho na escola'
+    && saidPhrase('comprei uma tv de 2400 em 10x no nubank', { cards: [{ name: 'Nubank' }] }) === 'tv'
+    && saidPhrase('vendi 3 meses de iptv por 90 reais', {}) === '3 meses de iptv', 'frase limpa: sem comando, valor, parcelas, cartão; "3 meses" fica');
+  ok(personalDescription('Mercado', 'mercado 52,90 no débito', null, { cards: [] }) === 'Mercado' && personalDescription('Parcela cartão do pai 3/12', 'Pagamento cartão pai parcela com Pix 3/12 350', null, { cards: [] }) === 'Parcela cartão do pai 3/12',
+    'a descrição da IA que já tem tudo não muda');
+  ok(moneySaid('gastei 20 reais e 5 centavos') === 'gastei 20,05' && moneySaid('mercado 20 e farmácia 50') === 'mercado 20 e farmácia 50', 'centavos: "20 reais e 5 centavos" = 20,05; "20 e farmácia 50" continua dois valores');
 }
 
 

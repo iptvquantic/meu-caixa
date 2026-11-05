@@ -69,7 +69,7 @@ eq(q('pagamento cartao pai parcela com pix 3/12'), null, '... sem valor: não la
 eq(q('cartao bruna 300'), { type: 'out', amount: 300, inst: 1, date: T, desc: 'Cartao bruna', kind: null }, 'cartão da Bruna: saída (pagamento do cartão dela)');
 eq(q('mercado 50 cartão'), { type: 'card', amount: 50, inst: 1, date: T, desc: 'Mercado', kind: null }, '"cartão" no fim: pagou no cartão');
 eq(q('paguei a fatura do cartão 1500').type, 'out', 'fatura não é compra no cartão');
-eq(q('Entrada Edson Monsores 30'), { type: 'in', amount: 30, inst: 1, date: T, desc: 'Edson Monsores', kind: null }, '"Entrada" no começo: entrada, e sai da descrição');
+eq(q('Entrada Pedro Alencar 30'), { type: 'in', amount: 30, inst: 1, date: T, desc: 'Pedro Alencar', kind: null }, '"Entrada" no começo: entrada, e sai da descrição');
 eq(q('Saída terceira parcela celular pai 194'), { type: 'out', amount: 194, inst: 1, date: T, desc: 'Terceira parcela celular pai', kind: null }, '"Saída" no começo sai da descrição');
 eq(q('farmácia 37,50 05/10').date, '2026-10-05', 'sem "parcela", 05/10 continua sendo data');
 
@@ -85,14 +85,14 @@ eq(ctx.typeWords('Venda de IPTV'), ['venda', 'iptv'], 'palavras do nome'); eq(ct
   const data = {
     cats: [C('iptv', 'in', 'Venda de IPTV', 'iptv'), C('vend', 'in', 'Vendas', 'vendas'), C('ass', 'out', 'Assinaturas', 'assinaturas'), C('merc', 'out', 'Mercado', 'mercado'),
       C('ifood', 'out', 'Lanche / ifood'), C('cerv', 'out', 'Cerveja'), C('imp1', 'out', 'Categoria importada 1'), C('imp2', 'out', 'Categoria importada 2'), C('cdb', 'invest', 'Renda Fixa/CDB', 'renda_fixa')],
-    txs: [TX('in', 'Josimar', 'iptv', '2026-10-10'), TX('in', 'Roberval', 'iptv', '2026-10-09'), TX('in', 'Josimar', 'iptv', '2026-09-15'),
+    txs: [TX('in', 'Joaquim', 'iptv', '2026-10-10'), TX('in', 'Roberval', 'iptv', '2026-10-09'), TX('in', 'Joaquim', 'iptv', '2026-09-15'),
       TX('out', 'ifood mensalidade iptv ramom drograria padaria', 'merc', '2026-10-04'), TX('card', 'Shopee', null, '2026-10-01', 'k1'), TX('card', 'Shopee', null, '2026-09-01', 'k1'),
       TX('out', 'Mercado', 'merc', '2026-10-03')],
     recs: [], cards: [{ id: 'k1', name: 'Nubank', archived: false }, { id: 'k2', name: 'Inter', archived: true }]
   };
   const g = (text, hint) => { const r = ctx.guessType(ctx.parseQuick(text, T), text, data, hint); return [r.type, r.category_id, r.card_id, r.by]; };
   eq(g('iptv vanessa 30'), ['in', 'iptv', null, 'historico'], 'iptv vanessa 30 → entrada em Venda de IPTV (o caso real)');
-  eq(g('josimar 30'), ['in', 'iptv', null, 'historico'], 'nome de cliente já lançado → entrada na mesma categoria');
+  eq(g('joaquim 30'), ['in', 'iptv', null, 'historico'], 'nome de cliente já lançado → entrada na mesma categoria');
   eq(g('mercado 52,90'), ['out', 'merc', null, 'historico'], 'mercado → saída');
   eq(g('shopee 80'), ['card', null, 'k1', 'historico'], 'Shopee sempre no cartão → cartão Nubank');
   eq(g('shopee 80 pix'), ['out', null, null, 'historico'], '"pix" na frase: à vista');

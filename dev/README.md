@@ -114,7 +114,7 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
   criado; o app mostra na hora com Desfazer (que apaga pelo próprio app, com RLS).
 - Na página Assistente, pergunta livre vai ao Conselheiro (função `ai`, com o histórico da conversa).
 - Gravação: o app mede o volume do microfone enquanto grava (`vadStep`, Web Audio): mostra 5 barras e, depois de
-  ~0,4 s de voz, 1,6 s de silêncio = terminou de falar e envia sozinho (`VAD` no `app.html`). O ruído de fundo é o
+  ~0,4 s de voz, 2 s de silêncio = terminou de falar e envia sozinho (`VAD` no `app.html`). O ruído de fundo é o
   menor volume recente; barulho alto o tempo todo não dispara (a pessoa toca em Enviar); sem voz em 4,5 s, pede
   para falar mais perto. Teste no Chromium com um áudio de fala seguida de silêncio (`test-assist.js`). O áudio do
   medidor (`audioCtx`) nasce ainda dentro do toque no microfone, antes de pedir a permissão (o iPhone só deixa rodar

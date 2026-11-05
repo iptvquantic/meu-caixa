@@ -2,7 +2,7 @@
 // pagar conta fixa, ler comprovante por foto, consultar, desfazer, perguntar à IA). Frase simples e clara é
 // lançada na hora pelo lançamento rápido; áudio e frase com dúvida passam pela IA com o contexto da pessoa
 // (understand.ts). Tudo que fala com o mundo (banco, IA, áudio, imagem) chega por "deps" (dev/test-bot.mjs).
-import { explicitType, familyOf, guessType, iconIsSpecific, norm, parseQuick, suggestIcon } from './smart.ts';
+import { explicitType, familyOf, guessType, iconIsSpecific, moneySaid, norm, parseQuick, personalDescription, suggestIcon } from './smart.ts';
 import { contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf, type Item, type Plan } from './understand.ts';
 import {
   addMonths, billsOfMonth, brl, buildContext, cardParts, goalValue, invoiceMonth, monthByCat, monthSums, r2, splitInstallments,
@@ -194,8 +194,8 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
   if (/^(contas|contas fixas|a pagar|a receber|vencimentos|boletos|contas do mes)$/.test(n)) return feats(u).bills === false ? 'As *contas fixas* estão desligadas nos Ajustes do app.' : bills(u, d, today);
   if (/^(metas|meta|limites|objetivos)$/.test(n)) return feats(u).goals === false ? 'As *metas* estão desligadas nos Ajustes do app.' : goals(u, d, today);
 
-  // a frase anterior que ficou sem valor + esta ("parcela do pai" + "350")
-  const full = ro.context ? `${ro.context}. ${text}` : text, fn = norm(full).replace(/[!.?…]+$/g, '').trim();
+  // a frase anterior que ficou sem valor + esta ("parcela do pai" + "350"); "20 reais e 50 centavos" vira "20,50"
+  const full = moneySaid(ro.context ? `${ro.context}. ${text}` : text), fn = norm(full).replace(/[!.?…]+$/g, '').trim();
   let counted = !!ro.fromAudio; // o áudio já gastou 1 da cota de IA do dia
   if (ro.fromAudio || ro.context || !isQuestion(text)) {
     const q = parseQuick(full, today) as Quick | null;
@@ -215,7 +215,7 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
       const data = await load();
       if (data.cards.some((c) => !c.archived) && (feats(u).bills === false || !(findBill(full, 'out', data, today) || findBill(full, 'out', data, today, true)))) return MSG.invoicePaid;
     }
-    // frase simples e clara ("mercado 52,90", "josimar 30"): lança na hora, sem gastar IA
+    // frase simples e clara ("mercado 52,90", "joaquim 30"): lança na hora, sem gastar IA
     if (simple && q && q.amount > 0) {
       const data = await load();
       if (confident(q, full, data, ro.hint)) return quickEntry(q, full, u, d, data, ro.hint);
@@ -234,6 +234,9 @@ async function route(text: string, u: WaUser, d: BotDeps, ro: RouteOpts = {}): P
       let plan: Plan | null = null, down = false;
       try { plan = toPlan(await d.understand(UNDERSTAND, contextOf(full, data, today, { hint: ro.hint, fromAudio: ro.fromAudio }), SCHEMA), today); }
       catch (e) { down = true; d.log?.('entender falhou', e instanceof Error ? e.message : e); }
+      // só na conta do dono (master/admin): a frase e o que a IA entendeu, para conferir quando algo sair errado
+      // (de clientes, nada do que foi dito vai para o registro)
+      if (u.plan === 'master' || u.plan === 'admin') d.log?.('entendido (dono)', JSON.stringify({ frase: full.slice(0, 240), audio: !!ro.fromAudio, acao: plan?.action ?? (down ? 'ia fora' : 'sem plano'), itens: plan?.action === 'lancar' ? plan.items.map((i) => ({ tipo: i.type, valor: i.amount, desc: i.description, cat: i.category })) : undefined }));
       if (plan) {
         const r = await applyPlan(plan, full, u, d, data);
         if (r !== undefined) return r;
@@ -283,7 +286,7 @@ function quickEntry(q: Quick, text: string, u: WaUser, d: BotDeps, data: Data, h
   const g = guessType(q, text, data, hint);
   const cat = g.category_id ? data.categories.find((c) => c.id === g.category_id) ?? null : null;
   const card = g.card_id ? data.cards.find((c) => c.id === g.card_id) ?? null : null;
-  return addEntry(u, d, { ...q, type: g.type, investKind: g.investKind }, text, data, { cat, card });
+  return addEntry(u, d, { ...q, type: g.type, investKind: g.investKind }, text, data, { cat, card, personal: true });
 }
 
 // O que a IA entendeu → lançamentos, pedido do valor, desfazer ou pergunta livre (undefined)
@@ -342,7 +345,7 @@ async function launch(items: Item[], text: string, u: WaUser, d: BotDeps, data: 
     }
     const card = it.type === 'card' ? cardByName(it.card, data) || (g.card_id ? data.cards.find((c) => c.id === g.card_id && !c.archived) ?? null : null) : null;
     const bill = it.bill ? bills.find((b) => norm(b.rec.name) === norm(it.bill)) ?? null : null;
-    const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: saidPayment(text, it.payment) });
+    const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: saidPayment(text, it.payment), personal: true });
     if (r === MSG.fail || r === MSG.plan(d.appUrl)) return out.length ? out.join('\n\n') + '\n\n' + r : r;
     out.push(r);
   }
@@ -356,7 +359,8 @@ function saldoLine(u: WaUser, data: Data, today: string) {
 
 // ---------------- lançar ----------------
 type BillMatch = { rec: RecX; due: string; status: string };
-type EntryOpts = { cat?: Category | null; card?: Card | null; bill?: BillMatch | null; head?: string; tail?: string; brief?: boolean; pay?: string };
+// personal: descrição do jeito da pessoa (o nome do cliente dito nunca fica de fora; só o nome, se é assim que ela lança)
+type EntryOpts = { cat?: Category | null; card?: Card | null; bill?: BillMatch | null; head?: string; tail?: string; brief?: boolean; pay?: string; personal?: boolean };
 const PAY_TXT: Record<string, string> = { pix: 'PIX', debito: 'débito', dinheiro: 'dinheiro', boleto: 'boleto', transferencia: 'transferência' };
 // a forma de pagamento só aparece na confirmação se a pessoa disse (a IA às vezes chuta "pix" ou "dinheiro");
 // inclui o que o áudio costuma trocar ("pics")
@@ -387,8 +391,10 @@ async function addEntry(u: WaUser, d: BotDeps, q: Quick, original: string, loade
   const kind = type === 'in' ? 'in' : type === 'invest' ? 'invest' : 'out';
   const billCat = bill?.rec.category_id ? data.categories.find((c) => c.id === bill!.rec.category_id && c.kind === kind) : null;
   const cat = billCat || (o.cat && o.cat.kind === kind ? o.cat : null) || matchCategory(q.description, kind, data) || othersOf(kind, data);
+  // vários lançamentos numa frase: o nome sai da descrição de cada um (não da frase inteira)
+  const desc = o.personal && !bill ? personalDescription(q.description, o.brief ? q.description : original, cat, data) : q.description;
   const tx = {
-    type, amount: r2(q.amount), date: q.date, description: (q.description || '').slice(0, 140), category_id: cat?.id ?? null,
+    type, amount: r2(q.amount), date: q.date, description: (desc || '').slice(0, 140), category_id: cat?.id ?? null,
     card_id: type === 'card' ? card!.id : null, installments: type === 'card' ? Math.min(48, Math.max(1, q.installments || 1)) : 1,
     invest_kind: type === 'invest' ? (q.investKind === 'resgate' ? 'resgate' : 'aporte') : null,
     recurring_id: bill ? bill.rec.id : null, recurring_month: bill ? today.slice(0, 7) : null,

@@ -29,7 +29,7 @@
   - "pagamento cartão pai parcela com pix 3/12 350" vira saída por PIX com "3/12" na descrição (antes virava
     compra no cartão de crédito da pessoa);
   - "cartão da Bruna 300" (cartão de outra pessoa) é saída; "comprei em 10x no cartão" é compra parcelada;
-  - "Entrada Edson 30" é entrada, sem "Entrada" na descrição; valor por extenso ("trezentos e cinquenta") vira
+  - "Entrada Joaquim 30" é entrada, sem "Entrada" na descrição; valor por extenso ("trezentos e cinquenta") vira
     número; uma frase com dois valores vira dois lançamentos;
   - "paguei o aluguel", sem valor, marca a conta fixa com o valor dela;
   - a categoria é pelo que foi ("pix 35 ifood" vai para o iFood, não para "PIX enviado");
@@ -37,7 +37,7 @@
 - Faltou o valor ("Uber", "parcela do pai"): o app pergunta "Quanto foi?" e a resposta completa o lançamento.
 - Depois de lançar, o aviso mostra o que foi ouvido e tem Desfazer e Corrigir (abre o lançamento já preenchido);
   com vários lançamentos, Desfazer e Ver. Na conversa do Assistente também.
-- Frase simples e clara ("mercado 52,90", "josimar 30") continua lançando na hora, sem gastar a IA; IA ocupada ou
+- Frase simples e clara ("mercado 52,90", "joaquim 30") continua lançando na hora, sem gastar a IA; IA ocupada ou
   fora do ar: o lançamento rápido resolve o que der e, sem valor, a mensagem diz o que fazer.
 - "Apaga isso" falado desfaz o último lançamento do assistente.
 - Avaliação com o modelo de verdade antes de publicar: 65 frases no jeito do dono (faladas e escritas).
@@ -48,7 +48,7 @@
   Recursos do app (nada é apagado).
 - Tipo automático: o assistente descobre sozinho se é entrada, saída, cartão ou investimento. Palavras como
   "recebi", "paguei", "investi", "no cartão" ou "3x" decidem; sem elas, vale o jeito de cada pessoa: o que ela
-  já lançou com as mesmas palavras (o cliente "Josimar" é entrada; a Netflix sempre no cartão vai para o
+  já lançou com as mesmas palavras (o cliente "Joaquim" é entrada; a Netflix sempre no cartão vai para o
   cartão), os nomes das categorias dela ("Venda de IPTV" é entrada) e o ícone (uber é gasto). A aba tocada no
   formulário vence as pistas. Corrige "iptv vanessa 30", que entrava como saída em Assinaturas.
 - Tirar foto na hora: no celular abre a câmera traseira do aparelho; no computador, a webcam dentro do app.

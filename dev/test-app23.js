@@ -20,7 +20,7 @@ const { ok, done } = checker('versão 2.3');
   w = await bootApp({ desktop: true, onError }); d = w.document; M = w.__mc; S = M.S;
   await sleep(50);
   M.openTx(); await sleep(60);
-  ok(d.querySelector('#as-text').hasAttribute('data-autofocus') && !d.querySelector('#tx-amount').hasAttribute('data-autofocus'), 'PC: o "Lançar com IA" já vem com o foco (dá para escrever direto)');
+  ok(d.querySelector('#tx-amount').hasAttribute('data-autofocus') && !d.querySelector('#as-text').hasAttribute('data-autofocus'), 'PC: o cursor já vai para o valor (R$), mesmo com o Lançar com IA ligado');
   click(w, '[data-act="closeSheet"]'); await sleep(20);
   S.profile.settings = { ...(S.profile.settings || {}), features: { assist: false } };
   M.openTx(); await sleep(60);
