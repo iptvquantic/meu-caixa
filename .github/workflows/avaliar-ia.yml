@@ -1,0 +1,71 @@
+# Avaliação do "entender" (a IA que lê o que a pessoa falou ou escreveu) com o modelo de verdade, antes de publicar.
+# Chama a função TEMPORÁRIA mc-avaliar (gerada por dev/avaliar-ia.js; desliga sozinha) uma frase por vez, no ritmo
+# do limite por minuto da Groq grátis. As frases são de exemplo, com nomes fictícios: nada de cliente de verdade.
+# A senha entra pelo formulário (ou pela API) e não aparece no log.
+# Rodar: gh api -X POST repos/iptvquantic/meu-caixa/actions/workflows/avaliar-ia.yml/dispatches -f ref=main \
+#          -f "inputs[senha]=…" -f "inputs[casos]=1-73"   → resultado nas anotações da execução
+name: Avaliar IA (antes de publicar)
+
+on:
+  workflow_dispatch:
+    inputs:
+      senha:
+        description: Senha da função mc-avaliar (não aparece no log)
+        required: true
+        type: string
+      casos:
+        description: 'Frases a avaliar (ex.: 1-73 ou 5,9,12)'
+        required: false
+        default: '1-73'
+        type: string
+      esforco:
+        description: Esforço da IA
+        required: false
+        default: low
+        type: choice
+        options: [low, medium]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avaliar-ia
+  cancel-in-progress: false
+
+jobs:
+  avaliar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Avaliar as frases
+        env:
+          FN: https://jgqhtshcuyzytljkmmxd.supabase.co/functions/v1/mc-avaliar
+        run: |
+          set -uo pipefail
+          # lidos do pedido (não passam pelo texto do passo, que aparece no log)
+          SENHA=$(jq -r '.inputs.senha // ""' "$GITHUB_EVENT_PATH"); echo "::add-mask::$SENHA"
+          CASOS=$(jq -r '.inputs.casos // "1-73"' "$GITHUB_EVENT_PATH" | tr -cd '0-9,-')
+          ESF=$(jq -r '.inputs.esforco // "low"' "$GITHUB_EVENT_PATH" | tr -cd 'a-z')
+          ids=()
+          IFS=',' read -ra parts <<<"$CASOS"
+          for p in "${parts[@]}"; do a=${p%-*}; b=${p#*-}; [ -z "$a" ] && continue; for ((i=a; i<=b; i++)); do ids+=("$i"); done; done
+          : > resultado.txt
+          for id in "${ids[@]}"; do
+            line=""
+            for tentativa in 1 2 3 4; do
+              out=$(curl -sS --max-time 60 "$FN/$SENHA/$id/$ESF" 2>&1 || true)
+              line=$(grep -m1 "^#$id " <<<"$out" || true)
+              [ -n "$line" ] && break
+              grep -q 'encerrada\|não encontrado' <<<"$out" && { echo "::error title=Avaliação::a função mc-avaliar não está no ar (ou a senha não confere)"; exit 1; }
+              sleep 30 # limite por minuto da Groq
+            done
+            echo "${line:-#$id SEM RESPOSTA}" | tee -a resultado.txt
+            sleep 14
+          done
+          ok=$(grep -c ' OK |' resultado.txt || true)
+          ruim=$(grep -c ' FALHOU \|SEM RESPOSTA\|ERRO' resultado.txt || true)
+          while IFS= read -r l; do echo "::warning title=Falhou::${l:0:900}"; done < <(grep ' FALHOU \|SEM RESPOSTA\|ERRO' resultado.txt)
+          echo "::notice title=Avaliação da IA::$ok certas, $ruim com problema (frases $CASOS, esforço $ESF)"
+          # as descrições gravadas e as certas também, para conferir
+          while IFS= read -r l; do echo "::notice title=Certa::${l:0:900}"; done < <(grep ' OK |' resultado.txt | grep 'gravada\|IPTV\|cliente' | head -30)
+          [ "$ruim" = 0 ]
