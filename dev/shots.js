@@ -10,6 +10,11 @@ const html = appHtml({ demo: true });
 const openNew = async p => { const mobile = await p.evaluate(() => innerWidth < 900); await p.click(mobile ? '#mnav .fab' : '.top .btn.primary'); await sleep(300); };
 // mostra o painel do WhatsApp (com o número do robô, como na versão de verdade) e gera o código
 const waCode = async p => { await p.evaluate(() => { const M = window.__mc; M.Demo.db.wa = null; M.S.wa = null; M.S.waBot = { configured: true, number: '15550100000' }; M.render(); }); await sleep(100); await p.click('[data-act="waStart"]'); await sleep(250); await p.evaluate(() => document.querySelector('.wa-code').scrollIntoView({ block: 'center' })); await sleep(100); };
+// tutorial: a pergunta (forçada com ?tour=1) e um passo pelo número ou pelo título
+// fugas: cada print começa com o plano zerado (a demonstração guarda os ajustes no navegador)
+const leakReset = async p => { await p.evaluate(() => { const M = window.__mc, st = { ...(M.S.profile.settings || {}) }; delete st.leaks; delete st.tour; M.S.profile.settings = st; M.LEAK.ai = null; M.render(); }); await sleep(100); };
+const tourAsk = async p => { await leakReset(p); await p.evaluate(() => { history.replaceState(null, '', location.pathname + '?tour=1'); const M = window.__mc; M.TOUR.offered = false; M.tourMaybeOffer(); }); await sleep(200); };
+const tourTo = to => async p => { await leakReset(p); await p.evaluate(t => { const M = window.__mc; M.tourStart(); const i = typeof t === 'number' ? t : M.TOUR.steps.findIndex(s => s.title === t); for (let k = 0; k < i; k++) M.tourGo(1); }, to); await sleep(600); };
 const SHOTS = [];
 for (const theme of ['dark', 'light', 'cyber']) {
   SHOTS.push([`m360-home-${theme}`, { w: 360, h: 780, theme, page: 'home' }]);
@@ -81,7 +86,27 @@ SHOTS.push(
   ['m360-cliente-light', { w: 360, h: 780, theme: 'light', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => document.querySelector('#page .adm-row').click()); await sleep(300); } }],
   ['m390-cliente-confirmar-dark', { w: 390, h: 844, theme: 'dark', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => document.querySelector('#page .adm-row').click()); await sleep(250); await p.click('.sheet [data-a="anual"]'); await sleep(250); } }],
   ['d1280-cliente-dark', { w: 1280, h: 860, theme: 'dark', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => [...document.querySelectorAll('#page .adm-row')].find(r => /Diego/.test(r.textContent)).click()); await sleep(300); } }],
-  ['m390-cliente-bloquear-cyber', { w: 390, h: 844, theme: 'cyber', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => [...document.querySelectorAll('#page .adm-row')].find(r => /Bruno/.test(r.textContent)).click()); await sleep(250); await p.click('.sheet [data-a="bloquear"]'); await sleep(250); } }]
+  ['m390-cliente-bloquear-cyber', { w: 390, h: 844, theme: 'cyber', page: 'admin', setup: async p => { await sleep(300); await p.evaluate(() => [...document.querySelectorAll('#page .adm-row')].find(r => /Bruno/.test(r.textContent)).click()); await sleep(250); await p.click('.sheet [data-a="bloquear"]'); await sleep(250); } }],
+  // 2.6: fugas de gastos (página, plano começado, parecer da IA) e o tutorial opcional (pergunta e passos)
+  ['m360-fugas-dark', { w: 360, h: 780, theme: 'dark', page: 'leaks', full: true, setup: leakReset }],
+  ['m360-fugas-light', { w: 360, h: 780, theme: 'light', page: 'leaks', setup: leakReset }],
+  ['m360-fugas-cyber', { w: 360, h: 780, theme: 'cyber', page: 'leaks', setup: leakReset }],
+  ['m390-fugas-light', { w: 390, h: 844, theme: 'light', page: 'leaks', full: true, setup: async p => { await leakReset(p); await p.click('[data-act="leakStep"][data-id="subs"]'); await sleep(200); } }],
+  ['m390-fugas-cyber', { w: 390, h: 844, theme: 'cyber', page: 'leaks', full: true, setup: async p => { await leakReset(p); await p.click('[data-act="leakAI"]'); await sleep(900); } }],
+  ['m390-fugas-dark', { w: 390, h: 844, theme: 'dark', page: 'leaks', setup: leakReset }],
+  ['d1280-fugas-dark', { w: 1280, h: 860, theme: 'dark', page: 'leaks', full: true, setup: leakReset }],
+  ['d1280-fugas-light', { w: 1280, h: 860, theme: 'light', page: 'leaks', setup: leakReset }],
+  ['d1280-fugas-cyber', { w: 1280, h: 860, theme: 'cyber', page: 'leaks', full: true, setup: async p => { await leakReset(p); await p.click('[data-act="leakStart"]'); await sleep(200); await p.click('[data-act="leakAI"]'); await sleep(900); } }],
+  ['m390-tour-pergunta-dark', { w: 390, h: 844, theme: 'dark', page: 'home', setup: tourAsk }],
+  ['d1280-tour-pergunta-light', { w: 1280, h: 860, theme: 'light', page: 'home', setup: tourAsk }],
+  ['m360-tour-inicio-cyber', { w: 360, h: 780, theme: 'cyber', page: 'home', setup: tourTo(0) }],
+  ['m360-tour-saldo-dark', { w: 360, h: 780, theme: 'dark', page: 'home', setup: tourTo(1) }],
+  ['m390-tour-ia-light', { w: 390, h: 844, theme: 'light', page: 'home', setup: tourTo(2) }],
+  ['m390-tour-menu-dark', { w: 390, h: 844, theme: 'dark', page: 'home', setup: tourTo('Menu') }],
+  ['m390-tour-novo-cyber', { w: 390, h: 844, theme: 'cyber', page: 'home', setup: tourTo('Novo lançamento') }],
+  ['d1280-tour-fugas-cyber', { w: 1280, h: 860, theme: 'cyber', page: 'home', setup: tourTo('Fugas de gastos') }],
+  ['d1280-tour-saldo-light', { w: 1280, h: 860, theme: 'light', page: 'home', setup: tourTo(1) }],
+  ['d1280-tour-fim-dark', { w: 1280, h: 860, theme: 'dark', page: 'home', setup: tourTo('Pronto!') }]
 );
 
 (async () => {

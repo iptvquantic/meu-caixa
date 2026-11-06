@@ -1,5 +1,34 @@
 # Histórico de versões
 
+## 2.6.0 — 06/11/2026
+- Fugas de gastos (novo, no Menu do celular e no menu lateral do PC; liga e desliga em Ajustes → Recursos do app, sem
+  apagar nada): lê os gastos dos últimos 90 dias e mostra, em 10 áreas, onde o dinheiro escapa: assinaturas
+  esquecidas (também o mesmo valor que cai todo mês), entrega de comida e lanches, compras por impulso, contas
+  superfaturadas (internet, celular e as contas que subiram de um mês para o outro), taxas bancárias, seguros,
+  energia e gás, transporte, entretenimento e pequenos gastos recorrentes. Compra parcelada no cartão pesa pela
+  parcela de cada mês, não pelo valor inteiro.
+- Cada fuga vem com economia possível por mês, dificuldade para cortar, impacto na qualidade de vida e prioridade,
+  os itens que mais pesam e uma dica prática. Pessoas na casa e renda mensal (vem a média das entradas; dá para
+  digitar) ajustam a análise. Nas fugas de hábito, um toque cria o limite de gasto sugerido em Metas.
+- Plano de 30 dias em 4 semanas, só com o que apareceu nos gastos, com passos para marcar e o dia do plano. Sem
+  prisão financeira: o plano mantém uma verba livre por semana para lazer e comida pronta.
+- Auditoria com IA (opcional, 1 da cota diária): a IA lê o resumo do detector, a casa e a renda e escreve o parecer
+  de auditor com o plano. Passa pela função "ai" do servidor, como o Assistente.
+- No Início, uma linha discreta no resumo do mês: quanto pode ficar no bolso, com o atalho Ver fugas.
+- Tutorial do app, só para quem quiser: conta nova recebe uma pergunta discreta (sem travar a tela) com Fazer o tour,
+  Mais tarde ou Não, obrigado. "Mais tarde" pergunta de novo depois de 24 h, no máximo mais uma vez; ignorar conta
+  como mais tarde; a escolha vale em todos os aparelhos. O tour destaca o saldo, o Lançar com IA, o botão de novo
+  lançamento, Extrato, Relatórios e o Menu (no PC, Fugas de gastos e Ajustes). Funciona com teclado (setas, Esc) e
+  leitor de tela. Para ver de novo: Menu → Tutorial do app (no PC, Ajustes).
+- Novo lançamento: no PC o cursor já começa no R$, pronto para digitar o valor, mesmo com o Lançar com IA ligado
+  (no celular continua piscando no R$ sem abrir o teclado sozinho).
+- Lançar falando ou escrevendo: a descrição guarda tudo o que foi dito (cliente, loja, para quem), e não um resumo:
+  "entrada 30 venda IPTV cliente Odair" fica "Venda IPTV cliente Odair". O aviso de lançamento mostra a descrição.
+  "20 reais e 50 centavos" é um valor só (R$ 20,50); a parcela falada por extenso ("parcela três de doze") fica
+  "3/12". A voz espera 2 segundos de silêncio antes de enviar (pausas normais não cortam a frase).
+- Conta nova recebe só as categorias básicas (29, genéricas); cada pessoa cria as suas. A página Categorias explica
+  isso enquanto só houver as básicas. Testado no Postgres de verdade.
+
 ## 2.5.0 — 29/10/2026
 - Painel de clientes (só para o dono, conta master/admin): página Clientes no menu lateral do PC e no Menu do
   celular. Mostra quantos estão em teste, pagantes, vencem em 7 dias, vencidos e bloqueados (cada número filtra a

@@ -18,8 +18,8 @@ Postgres 16 e cria o usuário sozinho.
 
 | Comando | O que confere |
 |---|---|
-| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.5 (painel de clientes: só o dono vê, filtros, busca, liberar plano com confirmação e Desfazer, bloquear, cobrança no WhatsApp, texto escapado); 2.4 (voz que envia sozinha, Corrigir, microfone); 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
-| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: login, cadastro direto (`?criar=1`), carga dos dados, gravação, painel de clientes (RPC com o login do dono, foco e teclado, função ainda não publicada), assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
+| `npm test` | Sintaxe dos scripts, todo `data-act` com função, todo id e todo ícone existentes, nenhuma chave secreta; 2.6 (fugas de gastos: as 10 áreas, parcela do cartão mês a mês, assinatura esquecida, contas que subiram, prioridade, plano de 30 dias com verba livre, limite sugerido, IA, liga/desliga; tutorial: só conta nova, Mais tarde no máximo 2 vezes, Não obrigado, teclado); 2.5 (painel de clientes: só o dono vê, filtros, busca, liberar plano com confirmação e Desfazer, bloquear, cobrança no WhatsApp, texto escapado); 2.4 (voz que envia sozinha, Corrigir, microfone); 2.3 (lançamento sem teclado no celular, menu encolhível, tema Automático, resumo do mês, passos do Início, relatórios); 2.3.2 ("Lançar com IA" no Início e no Novo lançamento, tipo automático com a aba como dica, câmera, liga/desliga); ícones automáticos (farmácia → pílula etc.); a interface inteira em modo demonstração (lançar, parcelar, editar, desfazer, categorias, temas, todas as telas, PDF, migração da versão antiga); contas fixas, metas e Ajustes; backup exportar → restaurar sem duplicar e sem perder nada; resumo enviado à IA |
+| `npm run test:browser` | No Chromium, com o Supabase simulado e a CSP do site: cursor no R$ ao abrir o lançamento no PC (sem teclado no celular), fugas de gastos pelo teclado, tutorial com a caixa dentro da tela em 360/390/1280 px e foco preso na caixa; login, cadastro direto (`?criar=1`), carga dos dados, gravação, painel de clientes (RPC com o login do dono, foco e teclado, função ainda não publicada), assistente (frase → lançamento com Desfazer), IA pela função, gráfico de Relatórios, conectar o WhatsApp com código, ativação do robô pelo dono; "Lançar com IA" com microfone e câmera de verdade (dispositivos falsos do Chromium): no celular a câmera do aparelho (campo com capture), no computador a webcam dentro do app (desliga depois de fotografar), foto escolhida pela galeria, arquivo que não fica no app; abrir sem internet com os últimos dados (service worker); app instalável (manifest, ícones, atalho); página inicial (quem tem conta vai para o app, links, CSP, prints em `dev/shots/landing-*.png`) |
 | `npm run test:db` | Banco num Postgres real: regras de acesso (RLS), permissões e validações com 5 tipos de usuário; segurança do robô (código de conexão, número de cada um, plano vencido, desfazer); painel de clientes (só master/admin, contas de admin protegidas, datas, desfazer, registro de cada mudança); cada migração nova; rodar tudo de novo (idempotente) sem mudar nenhum dado |
 | `npm run test:bot` | Robô sem internet: conectar, lançar (texto, áudio e foto do comprovante), entender a frase com a IA (plano conferido, PIX x cartão, parcela 3/12, faltou o valor, vários lançamentos, IA fora do ar), transcrição (modelos, vocabulário, silêncio), conta fixa, desfazer, consultas, IA, limites, assinatura da Meta, escolha do número (o de atendimento nunca), ativação com PIN, "pronto para os clientes", assistente pelo app (`?app`: login, limites, arquivos), cópias geradas em dia (entra no `npm test`) |
 | `npm run test:fn:live` | As duas funções rodando no Deno de verdade. Robô: falando com as funções reais do banco pelo PostgREST (mesmo servidor do Supabase), Meta e Groq simuladas, inclusive a ativação na Meta, a foto do comprovante e o assistente do app (texto, áudio e foto gravando no banco). IA: chave publicável, login, limite, plano e leitura de comprovante. Baixa Deno e PostgREST para `dev/.tools` na primeira vez. `WA_FN_DIR`/`AI_FN_DIR=out/deploy/<função>` roda a entrada gerada pelo `fn-deploy.js` |
@@ -140,7 +140,7 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
   texto; cada frase entendida usa ~1,8 mil. Para vender com muitos clientes, passar a chave para o plano pago
   (Developer) da Groq.
 - Avaliação com o modelo de verdade (`avaliar-ia.ts` + `avaliar-ia.js`): uma função temporária `mc-avaliar` roda as
-  65 frases (faladas e escritas, no jeito do dono, nomes fictícios) com o `understand.ts` de um commit do GitHub,
+  73 frases (faladas e escritas, no jeito do dono, nomes fictícios) com o `understand.ts` de um commit do GitHub,
   protegida por senha (só o hash vai no código) e desligando sozinha em poucas horas. 23/10/2026: todas certas com
   esforço baixo, contando as conferências do código acima (conta fixa, categoria pelo assunto).
 
@@ -158,6 +158,22 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
 - Testes: `test/rls_admin.sql` (41 conferências no Postgres de verdade), `test-app25.js` (jsdom, demonstração) e
   `test-admin-live.js` (Chromium, caminho real com a CSP: parâmetros do RPC, login, foco, função não publicada).
 - Ícones novos (Lucide 1.57.0) entram com `node icons-add.js nome1 nome2…`.
+
+## Fugas de gastos e tutorial (2.6)
+
+- Página `leaks` ("Fugas de gastos"; recurso `leaks`, liga e desliga em Ajustes). Tudo calculado no aparelho por
+  `leakAnalysis()`: saídas e parcelas do cartão (`leakSpend`, cada parcela no mês dela) dos últimos 90 dias, por área
+  (`LEAK_AREAS`: categoria padrão pelo `legacy_key` ou palavras da descrição/categoria; a primeira área que reconhece
+  fica com o gasto). Assinatura esquecida = mesmo valor, todo mês, mesmo nome (até R$ 200, fora de parcelas e do
+  essencial). Contas que subiram = 3+ meses e o último 12% (e R$ 10) acima da média. Pequenos gastos = até R$ 30,
+  8+ vezes, fora do essencial. Prioridade = economia × dificuldade × impacto (+35% acima da fatia típica da renda).
+- Plano de 30 dias (`leakPlan`), verba livre por semana e passos marcados em `profile.settings.leaks` (`people`,
+  `income`, `start`, `done`). Auditoria com IA pela função `ai` (`leakPrompt`, até 2.000 caracteres; resposta
+  guardada só no aparelho).
+- Tutorial (`tourStart`/`tourMaybeOffer`): oferecido a conta nova (até 15 lançamentos, não dono), uma pergunta
+  discreta; `profile.settings.tour` guarda `done`, `skip`, `later` e `asks` (no máximo 2). `?tour=1` força a
+  pergunta (prévia e testes). Passo cujo item não está na tela é pulado.
+- Testes: `test-app26.js` (jsdom, 63 conferências) e `test-v26-browser.js` (Chromium).
 
 ## Publicar o app
 
