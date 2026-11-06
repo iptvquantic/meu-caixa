@@ -10,7 +10,7 @@ import { handle, kindOf, messagesOf, resetPhoneCache, signatureOk } from './supa
 import { groq, speechText, toQuick } from './supabase/functions/whatsapp/groq.ts';
 import { cleanDescription, contextOf, SCHEMA, SYSTEM as UNDERSTAND, toPlan, vocabOf } from './supabase/functions/whatsapp/understand.ts';
 import { b64, readReceipt, toReceipt } from './supabase/functions/whatsapp/receipt.ts';
-import { clientName, moneySaid, norm, personalDescription, saidPhrase, titleName } from './supabase/functions/whatsapp/smart.ts';
+import { clientName, installmentSaid, moneySaid, norm, personalDescription, saidPhrase, titleName } from './supabase/functions/whatsapp/smart.ts';
 
 const require = createRequire(import.meta.url);
 let pass = 0, fail = 0;
@@ -633,6 +633,8 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
     [/instalacao/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 120, 'Instalação', 'Serviços')] }],
     [/drogasil/, { acao: 'lancar', entendido: '', lancamentos: [item('saida', 20.5, 'Farmacia', 'Farmácia')] }],
     [/ciro.*dora/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 30, 'Cliente Ciro', 'Venda de IPTV'), item('entrada', 50, 'Cliente Dora', 'Venda de IPTV')] }],
+    // a IA deixou de fora a parcela dita por extenso
+    [/parcela tres de doze/, { acao: 'lancar', entendido: '', lancamentos: [item('saida', 350, 'Parcela do cartão do meu pai', '')] }],
   ];
   const seen = [];
   const understand = async (system, context) => {
@@ -675,6 +677,17 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   ok(personalDescription('Mercado', 'mercado 52,90 no débito', null, { cards: [] }) === 'Mercado' && personalDescription('Parcela cartão do pai 3/12', 'Pagamento cartão pai parcela com Pix 3/12 350', null, { cards: [] }) === 'Parcela cartão do pai 3/12',
     'a descrição da IA que já tem tudo não muda');
   ok(moneySaid('gastei 20 reais e 5 centavos') === 'gastei 20,05' && moneySaid('mercado 20 e farmácia 50') === 'mercado 20 e farmácia 50', 'centavos: "20 reais e 5 centavos" = 20,05; "20 e farmácia 50" continua dois valores');
+  // a parcela falada por extenso fica anotada na descrição ("parcela três de doze" → 3/12)
+  const inst = [['Paguei trezentos e cinquenta reais da parcela do cartão do meu pai no pix, parcela três de doze.', '3/12'], ['pagamento cartao pai parcela com pix 3/12 350', '3/12'],
+    ['parcela 3 de 12 do cartão do pai 350', '3/12'], ['terceira parcela de doze do celular 194', '3/12'], ['paguei a última parcela de doze da geladeira', '12/12'],
+    ['parcela vinte e quatro de quarenta e oito do carro 900', '24/48'], ['comprei em 2 parcelas de 50 reais', ''], ['parcela de 350 do cartão', ''], ['parcela 2 de 50 reais', '']];
+  const instBad = inst.filter(([t, want]) => installmentSaid(t) !== want);
+  ok(!instBad.length, 'parcela dita: "três de doze" = 3/12, "última de doze" = 12/12; "2 parcelas de 50 reais" não é parcela: ' + JSON.stringify(instBad));
+  ok(personalDescription('Parcela do cartão do meu pai', inst[0][0], null, { cards: [] }) === 'Parcela do cartão do meu pai 3/12'
+    && personalDescription('Parcela 3 de 12 do cartão do pai', inst[2][0], null, { cards: [] }) === 'Parcela 3 de 12 do cartão do pai', 'a IA esqueceu a parcela: entra "3/12"; se ela já pôs, não repete');
+  await said('Paguei trezentos e cinquenta reais da parcela do cartão do meu pai no pix, parcela três de doze.');
+  t = lastAdd(db);
+  ok(/3\/12$/.test(t?.description || ''), 'áudio "parcela três de doze": a descrição gravada termina em 3/12: ' + JSON.stringify(t?.description));
 }
 
 

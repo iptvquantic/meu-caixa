@@ -4,8 +4,9 @@
 // Gerar e publicar: node avaliar-ia.js <commit> <senha> [horas]  → out/deploy/mc-avaliar/index.ts (deploy pelo conector)
 // Usar: GET …/functions/v1/mc-avaliar/<senha>/<casos: 1,5,7 ou 3-9>/<esforço: low|medium>/<modelo: 120|20>
 import { contextOf, SCHEMA, SYSTEM, toPlan } from '__UNDERSTAND__';
-// o que o robô faz depois da IA: centavos falados e a descrição com tudo o que foi dito (o que fica gravado)
+// o que o robô faz depois da IA: centavos falados, a descrição com tudo o que foi dito e a categoria que fica gravada
 import { moneySaid, personalDescription } from '__SMART__';
+import { itemCategory, matchCategory } from '__BOT__';
 
 const HASH = '__HASH__';
 const ATE = Date.parse('__ATE__');
@@ -46,7 +47,7 @@ type Case = { t: string; a?: boolean; hint?: any; x: any };
 const CASES: Case[] = [
   { t: 'pagamento cartao pai parcela com pix 3/12 350', x: { acao: 'lancar', n: 1, tipo: 'out', valor: 350, pay: 'pix', desc: /3\/12/ } },
   { t: 'Pagamento cartão pai parcela com Pix 3/12', a: true, x: { acao: 'falta_valor', desc: /pai/i } },
-  { t: 'Paguei trezentos e cinquenta reais da parcela do cartão do meu pai no pix, parcela três de doze.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 350, pay: 'pix', desc: /3\/12|3 de 12/ } },
+  { t: 'Paguei trezentos e cinquenta reais da parcela do cartão do meu pai no pix, parcela três de doze.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 350, pay: 'pix', fdesc: /3\/12|3 de 12/ } },
   { t: 'comprei uma tv de 2400 em 10x no cartão', x: { acao: 'lancar', tipo: 'card', valor: 2400, parc: 10 } },
   { t: 'geladeira 10x de 240 no meu cartão', x: { acao: 'lancar', tipo: 'card', valor: 2400, parc: 10 } },
   { t: 'Gastei cinquenta no mercado e trinta na farmácia ontem.', a: true, x: { acao: 'lancar', n: 2, tipo: 'out', valor: 50, cat: /Mercado|Alimentação/, data: '2026-10-21', v2: 30, cat2: /Farm/ } },
@@ -139,15 +140,23 @@ function check(c: Case, p: any): string[] {
   // a descrição que fica gravada (a da IA, completada com o que foi dito)
   const fd = p.items.length === 1 ? personalDescription(it.description, moneySaid(c.t), null, data) : it.description;
   if (x.fdesc && !x.fdesc.test(fd)) bad.push('gravada "' + fd + '"');
-  // como no app: conta fixa reconhecida sem categoria usa a categoria da conta fixa
-  const billCat = it.bill ? cats.find((c) => c.id === data.recurring.find((r: any) => r.name === it.bill)?.category_id)?.name ?? '' : '';
-  if (x.cat && !like(x.cat, it.category || billCat)) bad.push('cat "' + it.category + '"≠' + x.cat);
+  // a categoria que fica gravada, como no robô: a conta fixa reconhecida usa a categoria dela; senão a escolha da IA
+  // passada pelo mesmo filtro do robô (PIX enviado diz como foi, não o que foi), o ícone e, por fim, "Outros"
+  const fc = savedCat(it, c.t, p.items.length > 1);
+  if (x.cat && !like(x.cat, fc)) bad.push('cat "' + it.category + '"' + (fc !== it.category ? '→"' + fc + '"' : '') + '≠' + x.cat);
   if (x.parc && it.installments !== x.parc) bad.push('parc ' + it.installments + '≠' + x.parc);
   if (x.inv && it.investKind !== x.inv) bad.push('inv ' + it.investKind);
   if (x.data && it.date !== x.data) bad.push('data ' + it.date + '≠' + x.data);
   if (x.bill && it.bill !== x.bill) bad.push('conta "' + it.bill + '"≠' + x.bill);
-  if (x.v2) { const b = p.items[1]; if (!b || Math.abs(b.amount - x.v2) > 0.005) bad.push('2º valor'); if (x.cat2 && !like(x.cat2, b?.category ?? '')) bad.push('2ª cat "' + b?.category + '"'); }
+  if (x.v2) { const b = p.items[1]; if (!b || Math.abs(b.amount - x.v2) > 0.005) bad.push('2º valor'); const fc2 = b ? savedCat(b, c.t, true) : ''; if (x.cat2 && !like(x.cat2, fc2)) bad.push('2ª cat "' + b?.category + '"→"' + fc2 + '"'); }
   return bad;
+}
+function savedCat(it: any, text: string, multi: boolean): string {
+  const billCat = it.bill ? cats.find((c) => c.id === data.recurring.find((r: any) => r.name === it.bill)?.category_id)?.name ?? '' : '';
+  if (billCat) return billCat;
+  const kind = it.type === 'in' ? 'in' : it.type === 'invest' ? 'invest' : 'out';
+  const cat = itemCategory(it, moneySaid(text), data, multi).cat || matchCategory(it.description, kind, data);
+  return cat ? cat.name : 'Outros';
 }
 Deno.serve(async (req) => {
   const u = new URL(req.url);
@@ -182,7 +191,7 @@ Deno.serve(async (req) => {
     const j = await r.json(), raw = j?.choices?.[0]?.message?.content ?? '', us = j?.usage ?? {};
     const p = toPlan(raw, TODAY), bad = check(c, p);
     const fd = p && p.action === 'lancar' && p.items.length === 1 ? personalDescription(p.items[0].description, moneySaid(c.t), null, data) : '';
-    const show = p ? (p.action === 'lancar' ? p.items.map((x: any) => x.type + ' ' + fmt(x.amount) + ' ' + x.date.slice(5) + ' "' + x.description + '" [' + x.category + ']' + (x.payment !== 'outro' ? ' ' + x.payment : '') + (x.card ? ' cartão:' + x.card : '') + (x.installments > 1 ? ' ' + x.installments + 'x' : '') + (x.investKind ? ' ' + x.investKind : '') + (x.bill ? ' conta:' + x.bill : '')).join(' + ') : p.action + ((p as any).description ? ' "' + (p as any).description + '"' : '')) : 'NULO ' + raw.slice(0, 120);
+    const show = p ? (p.action === 'lancar' ? p.items.map((x: any) => { const sc = savedCat(x, c.t, p.items.length > 1); return x.type + ' ' + fmt(x.amount) + ' ' + x.date.slice(5) + ' "' + x.description + '" [' + x.category + (sc !== x.category ? ' → ' + sc : '') + ']' + (x.payment !== 'outro' ? ' ' + x.payment : '') + (x.card ? ' cartão:' + x.card : '') + (x.installments > 1 ? ' ' + x.installments + 'x' : '') + (x.investKind ? ' ' + x.investKind : '') + (x.bill ? ' conta:' + x.bill : ''); }).join(' + ') : p.action + ((p as any).description ? ' "' + (p as any).description + '"' : '')) : 'NULO ' + raw.slice(0, 120);
     out.push('#' + (i + 1) + (bad.length ? ' FALHOU ' + bad.join('; ') : ' OK') + ' | ' + ms + 'ms ' + (us.prompt_tokens ?? '?') + '+' + (us.completion_tokens ?? '?') + 't | ' + show + (fd && fd !== p.items[0].description ? ' → gravada "' + fd + '"' : ''));
   }
   return new Response(model + ' esforço=' + effort + ' | ' + limits + '\n' + out.join('\n') + '\n', { headers: { 'content-type': 'text/plain; charset=utf-8' } });

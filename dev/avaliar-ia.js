@@ -19,14 +19,15 @@ const published = heads.some((h) => { try { git('merge-base', '--is-ancestor', s
 if (!published) { console.error(`❌ o commit ${sha.slice(0, 7)} não está no GitHub (faça push antes)`); process.exit(1); }
 
 const url = `https://raw.githubusercontent.com/iptvquantic/meu-caixa/${sha}/dev/supabase/functions/whatsapp/understand.ts`;
-const smart = url.replace('/understand.ts', '/smart.ts');
+const smart = url.replace('/understand.ts', '/smart.ts'), bot = url.replace('/understand.ts', '/bot.ts');
 const ate = new Date(Date.now() + Number(hours) * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z');
 const src = fs.readFileSync(path.join(__dirname, 'avaliar-ia.ts'), 'utf8')
   .replace('__UNDERSTAND__', url)
   .replace('__SMART__', smart)
+  .replace('__BOT__', bot)
   .replace('__HASH__', crypto.createHash('sha256').update(pass).digest('hex'))
   .replace('__ATE__', ate);
-if (/__(UNDERSTAND|SMART|HASH|ATE)__/.test(src)) { console.error('❌ avaliar-ia.ts sem os marcadores esperados'); process.exit(1); }
+if (/__(UNDERSTAND|SMART|BOT|HASH|ATE)__/.test(src)) { console.error('❌ avaliar-ia.ts sem os marcadores esperados'); process.exit(1); }
 const out = path.join(__dirname, 'out', 'deploy', 'mc-avaliar', 'index.ts');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, src);

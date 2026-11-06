@@ -388,6 +388,33 @@ function saidPhrase(text, data) {
   while (words.length && link(words[0])) words.shift();
   return words.join(' ');
 }
+// parcela falada: "parcela três de doze", "parcela 3 de 12", "terceira parcela de doze", "última parcela de doze" → "3/12"
+const SMALL_NUM = { um: 1, uma: 1, dois: 2, duas: 2, tres: 3, quatro: 4, cinco: 5, seis: 6, sete: 7, oito: 8, nove: 9, dez: 10, onze: 11, doze: 12, treze: 13,
+  catorze: 14, quatorze: 14, quinze: 15, dezesseis: 16, dezessete: 17, dezoito: 18, dezenove: 19, vinte: 20, trinta: 30, quarenta: 40, cinquenta: 50, sessenta: 60 };
+const ORD_NUM = { primeira: 1, primeiro: 1, segunda: 2, segundo: 2, terceira: 3, terceiro: 3, quarta: 4, quarto: 4, quinta: 5, quinto: 5, sexta: 6, sexto: 6,
+  setima: 7, setimo: 7, oitava: 8, oitavo: 8, nona: 9, nono: 9, decima: 10, decimo: 10 };
+function installmentSaid(text) {
+  const t = norm(moneySaid(text)).replace(/[^a-z0-9/ ]+/g, ' ').split(' ').filter(Boolean);
+  const num = i => {
+    const w = t[i];
+    if (w === undefined) return null;
+    if (/^\d{1,2}$/.test(w)) return [+w, i + 1];
+    const v = SMALL_NUM[w], u = SMALL_NUM[t[i + 2]];
+    if (v === undefined) return null;
+    return v >= 20 && t[i + 1] === 'e' && u >= 1 && u <= 9 ? [v + u, i + 3] : [v, i + 1];
+  };
+  const isMoney = i => /^(reais|real|conto|contos|centavo|centavos)$/.test(t[i] || '');
+  for (let i = 0; i < t.length; i++) {
+    if (!/^(parcela|parcelas|prestacao|prestacoes)$/.test(t[i])) continue;
+    const near = t.slice(Math.max(0, i - 3), i + 5).find(w => /^\d{1,2}\/\d{1,2}$/.test(w));
+    if (near) { const [a, b] = near.split('/').map(Number); if (a >= 1 && a <= b) return `${a}/${b}`; }
+    const j = t[i + 1] === 'numero' ? i + 2 : i + 1, a = num(j);
+    if (a && t[a[1]] === 'de') { const b = num(a[1] + 1); if (b && !isMoney(b[1]) && a[0] >= 1 && a[0] <= b[0]) return `${a[0]}/${b[0]}`; }
+    const o = t[i - 1] === 'ultima' ? -1 : ORD_NUM[t[i - 1]];
+    if (o && t[i + 1] === 'de') { const b = num(i + 2); if (b && !isMoney(b[1]) && o <= b[0]) return `${o < 0 ? b[0] : o}/${b[0]}`; }
+  }
+  return '';
+}
 // descrição final do assistente: a da IA se ela guardou tudo o que foi dito; senão a frase da pessoa
 function personalDescription(desc, text, cat, data) {
   desc = String(desc || '').trim();
@@ -410,7 +437,13 @@ function personalDescription(desc, text, cat, data) {
     const nw = new Set(name.split(/\s+/).map(norm));
     out = norm(out).includes(norm(name)) ? out.split(/\s+/).map(w => nw.has(norm(w)) ? titleName(w) : w).join(' ') : `${out} ${titleName(name)}`.trim();
   }
+  // a parcela dita por extenso fica anotada: "parcela três de doze" → "… 3/12"
+  const inst = installmentSaid(text);
+  if (inst) {
+    const [a, b] = inst.split('/');
+    if (!out.includes(inst) && installmentSaid(out) !== inst && !new RegExp(`(^|\\D)${a}\\s*(de|/)\\s*${b}(\\D|$)`).test(norm(out))) out = `${out} ${inst}`.trim();
+  }
   return out.slice(0, 140);
 }
 
-export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords, personalDescription, clientName, titleName, saidPhrase, moneySaid };
+export { norm, suggestIcon, iconIsSpecific, familyOf, parseQuick, parseAmountBR, stripLeadingEmoji, explicitType, guessType, typeWords, personalDescription, clientName, titleName, saidPhrase, moneySaid, installmentSaid };

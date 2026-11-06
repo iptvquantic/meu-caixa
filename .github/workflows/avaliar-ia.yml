@@ -64,8 +64,9 @@ jobs:
           done
           ok=$(grep -c ' OK |' resultado.txt || true)
           ruim=$(grep -c ' FALHOU \|SEM RESPOSTA\|ERRO' resultado.txt || true)
-          while IFS= read -r l; do echo "::warning title=Falhou::${l:0:900}"; done < <(grep ' FALHOU \|SEM RESPOSTA\|ERRO' resultado.txt)
+          while IFS= read -r l; do echo "::warning title=Falhou::${l:0:900}"; done < <(grep ' FALHOU \|SEM RESPOSTA\|ERRO' resultado.txt | head -9)
           echo "::notice title=Avaliação da IA::$ok certas, $ruim com problema (frases $CASOS, esforço $ESF)"
-          # as descrições gravadas e as certas também, para conferir
-          while IFS= read -r l; do echo "::notice title=Certa::${l:0:900}"; done < <(grep ' OK |' resultado.txt | grep 'gravada\|IPTV\|cliente' | head -30)
+          # o GitHub guarda só 10 anotações de cada tipo por passo: o resultado inteiro vai numa só (uma linha por frase)
+          todas=$(sed 's/%/%25/g; s/\r//g' resultado.txt | awk '{ printf "%s%%0A", substr($0, 1, 700) }')
+          echo "::notice title=Resultado completo::$todas"
           [ "$ruim" = 0 ]

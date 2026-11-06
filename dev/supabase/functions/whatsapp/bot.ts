@@ -325,24 +325,29 @@ const cardByName = (name: string, data: Data) => {
   const list = data.cards.filter((c) => !c.archived);
   return list.find((c) => norm(c.name) === n) ?? list.find((c) => norm(c.name).includes(n) || n.includes(norm(c.name))) ?? null;
 };
+// categoria de um item que a IA entendeu: a que ela escolheu da lista da pessoa > a que a pessoa costuma usar para esse
+// nome > a do ícone. Exportada para a avaliação com o modelo de verdade conferir a categoria que fica gravada.
+export function itemCategory(it: Item, text: string, data: Data, multi = false) {
+  const kind = it.type === 'in' ? 'in' : it.type === 'invest' ? 'invest' : 'out';
+  const mine = data.categories.filter((c) => c.kind === kind && !c.archived);
+  const q: Quick = { type: it.type, amount: it.amount, installments: it.installments, date: it.date, description: it.description, investKind: it.investKind };
+  const named = it.category ? mine.find((c) => norm(c.name) === norm(it.category)) ?? null : null;
+  const g = guessType(q, it.description, data, null), hist = g.catFor(kind);
+  let cat = named || (hist ? mine.find((c) => c.id === hist) ?? null : null) || matchCategory(it.description, kind, data);
+  // "PIX enviado"/"PIX recebido" dizem COMO foi, não O QUE foi: se a pessoa costuma pôr essas palavras em outra
+  // categoria, ou o nome de outra categoria está na frase, vale a outra. Se ela mesma usa o PIX para isso, fica.
+  if (cat && PAY_CATS.has(String(cat.legacy_key ?? '')) && hist !== cat.id) {
+    const habit = hist ? mine.find((c) => c.id === hist && !PAY_CATS.has(String(c.legacy_key ?? ''))) ?? null : null;
+    cat = habit || subjectCategory(multi ? it.description : `${it.description} ${text}`, kind, data) || cat;
+  }
+  return { cat, g, q };
+}
 async function launch(items: Item[], text: string, u: WaUser, d: BotDeps, data: Data): Promise<string> {
   if (!u.access) return MSG.plan(d.appUrl);
   const today = d.today(), multi = items.length > 1, out: string[] = [];
   const bills = feats(u).bills === false ? [] : billsOfMonth(data.recurring, data.transactions, today.slice(0, 7), today);
   for (const it of items) {
-    const kind = it.type === 'in' ? 'in' : it.type === 'invest' ? 'invest' : 'out';
-    const mine = data.categories.filter((c) => c.kind === kind && !c.archived);
-    const q: Quick = { type: it.type, amount: it.amount, installments: it.installments, date: it.date, description: it.description, investKind: it.investKind };
-    // categoria: a que a IA escolheu da lista da pessoa > a que ela costuma usar para esse nome > a do ícone
-    const named = it.category ? mine.find((c) => norm(c.name) === norm(it.category)) ?? null : null;
-    const g = guessType(q, it.description, data, null), hist = g.catFor(kind);
-    let cat = named || (hist ? mine.find((c) => c.id === hist) ?? null : null) || matchCategory(it.description, kind, data);
-    // "PIX enviado"/"PIX recebido" dizem COMO foi, não O QUE foi: se a pessoa costuma pôr essas palavras em outra
-    // categoria, ou o nome de outra categoria está na frase, vale a outra. Se ela mesma usa o PIX para isso, fica.
-    if (cat && PAY_CATS.has(String(cat.legacy_key ?? '')) && hist !== cat.id) {
-      const habit = hist ? mine.find((c) => c.id === hist && !PAY_CATS.has(String(c.legacy_key ?? ''))) ?? null : null;
-      cat = habit || subjectCategory(multi ? it.description : `${it.description} ${text}`, kind, data) || cat;
-    }
+    const { cat, g, q } = itemCategory(it, text, data, multi);
     const card = it.type === 'card' ? cardByName(it.card, data) || (g.card_id ? data.cards.find((c) => c.id === g.card_id && !c.archived) ?? null : null) : null;
     const bill = it.bill ? bills.find((b) => norm(b.rec.name) === norm(it.bill)) ?? null : null;
     const r = await addEntry(u, d, q, text, data, { cat, card, bill, brief: multi, pay: saidPayment(text, it.payment), personal: true });
