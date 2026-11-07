@@ -695,6 +695,7 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   const clock = [['11h40, cartão, padaria.', '11,40, cartão, padaria.'], ['padaria 11:40', 'padaria 11,40'], ['11 h 40 padaria', '11,40 padaria'], ['2 pães 11h40', '2 pães 11,40'],
     ['almoço às 12h30 25', null], ['paguei 50 no mercado 11:40', null], ['reunião às 11h40', null], ['11h40 da manhã padaria 8', null], ['parcela 3/12 11h40', null], ['pão 25h10', null], ['11h40 11h50 padaria', null]];
   const clockBad = clock.filter(([i, o]) => moneySaid(i) !== (o ?? i));
+  ok(personalDescription('Mercado', 'Pague 52 no pics do mercado', null, { cards: [] }) === 'Mercado', 'verbo de pagar mal ouvido ("Pague") e "pics" não viram descrição');
   ok(!clockBad.length, 'valor escrito como hora vira valor ("11h40" → 11,40); horário de verdade ("às 12h30", "da manhã") e frase com outro valor ficam como estão: ' + JSON.stringify(clockBad));
   r = await said('11h40, padaria.'); t = lastAdd(db);
   ok(t && t.amount === 11.4 && t.type === 'out' && t.description === 'Padaria' && !/faltou o valor/i.test(r || ''), 'áudio "11h40, padaria.": lança R$ 11,40 na hora, sem perguntar o valor: ' + JSON.stringify(t));

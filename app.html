@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aiFg01KDn52nlSNhvRoh5swBZ8Z9TNKy37lDKXbNT/E=' 'sha256-LsN6nfX3lWYAlqR+4KuucD3LsxnroGy5SPKxUrMBy34=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aiFg01KDn52nlSNhvRoh5swBZ8Z9TNKy37lDKXbNT/E=' 'sha256-kHA+OSDk+NIeQy0wylzrTHx6bsoX+h+tWyTzMLmjQcQ=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -1067,7 +1067,7 @@ function moneySaid(s) {
 // palavras que não são "o que foi": números falados, comando, pagamento, tempo, muleta da fala
 const NUM_WORDS = new Set('zero dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta oitenta noventa cem cento duzentos duzentas trezentos quatrocentos quinhentos seiscentos setecentos oitocentos novecentos mil milhao milhoes'.split(' '));
 const SAID_SKIP = new Set(('lanca lancar lance lancado coloca colocar coloque bota botar registra registrar registre anota anotar anote ai mim favor ' +
-  'reais real conto contos pila centavo centavos vez vezes x entrada saida gasto gastei gastou paguei pago paga pagou recebi recebido recebeu ganhei comprei comprou vendi vendeu ' +
+  'reais real conto contos pila centavo centavos vez vezes x entrada saida gasto gastei gastou gastamos paguei pague pagei pagamos pago paga pagou recebi recebido recebeu recebemos ganhei comprei comprou compramos vendi vendeu ' +
   'foi teve tive hoje ontem anteontem agora dia mes semana passada passado ah eh hum hmm entao tipo ne bom olha assim oi ola ok okay beleza pronto isso aqui la so mais tambem ' +
   'valor pix pics piks debito dinheiro especie boleto transferencia ted doc cartao credito vista parcelado parcelei').split(' '));
 const SAID_UNITS = /^(meses|mes|telas|tela|telinhas|unidades|unidade|kg|quilos|kilos|litros|litro|caixas|caixa|pacotes|pacote|horas|hora|pecas|itens|pontos|pessoas|semanas)$/;
