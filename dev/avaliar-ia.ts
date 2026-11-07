@@ -120,6 +120,10 @@ const CASES: Case[] = [
   { t: 'Recebi cento e vinte do cliente Rafael pela instalação da antena.', a: true, x: { acao: 'lancar', tipo: 'in', valor: 120, fdesc: /^(?=.*Rafael)(?=.*antena)/i } },
   { t: 'Paguei quinze reais de lanche pro meu filho na escola.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 15, fdesc: /^(?=.*lanche)(?=.*filho)/i } },
   { t: 'entrada 50 iptv 2 telas cliente Marta', x: { acao: 'lancar', tipo: 'in', valor: 50, cat: 'Venda de IPTV', fdesc: /^(?=.*2 telas)(?=.*Marta)/i } },
+  // 06/11: o reconhecimento de voz escreveu o valor como hora ("onze e quarenta" → "11h40"); horário de verdade continua
+  { t: '11h40, cartão, padaria.', a: true, x: { acao: 'lancar', tipo: 'card', valor: 11.4, fdesc: /padaria/i } },
+  { t: 'Padaria, onze e quarenta.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 11.4, fdesc: /padaria/i } },
+  { t: 'Almoço às 12h30, 25 reais.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 25 } },
 ];
 const enc = new TextEncoder();
 const sha = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');

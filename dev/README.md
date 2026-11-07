@@ -140,7 +140,7 @@ aplicado e rode o mesmo SELECT na produção pelo conector — as assinaturas po
   texto; cada frase entendida usa ~1,8 mil. Para vender com muitos clientes, passar a chave para o plano pago
   (Developer) da Groq.
 - Avaliação com o modelo de verdade (`avaliar-ia.ts` + `avaliar-ia.js`): uma função temporária `mc-avaliar` roda as
-  73 frases (faladas e escritas, no jeito do dono, nomes fictícios) com o `understand.ts` de um commit do GitHub,
+  76 frases (faladas e escritas, no jeito do dono, nomes fictícios) com o `understand.ts` de um commit do GitHub,
   protegida por senha (só o hash vai no código) e desligando sozinha em poucas horas. 23/10/2026: todas certas com
   esforço baixo, contando as conferências do código acima (conta fixa, categoria pelo assunto).
 

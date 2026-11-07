@@ -108,6 +108,10 @@ eq(ctx.typeWords('Venda de IPTV'), ['venda', 'iptv'], 'palavras do nome'); eq(ct
   eq(g('shopee 10', { type: 'out', sure: true, pay: true })[0], 'out', '"PIX, débito ou dinheiro" tocado: não vai para o cartão');
   eq(ctx.guessType(ctx.parseQuick('resgatei 200 cdb', T), 'resgatei 200 cdb', data, null).investKind, 'resgate', 'resgate');
   eq(ctx.guessType(ctx.parseQuick('salário 2500', T), 'salário 2500', { txs: [], cats: [], recs: [], cards: [] }, null).type, 'in', 'salário sem dados: entrada');
+  // o reconhecimento de voz escreve "onze e quarenta" como hora: é valor; horário de verdade continua horário
+  eq(ctx.parseQuick('padaria 11h40', T).amount, 11.4, 'padaria 11h40 = R$ 11,40');
+  eq(ctx.parseQuick('11:40 padaria', T).amount, 11.4, '11:40 padaria = R$ 11,40');
+  eq(ctx.parseQuick('almoço às 12h30 25', T).amount, 25, 'almoço às 12h30 25 = R$ 25 (12h30 é horário)');
 }
 
 done();

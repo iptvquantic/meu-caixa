@@ -3,7 +3,7 @@
 # do limite por minuto da Groq grátis. As frases são de exemplo, com nomes fictícios: nada de cliente de verdade.
 # A senha entra pelo formulário (ou pela API) e não aparece no log.
 # Rodar: gh api -X POST repos/iptvquantic/meu-caixa/actions/workflows/avaliar-ia.yml/dispatches -f ref=main \
-#          -f "inputs[senha]=…" -f "inputs[casos]=1-73"   → resultado nas anotações da execução
+#          -f "inputs[senha]=…" -f "inputs[casos]=1-76"   → resultado nas anotações da execução
 name: Avaliar IA (antes de publicar)
 
 on:
@@ -16,7 +16,7 @@ on:
       casos:
         description: 'Frases a avaliar (ex.: 1-73 ou 5,9,12)'
         required: false
-        default: '1-73'
+        default: '1-76'
         type: string
       esforco:
         description: Esforço da IA
@@ -44,7 +44,7 @@ jobs:
           set -uo pipefail
           # lidos do pedido (não passam pelo texto do passo, que aparece no log)
           SENHA=$(jq -r '.inputs.senha // ""' "$GITHUB_EVENT_PATH"); echo "::add-mask::$SENHA"
-          CASOS=$(jq -r '.inputs.casos // "1-73"' "$GITHUB_EVENT_PATH" | tr -cd '0-9,-')
+          CASOS=$(jq -r '.inputs.casos // "1-76"' "$GITHUB_EVENT_PATH" | tr -cd '0-9,-')
           ESF=$(jq -r '.inputs.esforco // "low"' "$GITHUB_EVENT_PATH" | tr -cd 'a-z')
           ids=()
           IFS=',' read -ra parts <<<"$CASOS"

@@ -635,6 +635,9 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
     [/ciro.*dora/, { acao: 'lancar', entendido: '', lancamentos: [item('entrada', 30, 'Cliente Ciro', 'Venda de IPTV'), item('entrada', 50, 'Cliente Dora', 'Venda de IPTV')] }],
     // a IA deixou de fora a parcela dita por extenso
     [/parcela tres de doze/, { acao: 'lancar', entendido: '', lancamentos: [item('saida', 350, 'Parcela do cartão do meu pai', '')] }],
+    // o reconhecimento de voz escreveu o valor como hora; a IA só lança se receber "11,40"
+    [/^(11,40,? padaria|padaria 11,40)/, { acao: 'lancar', entendido: '', lancamentos: [item('saida', 11.4, 'Padaria', '')] }],
+    [/11h40.*padaria/, { acao: 'falta_valor', entendido: 'Padaria', lancamentos: [] }],
   ];
   const seen = [];
   const understand = async (system, context) => {
@@ -688,6 +691,17 @@ ok(matchCategory('Drogasil', 'out', fakeDb().db.data)?.id === 'c-farm', 'Drogasi
   await said('Paguei trezentos e cinquenta reais da parcela do cartão do meu pai no pix, parcela três de doze.');
   t = lastAdd(db);
   ok(/3\/12$/.test(t?.description || ''), 'áudio "parcela três de doze": a descrição gravada termina em 3/12: ' + JSON.stringify(t?.description));
+  // "onze e quarenta, padaria" virou "11h40, padaria." no reconhecimento de voz: é valor, não horário
+  const clock = [['11h40, cartão, padaria.', '11,40, cartão, padaria.'], ['padaria 11:40', 'padaria 11,40'], ['11 h 40 padaria', '11,40 padaria'], ['2 pães 11h40', '2 pães 11,40'],
+    ['almoço às 12h30 25', null], ['paguei 50 no mercado 11:40', null], ['reunião às 11h40', null], ['11h40 da manhã padaria 8', null], ['parcela 3/12 11h40', null], ['pão 25h10', null], ['11h40 11h50 padaria', null]];
+  const clockBad = clock.filter(([i, o]) => moneySaid(i) !== (o ?? i));
+  ok(!clockBad.length, 'valor escrito como hora vira valor ("11h40" → 11,40); horário de verdade ("às 12h30", "da manhã") e frase com outro valor ficam como estão: ' + JSON.stringify(clockBad));
+  r = await said('11h40, padaria.'); t = lastAdd(db);
+  ok(t && t.amount === 11.4 && t.type === 'out' && t.description === 'Padaria' && !/faltou o valor/i.test(r || ''), 'áudio "11h40, padaria.": lança R$ 11,40 na hora, sem perguntar o valor: ' + JSON.stringify(t));
+  ok(seen.some(c => /"11,40, padaria\."/.test(c)) && !seen.some(c => /11h40, padaria/.test(c)), 'a IA recebe "11,40", nunca "11h40"');
+  const t0 = lastAdd(db);
+  await answer(msg('padaria 11h40'), deps); t = lastAdd(db);
+  ok(t !== t0 && t.amount === 11.4 && /padaria/i.test(t.description), 'escrito "padaria 11h40": lança R$ 11,40: ' + JSON.stringify(t));
 }
 
 

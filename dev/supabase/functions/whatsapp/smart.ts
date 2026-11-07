@@ -164,7 +164,8 @@ function parseQuick(text, today) {
   const parcRx = /(\d{1,2})\s*x\b/i;
   const pm = parcRx.exec(n);
   if (pm) { out.installments = Math.min(48, Math.max(1, +pm[1])); out.type = 'card'; }
-  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ');
+  // horário que ficou na frase ("almoço às 12h30 25") não é valor
+  const cleanForAmt = raw.replace(parcRx, ' ').replace(/\b\d{1,2}\s*\/\s*\d{1,2}(\/\d{2,4})?\b/g, ' ').replace(/\b\d{1,2}(?: ?h ?|:)[0-5]\d\b/gi, ' ');
   const am = amtRx.exec(cleanForAmt);
   if (am) out.amount = parseAmountBR(am[1].replace(/\s+/g, ''));
   // tipo
@@ -343,8 +344,21 @@ function clientName(text) {
   }
   return out.join(' ');
 }
-// valor falado com centavos: "20 reais e 50 centavos" / "20 e 50 centavos" → "20,50" (um valor só)
-const moneySaid = s => String(s || '').replace(/(\d+)\s*(?:reais|real|conto|contos)?\s+e\s+(\d{1,2})\s*centavos?/gi, (m, a, b) => `${a},${b.padStart(2, '0')}`);
+// valor falado com centavos: "20 reais e 50 centavos" / "20 e 50 centavos" → "20,50" (um valor só). O reconhecimento
+// de voz às vezes escreve o valor como hora ("onze e quarenta" → "11h40" ou "11:40"): vira 11,40 quando é o único
+// número com cara de valor e nada em volta indica horário ("às", "das", "horas", "da manhã"…)
+const CLOCK_BEFORE = /(?:^|\s)(?:as|às|das|pelas|ate|até|desde|hora|horas|horario|horário)\s*$/i;
+const CLOCK_AFTER = /^\s*(?:h\b|hs\b|hrs?\b|horas?\b|min\b|minutos?\b|(?:da|de) (?:manh|tarde|noite|madrugada))/i;
+function moneySaid(s) {
+  const t = String(s || '').replace(/(\d+)\s*(?:reais|real|conto|contos)?\s+e\s+(\d{1,2})\s*centavos?/gi, (m, a, b) => `${a},${b.padStart(2, '0')}`);
+  const hits = [...t.matchAll(/(\d{1,2})(?: ?h ?|:)([0-5]\d)(?![\d:])/gi)];
+  if (hits.length !== 1) return t;
+  const m = hits[0], before = t.slice(0, m.index), after = t.slice(m.index + m[0].length);
+  if (+m[1] > 23 || /[\d.,:/]$/.test(before) || /^[.,:/]?\d/.test(after)) return t; // parte de outro número ou não é hora
+  if (CLOCK_BEFORE.test(before) || CLOCK_AFTER.test(after)) return t; // horário de verdade
+  if (/\d+[.,]\d{1,2}(?!\d)|(^|\D)\d{2,}(?!\d)|R\$\s*\d/i.test(`${before} ${after}`)) return t; // a frase já tem outro valor
+  return `${before}${+m[1]},${m[2]}${after}`;
+}
 // palavras que não são "o que foi": números falados, comando, pagamento, tempo, muleta da fala
 const NUM_WORDS = new Set('zero dois duas tres quatro cinco seis sete oito nove dez onze doze treze catorze quatorze quinze dezesseis dezessete dezoito dezenove vinte trinta quarenta cinquenta sessenta setenta oitenta noventa cem cento duzentos duzentas trezentos quatrocentos quinhentos seiscentos setecentos oitocentos novecentos mil milhao milhoes'.split(' '));
 const SAID_SKIP = new Set(('lanca lancar lance lancado coloca colocar coloque bota botar registra registrar registre anota anotar anote ai mim favor ' +

@@ -1,5 +1,11 @@
 # Histórico de versões
 
+## 2.6.1 — 06/11/2026
+- Lançar falando: quando o reconhecimento de voz escreve o valor como hora ("onze e quarenta" → "11h40" ou "11:40"),
+  o app entende R$ 11,40 e lança na hora, sem perguntar "Quanto foi?". Horário de verdade continua horário ("às
+  12h30", "11h40 da manhã") e, se a frase já tem outro valor, nada muda. No lançamento escrito, um horário que ficou na
+  frase ("almoço às 12h30 25") não é mais confundido com o valor.
+
 ## 2.6.0 — 06/11/2026
 - Fugas de gastos (novo, no Menu do celular e no menu lateral do PC; liga e desliga em Ajustes → Recursos do app, sem
   apagar nada): lê os gastos dos últimos 90 dias e mostra, em 10 áreas, onde o dinheiro escapa: assinaturas
