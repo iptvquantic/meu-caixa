@@ -7,6 +7,9 @@ import { contextOf, SCHEMA, SYSTEM, toPlan } from '__UNDERSTAND__';
 // o que o robô faz depois da IA: centavos falados, a descrição com tudo o que foi dito e a categoria que fica gravada
 import { moneySaid, personalDescription } from '__SMART__';
 import { itemCategory, matchCategory } from '__BOT__';
+// leitura de comprovante por foto (casos 101+): o receipt.ts do commit e fotos de exemplo do repositório (dev/avaliar)
+import { b64, readReceipt } from '__RECEIPT__';
+const FOTOS = '__FOTOS__';
 
 const HASH = '__HASH__';
 const ATE = Date.parse('__ATE__');
@@ -125,6 +128,34 @@ const CASES: Case[] = [
   { t: 'Padaria, onze e quarenta.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 11.4, fdesc: /padaria/i } },
   { t: 'Almoço às 12h30, 25 reais.', a: true, x: { acao: 'lancar', tipo: 'out', valor: 25 } },
 ];
+// fotos (lojas e números fictícios): o nome da loja vira a descrição; sem a loja, fica o que foi
+type Photo = { img: string; x: any };
+const PHOTOS: Photo[] = [
+  { img: 'cupom-loja.jpg', x: { valor: 365.23, desc: /^Supermercado Exemplar$/, store: 'Supermercado Exemplar', pay: 'credito', cat: /Mercado|Alimentação/ } },
+  { img: 'maquininha.jpg', x: { valor: 11.4, desc: /^(?!.*(cielo|master))/i, store: '', pay: 'credito' } },
+];
+async function photoCase(id: number, key: string): Promise<string> {
+  const c = PHOTOS[id - 101];
+  if (!c) return '';
+  const f = await fetch(FOTOS + c.img);
+  if (!f.ok) return '#' + id + ' ERRO foto ' + f.status;
+  const img = b64(new Uint8Array(await f.arrayBuffer())), s0 = Date.now();
+  const names = (k: string) => cats.filter((x) => x.kind === k).map((x) => x.name);
+  let rc: any = null;
+  try { rc = await readReceipt({ key, mime: 'image/jpeg', data: img, today: TODAY, categories: { out: names('out'), in: names('in') } }); }
+  catch (e) { return '#' + id + ' ERRO ' + String((e as Error)?.message ?? e).slice(0, 160); }
+  const x = c.x, bad: string[] = [];
+  if (!rc) bad.push('não leu');
+  else {
+    if (Math.abs(rc.amount - x.valor) > 0.005) bad.push('valor ' + rc.amount + '≠' + x.valor);
+    if (x.desc && !x.desc.test(rc.description)) bad.push('desc "' + rc.description + '"');
+    if (x.store !== undefined && rc.store !== x.store) bad.push('loja "' + rc.store + '"');
+    if (x.pay && rc.payment !== x.pay) bad.push('pag ' + rc.payment + '≠' + x.pay);
+    if (x.cat && !like(x.cat, rc.category)) bad.push('cat "' + rc.category + '"');
+  }
+  return '#' + id + (bad.length ? ' FALHOU ' + bad.join('; ') : ' OK') + ' | ' + (Date.now() - s0) + 'ms | foto ' + c.img + ': '
+    + (rc ? rc.kind + ' ' + fmt(rc.amount) + ' "' + rc.description + '" loja "' + rc.store + '" [' + rc.category + '] ' + rc.payment : 'nada');
+}
 const enc = new TextEncoder();
 const sha = async (s: string) => [...new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(s)))].map((b) => b.toString(16).padStart(2, '0')).join('');
 const fmt = (v: number) => v.toFixed(2);
@@ -174,6 +205,7 @@ Deno.serve(async (req) => {
   const key = Deno.env.get('GROQ_API_KEY') ?? '', out: string[] = [], t0 = Date.now();
   let limits = '';
   for (let k = 0; k < ids.length; k++) {
+    if (ids[k] >= 101) { const line = await photoCase(ids[k], key); if (line) out.push(line); continue; }
     const i = ids[k] - 1, c = CASES[i];
     if (!c) continue;
     if (Date.now() - t0 > 40e3) { out.push('… parou antes do ' + ids[k] + ' (tempo)'); break; }

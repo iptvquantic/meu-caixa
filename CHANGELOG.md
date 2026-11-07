@@ -5,6 +5,10 @@
   o app entende R$ 11,40 e lança na hora, sem perguntar "Quanto foi?". Horário de verdade continua horário ("às
   12h30", "11h40 da manhã") e, se a frase já tem outro valor, nada muda. No lançamento escrito, um horário que ficou na
   frase ("almoço às 12h30 25") não é mais confundido com o valor.
+- Comprovante por foto: quando o nome do lugar aparece no cupom ou na via da maquininha, ele vira a descrição
+  ("SUPERMERCADO BARCELOS LTDA" → "Supermercado Barcelos"), como referência de onde foi a compra. Foto só dos valores
+  continua lançando com a descrição do que foi ("Mercado") e a categoria certa. A empresa da maquininha (Cielo, Stone…)
+  e a bandeira do cartão nunca viram o nome da loja. Conferido com o modelo de visão de verdade em fotos de exemplo.
 
 ## 2.6.0 — 06/11/2026
 - Fugas de gastos (novo, no Menu do celular e no menu lateral do PC; liga e desliga em Ajustes → Recursos do app, sem

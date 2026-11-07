@@ -388,6 +388,14 @@ const msg = (text, extra = {}) => ({ phone: PHONE, kind: 'text', text, lastHour:
   ok(r({ comprovante: true, valor: '52.9', pagamento: 'vale' }).amount === 52.9 && r({ comprovante: true, valor: 10, pagamento: 'vale' }).payment === 'outro', 'ponto decimal; forma de pagamento desconhecida = outro');
   ok(r({ comprovante: true, valor: 10 }).kind === 'saida' && r({ comprovante: true, tipo: 'Entrada', valor: 10 }).kind === 'entrada' && r({ comprovante: true, tipo: 'investimento', valor: 10 }).kind === 'investimento' && r({ comprovante: true, tipo: 'xyz', valor: 10 }).kind === 'saida', 'tipo do comprovante: entrada, investimento ou saída (padrão)');
   ok(r({ comprovante: true, tipo: 'entrada', valor: 10, pagamento: 'credito', parcelas: 3 }).installments === 1, 'parcelas só em gasto no crédito');
+  // o nome da loja, quando aparece, vira a descrição (referência de onde foi); sem ele, fica o que foi
+  const loja = (l, d = 'Mercado', extra = {}) => r({ comprovante: true, valor: 365.23, loja: l, descricao: d, pagamento: 'credito', ...extra });
+  ok(loja('SUPERMERCADO BARCELOS LTDA').description === 'Supermercado Barcelos' && loja('SUPERMERCADO BARCELOS LTDA').store === 'Supermercado Barcelos', 'cupom em maiúsculas com LTDA: "Supermercado Barcelos"');
+  ok(loja('DROGARIA SÃO PAULO S.A.').description === 'Drogaria São Paulo' && loja('Padaria Pão de Mel').description === 'Padaria Pão de Mel' && loja('POSTO DO ZE ME').description === 'Posto do Ze', 'S.A. e ME saem; "de"/"do" ficam minúsculos; nome já escrito certo fica igual');
+  ok(loja('').description === 'Mercado' && loja('', 'Mercado').store === '', 'foto só dos valores (sem loja): fica "Mercado" e a categoria decide');
+  ok(loja('CIELO').description === 'Mercado' && loja('Stone').description === 'Mercado' && loja('MASTERCARD').description === 'Mercado', 'empresa da maquininha ou bandeira não é loja');
+  ok(loja('MERCADINHO 12.345.678/0001-90').description === 'Mercadinho', 'CNPJ fora do nome da loja');
+  ok(loja('Supermercado X', 'Pix Ana', { tipo: 'entrada' }).description === 'Pix Ana' && loja('Banco Y', 'CDB Banco Y', { tipo: 'investimento' }).store === '', 'entrada e investimento: a loja não entra');
   ok(b64(new Uint8Array([77, 67, 255])) === 'TUP/' && b64(new Uint8Array(100000).fill(65)).length === 133336, 'base64 da imagem (grande, sem estourar a pilha)');
 
   const sent = [];

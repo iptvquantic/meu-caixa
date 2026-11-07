@@ -3,7 +3,7 @@
 // função desliga sozinha depois de algumas horas (responde 410).
 // Uso: node avaliar-ia.js <commit de 40 caracteres> <senha de 16+ caracteres> [horas=3]
 //   → out/deploy/mc-avaliar/index.ts, publicado pelo conector do Supabase (nome mc-avaliar, verify_jwt=false).
-// Rodar: GET …/functions/v1/mc-avaliar/<senha>/<casos: 1,5,7 ou 43-50>/<esforço: low|medium>/<modelo: 120|20>
+// Rodar: GET …/functions/v1/mc-avaliar/<senha>/<casos: 1,5,7 ou 43-50; fotos 101+>/<esforço: low|medium>/<modelo: 120|20>
 // Cuidado com a cota grátis da Groq (8 mil tokens por minuto, 200 mil por dia): cada frase usa ~1,8 mil.
 const fs = require('fs'), path = require('path'), crypto = require('crypto'), { execFileSync } = require('child_process');
 
@@ -19,17 +19,20 @@ const published = heads.some((h) => { try { git('merge-base', '--is-ancestor', s
 if (!published) { console.error(`❌ o commit ${sha.slice(0, 7)} não está no GitHub (faça push antes)`); process.exit(1); }
 
 const url = `https://raw.githubusercontent.com/iptvquantic/meu-caixa/${sha}/dev/supabase/functions/whatsapp/understand.ts`;
-const smart = url.replace('/understand.ts', '/smart.ts'), bot = url.replace('/understand.ts', '/bot.ts');
+const smart = url.replace('/understand.ts', '/smart.ts'), bot = url.replace('/understand.ts', '/bot.ts'), receipt = url.replace('/understand.ts', '/receipt.ts');
+const fotos = `https://raw.githubusercontent.com/iptvquantic/meu-caixa/${sha}/dev/avaliar/`;
 const ate = new Date(Date.now() + Number(hours) * 3600e3).toISOString().replace(/\.\d+Z$/, 'Z');
 const src = fs.readFileSync(path.join(__dirname, 'avaliar-ia.ts'), 'utf8')
   .replace('__UNDERSTAND__', url)
   .replace('__SMART__', smart)
   .replace('__BOT__', bot)
+  .replace('__RECEIPT__', receipt)
+  .replace('__FOTOS__', fotos)
   .replace('__HASH__', crypto.createHash('sha256').update(pass).digest('hex'))
   .replace('__ATE__', ate);
-if (/__(UNDERSTAND|SMART|BOT|HASH|ATE)__/.test(src)) { console.error('❌ avaliar-ia.ts sem os marcadores esperados'); process.exit(1); }
+if (/__(UNDERSTAND|SMART|BOT|RECEIPT|FOTOS|HASH|ATE)__/.test(src)) { console.error('❌ avaliar-ia.ts sem os marcadores esperados'); process.exit(1); }
 const out = path.join(__dirname, 'out', 'deploy', 'mc-avaliar', 'index.ts');
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.writeFileSync(out, src);
-const cases = (src.match(/^\s*\{ t: '/gm) || []).length;
-console.log(`✅ ${path.relative(__dirname, out)}: ${cases} frases, understand.ts do commit ${sha.slice(0, 7)}, desliga em ${ate}`);
+const cases = (src.match(/^\s*\{ t: '/gm) || []).length, photos = (src.match(/^\s*\{ img: '/gm) || []).length;
+console.log(`✅ ${path.relative(__dirname, out)}: ${cases} frases (1–${cases}) e ${photos} fotos (101–${100 + photos}), commit ${sha.slice(0, 7)}, desliga em ${ate}`);
