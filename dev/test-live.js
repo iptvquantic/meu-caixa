@@ -17,6 +17,7 @@ const seen = [];
 let waLinked = false; // o robô conectou o número?
 const setupCalls = []; // pedidos do app para ativar o robô na Meta (só o dono)
 const appCalls = [];   // o assistente do app falando com o robô (texto, áudio, foto)
+const contaCalls = [];
 let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: 'ativado', waba: 'ativado', number: '15550100000' };
 
 (async () => {
@@ -25,7 +26,8 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   const errs = [];
   p.on('pageerror', e => errs.push(e.message));
-  p.on('console', m => { if (m.type() === 'error' && !/net::|ERR_|fetching the script/.test(m.text())) errs.push(m.text()); });
+  // respostas 400/409 esperadas (e-mail repetido, "Esqueci a senha" recusado) aparecem no console do navegador como recurso que falhou
+  p.on('console', m => { if (m.type() === 'error' && !/net::|ERR_|fetching the script|status of (400|409) /.test(m.text())) errs.push(m.text()); });
   await routeSite(p, {
     html: appHtml(),
     supabase: r => {
@@ -35,6 +37,14 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
       seen.push(`${m} ${path.startsWith('/auth/v1/signup') ? decodeURIComponent(path) : path.split('?')[0]} ${m !== 'GET' ? (r.postData() || '').slice(0, 200) : ''}`);
       const J = (o, s = 200) => r.respond({ status: s, headers: { ...cors, 'Content-Type': 'application/json' }, body: JSON.stringify(o) });
       if (path.startsWith('/auth/v1/signup')) return J({ ...user, email_confirmed_at: null, identities: [{}] });
+      // o e-mail padrão do Supabase não entrega para quem não é da equipe: "Esqueci a senha" recusa
+      if (path.startsWith('/auth/v1/recover')) return J({ code: 'email_address_not_authorized', msg: 'Email address is not authorized' }, 400);
+      // cadastro pela função "conta" (a conta nasce confirmada); e-mail repetido = 409
+      if (path.startsWith('/functions/v1/conta') && m === 'POST') {
+        const b = JSON.parse(r.postData() || '{}'); contaCalls.push({ b, apikey: r.headers().apikey || '' });
+        if (b.email === 'ja@teste.local') return J({ error: 'Este e-mail já tem conta. Use "Entrar".', reason: 'exists' }, 409);
+        return J({ ok: true });
+      }
       if (path.startsWith('/auth/v1/token')) return J(session);
       if (path.startsWith('/auth/v1/user')) return J(user);
       if (path.startsWith('/rest/v1/profiles')) return J(m === 'PATCH' ? [profile] : profile);
@@ -69,22 +79,35 @@ let setupReply = { ok: true, message: 'Robô ativado na Meta agora.', webhook: '
   ok(await p.$eval('[data-act="authTab"][data-tab="signup"]', b => b.getAttribute('aria-selected') === 'true') && /Criar conta/.test(await p.$eval('#auth-submit', b => b.textContent)), '"Começar grátis" da página inicial abre direto o cadastro');
   await p.goto(SITE + 'app.html', { waitUntil: 'load' }); await sleep(900);
   ok(await p.$eval('#auth', e => !e.hidden), 'sem sessão: abre na tela de login');
+  // esqueci a senha: o e-mail não chega a clientes, então o link vem pelo WhatsApp do suporte
+  await p.type('#auth-email', user.email); await p.click('[data-act="forgot"]'); await sleep(600);
+  const wa = await p.$eval('#auth-wa', a => ({ hidden: a.hidden, href: a.href, text: a.textContent }));
+  ok(!wa.hidden && wa.href.startsWith('https://wa.me/5522991053813?text=') && decodeURIComponent(wa.href).includes(user.email) && /WhatsApp/.test(wa.text) && /WhatsApp/.test(await p.$eval('#auth-msg', e => e.textContent)), 'Esqueci a senha: mostra o pedido de link no WhatsApp do suporte, com o e-mail');
+  // prints da tela de entrada com o pedido pelo WhatsApp (celular e PC)
+  require('fs').mkdirSync(require('path').join(__dirname, 'shots'), { recursive: true });
+  await p.screenshot({ path: require('path').join(__dirname, 'shots', 'm390-entrar-esqueci-dark.png') });
+  await p.setViewport({ width: 1280, height: 860 }); await sleep(200);
+  await p.screenshot({ path: require('path').join(__dirname, 'shots', 'd1280-entrar-esqueci-dark.png') });
+  ok(await p.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'tela de entrada sem vazamento no PC');
+  await p.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true }); await sleep(200);
+  await p.$eval('#auth-email', e => { e.value = ''; });
   // criar conta
   await p.click('[data-act="authTab"][data-tab="signup"]');
+  ok(await p.$eval('#auth-wa', a => a.hidden), 'trocar de aba esconde o botão do WhatsApp');
   ok(await p.$eval('#auth-pass-hint', e => !e.hidden && /8 caracteres/.test(e.textContent)), 'cadastro mostra a regra da senha');
   await p.type('#auth-email', user.email); await p.type('#auth-pass', 'senhafraca'); await p.type('#auth-pass2', 'senhafraca');
   await p.click('#auth-submit'); await sleep(300);
   ok(/Senha fraca: use pelo menos 8 caracteres, com letras e números/.test(await p.$eval('#auth-msg', e => e.textContent)) && !seen.some(s => s.startsWith('POST /auth/v1/signup')), 'senha fraca recusada antes de ir ao servidor');
   await p.$eval('#auth-pass', e => { e.value = ''; }); await p.$eval('#auth-pass2', e => { e.value = ''; });
   await p.type('#auth-pass', 'segredo123'); await p.type('#auth-pass2', 'segredo123');
-  await p.click('#auth-submit'); await sleep(700);
-  ok(/Conta criada/.test(await p.$eval('#auth-msg', e => e.textContent)), 'criar conta pede confirmação por e-mail');
-  ok(seen.some(s => s.startsWith('POST /auth/v1/signup') && s.includes('redirect_to=' + SITE + 'app.html')), 'link de confirmação volta para o app.html');
-  // entrar
-  await p.click('[data-act="authTab"][data-tab="login"]');
-  await p.$eval('#auth-pass', e => { e.value = ''; }); await p.type('#auth-pass', 'segredo123');
+  await p.$eval('#auth-email', e => { e.value = 'ja@teste.local'; });
+  await p.click('#auth-submit'); await sleep(600);
+  ok(/já tem conta/.test(await p.$eval('#auth-msg', e => e.textContent)) && await p.$eval('#auth', e => !e.hidden), 'e-mail que já tem conta: avisa e continua no cadastro');
+  await p.$eval('#auth-email', e => { e.value = ''; }); await p.type('#auth-email', user.email);
   await p.click('#auth-submit'); await sleep(1500);
-  ok(await p.$eval('#app', e => !e.hidden), 'login abre o app');
+  const conta = contaCalls.at(-1);
+  ok(conta && conta.b.acao === 'criar' && conta.b.email === user.email && conta.b.senha === 'segredo123' && conta.apikey && !seen.some(s => s.startsWith('POST /auth/v1/signup')), 'criar conta vai à função "conta" (nasce confirmada, sem e-mail)');
+  ok(seen.some(s => s.startsWith('POST /auth/v1/token')) && await p.$eval('#app', e => !e.hidden), 'conta criada: já entra no app, sem esperar e-mail');
   for (const t of ['transactions', 'profiles', 'categories', 'cards', 'recurring', 'goals', 'wa_links']) ok(seen.some(s => s.startsWith('GET /rest/v1/' + t)), 'carrega ' + t + ' do Supabase');
   // lançar
   await p.click('#mnav .fab'); await sleep(300);

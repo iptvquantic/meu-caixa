@@ -1,5 +1,15 @@
 # Histórico de versões
 
+## 2.7.0 — 07/11/2026
+- Cadastro sem depender de e-mail: o e-mail padrão do Supabase só chega para a equipe do projeto, então o cliente
+  não recebia a confirmação. Agora a conta é criada já confirmada (função nova "conta") e a pessoa entra na hora.
+  Para ninguém criar contas em massa: até 5 cadastros por endereço e 60 no total por hora (o endereço vira um código
+  embaralhado, o IP nunca é guardado), e "cadastro fechado" no Supabase continua valendo.
+- Esqueceu a senha: além do e-mail (que só chega para a equipe), a tela de entrada mostra "Pedir o link no WhatsApp"
+  com o e-mail da pessoa. No painel Clientes, o dono toca em "Link de nova senha" e manda pelo WhatsApp do cliente
+  (ou copia). Só master/admin geram o link, e nunca para conta de administrador.
+- Banco: migração 05 (tabela do limite de cadastros, só a função usa). Testado no Postgres de verdade.
+
 ## 2.6.1 — 06/11/2026
 - Lançar falando: quando o reconhecimento de voz escreve o valor como hora ("onze e quarenta" → "11h40" ou "11:40"),
   o app entende R$ 11,40 e lança na hora, sem perguntar "Quanto foi?". Horário de verdade continua horário ("às

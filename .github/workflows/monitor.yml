@@ -40,4 +40,5 @@ jobs:
           sw=$(get "$SITE/sw.js");            check "$sw" "mc-[0-9]" "versão $(grep -o -m1 "mc-[0-9][0-9.]*" <<<"$sw")"
           wa=$(get "$FN/whatsapp?health=1");  check "$wa" '"db":true' "banco e função whatsapp $wa"
           ai=$(get "$FN/ai?health=1");        check "$ai" '"ok":true' "função ai $ai"
+          ct=$(get "$FN/conta?health=1");     check "$ct" '"ok":true' "função conta $ct"
           echo "::notice title=Meu Caixa no ar::${OK% · }"

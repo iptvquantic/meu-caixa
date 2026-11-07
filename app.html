@@ -2,7 +2,7 @@
 <html lang="pt-BR" data-mc-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-aiFg01KDn52nlSNhvRoh5swBZ8Z9TNKy37lDKXbNT/E=' 'sha256-kHA+OSDk+NIeQy0wylzrTHx6bsoX+h+tWyTzMLmjQcQ=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-NoC1spHupWvIuaPEJWxnU74gDhNESq0hs/aKX9hS7hI=' 'sha256-myRfOApRbgNp/E5uVOF2IZ1p9ClY06KQr0io/JLWupU=' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'self' https://jgqhtshcuyzytljkmmxd.supabase.co wss://jgqhtshcuyzytljkmmxd.supabase.co https://*.googleapis.com; media-src 'self' blob:; worker-src 'self'; manifest-src 'self'; frame-src https://*.firebaseapp.com; object-src 'none'; base-uri 'self'; form-action 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0c1215">
 <meta name="description" content="Meu Caixa: entradas, saídas, cartão e investimentos para autônomos e pequenos negócios. No celular e no PC.">
@@ -248,6 +248,7 @@ svg.i{width:20px;height:20px;flex:none;stroke:currentColor;fill:none;stroke-widt
 .adm-more>*{flex:1 1 190px}
 .adm-confirm{border:1px solid var(--accent);border-radius:var(--r-md);padding:14px;background:color-mix(in srgb,var(--accent) 9%,var(--surface-2))}
 .adm-confirm p{margin-bottom:12px;line-height:1.45}
+.adm-link{margin-top:14px}.adm-link .input{margin-bottom:10px;font-size:13px}.adm-link .row{flex-wrap:wrap}.adm-link .row>*{flex:1 1 160px}
 
 /* ===== Folha (modal) ===== */
 .sheet-bg{position:fixed;inset:0;z-index:90;background:rgba(3,6,8,.55);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;animation:fade .15s ease}
@@ -627,6 +628,7 @@ canvas{max-width:100%}
       <button type="button" role="tab" data-act="authTab" data-tab="signup" aria-selected="false">Criar conta</button>
     </div>
     <div id="auth-msg" class="msg" role="alert" hidden></div>
+    <a id="auth-wa" class="btn block" target="_blank" rel="noopener" hidden style="margin-bottom:12px"></a>
     <form id="auth-form" novalidate>
       <label class="field"><span>E-mail</span><input class="input" id="auth-email" type="email" autocomplete="email" inputmode="email" required></label>
       <label class="field"><span>Senha</span><input class="input" id="auth-pass" type="password" autocomplete="current-password" required></label>
@@ -682,10 +684,11 @@ canvas{max-width:100%}
 // Fontes sem travar a abertura (internet lenta ou sem internet)
 for (const l of document.querySelectorAll('link[data-font]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 window.MC_CONFIG = {
-  version: '2.6.1',
+  version: '2.7.0',
   supabaseUrl: 'https://jgqhtshcuyzytljkmmxd.supabase.co',
   supabaseKey: 'sb_publishable_2M8clHFA_KiAnaFpfJuaDw_lbUc4n_c',
   aiFunction: 'ai',
+  accountFunction: 'conta', // cadastro e link de nova senha sem depender de e-mail (o e-mail padrão do Supabase só vai para a equipe)
   whatsapp: '5522991053813',
   plans: [
     { name: 'Mensal', price: 'R$ 14,90', url: 'https://pag.ae/81RjjwLHN' },
@@ -1519,9 +1522,30 @@ const Live = {
   async session() { const { data } = await this.sb.auth.getSession(); return data.session; },
   onAuth(cb) { this.sb.auth.onAuthStateChange((ev, session) => cb(ev, session)); },
   async signIn(email, password) { const { error } = await this.sb.auth.signInWithPassword({ email, password }); if (error) throw error; },
+  // conta nova pela função "conta" (nasce confirmada: o e-mail padrão do Supabase não chega a clientes) e já entra
   async signUp(email, password) {
-    const { data, error } = await this.sb.auth.signUp({ email, password, options: { emailRedirectTo: location.href.split('#')[0] } });
-    if (error) throw error; return !data.session;
+    if (!CFG.accountFunction) {
+      const { data, error } = await this.sb.auth.signUp({ email, password, options: { emailRedirectTo: location.href.split('#')[0] } });
+      if (error) throw error; return !data.session;
+    }
+    const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${CFG.accountFunction}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', apikey: CFG.supabaseKey }, body: JSON.stringify({ acao: 'criar', email, senha: password })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const e = new Error(j.error || 'HTTP ' + r.status); e.status = r.status; e.reason = j.reason; throw e; }
+    await this.signIn(email, password);
+    return false;
+  },
+  // painel do dono: link de nova senha de um cliente (a função confere se quem pede é master/admin)
+  async recoveryLink(userId) {
+    const { data } = await this.sb.auth.getSession();
+    const r = await fetch(`${CFG.supabaseUrl}/functions/v1/${CFG.accountFunction || 'conta'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.session?.access_token}`, apikey: CFG.supabaseKey },
+      body: JSON.stringify({ acao: 'link', usuario: userId })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.link) { const e = new Error(j.error || 'HTTP ' + r.status); e.status = r.status; throw e; }
+    return j.link;
   },
   async reset(email) { const { error } = await this.sb.auth.resetPasswordForEmail(email, { redirectTo: location.href.split('#')[0] }); if (error) throw error; },
   async newPassword(password) { const { error } = await this.sb.auth.updateUser({ password }); if (error) throw error; },
@@ -1713,6 +1737,8 @@ const Demo = {
   async waUnlink() { this.db.wa = null; this.save(); },
   async waBot() { return { configured: true, ready: true, number: null, demo: true }; },
   async waSetup() { return { ok: true, message: 'Robô ativo na Meta.', demo: true }; },
+  // link de nova senha (demonstração: endereço de exemplo, não abre nada)
+  async recoveryLink(id) { await new Promise(r => setTimeout(r, 150)); if (!(this.db.clients || []).some(x => x.id === id)) throw new Error('Cliente não encontrado.'); return 'https://exemplo.invalid/nova-senha#demonstracao'; },
   // painel de clientes com clientes de exemplo (as mesmas regras do servidor)
   async adminUsers() { if (!this.db.clients) { this.db.clients = demoClients(); this.save(); } return JSON.parse(JSON.stringify(this.db.clients)); },
   async adminSetPlan(id, action) {
@@ -2737,7 +2763,7 @@ function tourKey(e) {
 // Lista de contas com plano, validade e uso (sem valores dos lançamentos). Liberar Mensal/Trimestral/Anual, +7 dias,
 // bloquear/desbloquear e desfazer o último ajuste: tudo pelas funções admin_users/admin_set_plan, que conferem no
 // servidor se quem pede é master/admin e registram cada mudança.
-const ADM = { list: null, loading: false, err: '', at: 0, f: 'all', q: '', cur: null, ask: null, busy: false };
+const ADM = { list: null, loading: false, err: '', at: 0, f: 'all', q: '', cur: null, ask: null, busy: false, link: null, linkBusy: false };
 const ADM_NAMES = { mensal: 'Mensal', trimestral: 'Trimestral', anual: 'Anual', mais7: '+7 dias', bloquear: 'Bloqueio', desbloquear: 'Desbloqueio', desfazer: 'Desfazer' };
 const ADM_MONTHS = { mensal: 1, trimestral: 3, anual: 12 };
 const DAY_MS = 864e5;
@@ -2856,13 +2882,37 @@ function admSheetHTML(u) {
         <button class="btn" data-act="admAsk" data-a="mais7">${ico('gift')}+7 dias de cortesia</button>
         ${u.whatsapp ? `<a class="btn" href="${esc(admChargeLink(u))}" target="_blank" rel="noopener">${ico('message-circle')}Cobrar no WhatsApp</a>` : ''}
         ${u.active ? `<button class="btn danger" data-act="admAsk" data-a="bloquear">${ico('lock')}Bloquear</button>` : `<button class="btn" data-act="admAsk" data-a="desbloquear">${ico('lock-open')}Desbloquear</button>`}
-      </div>`;
+        ${ADM.link ? '' : `<button class="btn" data-act="admLink"${ADM.linkBusy ? ' disabled' : ''}>${ico('key-round')}${ADM.linkBusy ? 'Gerando o link…' : 'Link de nova senha'}</button>`}
+      </div>${ADM.link ? admLinkBox(u) : ''}`;
   }
   return `${sheetHead('adm-title', 'Cliente')}
     <div class="adm-head"><span class="avatar" aria-hidden="true">${esc(name.charAt(0).toUpperCase())}</span><div><b>${esc(name)}</b><small>${esc(u.email || '')}</small></div>
       <span class="st${s.tone ? ' st-' + s.tone : ''}" style="margin-left:auto;flex:none">${esc(s.label)}</span></div>
     <dl class="adm-facts">${facts}</dl>
     ${body}`;
+}
+// link de nova senha: a pessoa abre, cria a senha e entra (o e-mail padrão do Supabase não chega a clientes)
+function admLinkBox(u) {
+  const first = admName(u).split(' ')[0];
+  const text = `Olá, ${first}! Para criar uma senha nova no Meu Caixa, abra este link agora (ele vence em pouco tempo): ${ADM.link}`;
+  const wa = u.whatsapp ? `https://wa.me/${waNumber(u.whatsapp)}?text=${encodeURIComponent(text)}` : '';
+  return `<div class="adm-confirm adm-link" role="group" aria-labelledby="adm-link-t">
+    <p id="adm-link-t"><b>Link de nova senha</b> para ${esc(admName(u))}. Ele vence em pouco tempo: mande agora.</p>
+    <label class="sr" for="adm-link-url">Link</label><input class="input" id="adm-link-url" readonly value="${esc(ADM.link)}">
+    <div class="row">${wa ? `<a class="btn primary" href="${esc(wa)}" target="_blank" rel="noopener" data-autofocus>${ico('message-circle')}Enviar no WhatsApp</a>` : ''}<button class="btn${wa ? '' : ' primary'}" data-act="admCopyLink"${wa ? '' : ' data-autofocus'}>${ico('copy')}Copiar</button></div>
+  </div>`;
+}
+async function admLink() {
+  const u = ADM.cur; if (!u || ADM.linkBusy) return;
+  ADM.linkBusy = true; admSheetRender();
+  try { ADM.link = await api.recoveryLink(u.id); }
+  catch (e) { toast(e.status === 403 ? 'Esse link só sai para conta de cliente.' : admErr(e)); }
+  finally { ADM.linkBusy = false; if (ADM.cur && ADM.cur.id === u.id) admSheetRender(); }
+}
+async function admCopyLink() {
+  const url = ADM.link; if (!url) return;
+  try { await navigator.clipboard.writeText(url); toast('Link copiado. Cole no WhatsApp do cliente.'); }
+  catch { const i = $('#adm-link-url'); if (i) { i.focus(); i.select(); } toast('Selecionei o link: copie e mande para o cliente.'); }
 }
 function admSheetRender() {
   const box = SHEETS.at(-1)?.bg.querySelector('.sheet');
@@ -2872,8 +2922,8 @@ function admSheetRender() {
 }
 function openClient(id) {
   const u = admClients().find(x => x.id === id); if (!u) return;
-  ADM.cur = u; ADM.ask = null; ADM.busy = false;
-  openSheet(admSheetHTML(u), 'adm-title', () => { ADM.cur = null; ADM.ask = null; });
+  ADM.cur = u; ADM.ask = null; ADM.busy = false; ADM.link = null; ADM.linkBusy = false;
+  openSheet(admSheetHTML(u), 'adm-title', () => { ADM.cur = null; ADM.ask = null; ADM.link = null; });
 }
 function admAsk(action) { if (!ADM.cur || ADM.busy) return; ADM.ask = action; admSheetRender(); }
 // grava no servidor; o aviso tem Desfazer (volta ao que era antes deste ajuste)
@@ -4033,7 +4083,17 @@ function showAuth(mode) {
   $('[data-act="forgot"]').hidden = mode !== 'login';
   authMsg('');
 }
-function authMsg(text, ok) { const m = $('#auth-msg'); m.hidden = !text; m.textContent = text; m.className = 'msg ' + (ok ? 'ok' : 'err'); }
+// "Esqueci minha senha" sem depender de e-mail: o link de nova senha também vem pelo WhatsApp do suporte
+function authHelp(text, email, ok) {
+  authMsg(text, ok);
+  const a = $('#auth-wa');
+  a.hidden = !CFG.whatsapp;
+  if (CFG.whatsapp) {
+    a.href = `https://wa.me/${CFG.whatsapp}?text=${encodeURIComponent('Olá! Esqueci a senha do Meu Caixa. Meu e-mail: ' + email)}`;
+    a.innerHTML = `${ico('message-circle')}Pedir o link no WhatsApp`;
+  }
+}
+function authMsg(text, ok) { const m = $('#auth-msg'); m.hidden = !text; m.textContent = text; m.className = 'msg ' + (ok ? 'ok' : 'err'); const a = $('#auth-wa'); if (a) a.hidden = true; }
 // senha nova: 8+ caracteres com letras e números (a lista de senhas vazadas do Supabase é só no plano pago)
 const strongPass = p => p.length >= 8 && /\p{L}/u.test(p) && /\d/.test(p);
 async function onAuthSubmit(e) {
@@ -4051,7 +4111,7 @@ async function onAuthSubmit(e) {
       if (!strongPass(pass)) throw new Error('weak password');
       if (pass !== pass2) throw new Error('As senhas não são iguais.');
       const needsConfirm = await api.signUp(email, pass);
-      if (needsConfirm) authMsg('Conta criada! Abra o link que enviamos para ' + email + ' e depois entre aqui.', true);
+      authMsg(needsConfirm ? 'Conta criada! Abra o link que enviamos para ' + email + ' e depois entre aqui.' : 'Conta criada! Entrando…', true);
     } else {
       if (!email || !pass) throw new Error('Preencha e-mail e senha.');
       await api.signIn(email, pass);
@@ -4131,6 +4191,8 @@ const ACT = {
   leakRestart: () => { saveLeakSettings({ start: isoOf(new Date()), done: [] }); render(); toast('Plano recomeçado: dia 1 de 30.'); },
   leakGoal: el => openGoalEditor(null, { kind: 'budget', category_id: el.dataset.cat, amount: +el.dataset.v || '' }),
   leakAI: () => leakAI(),
+  admLink: () => admLink(),
+  admCopyLink: () => admCopyLink(),
   // tutorial
   tourStart: () => tourStart(),
   tourLater: () => { tourAskGone('later'); toast('Combinado. Pergunto de novo outro dia.'); },
@@ -4183,7 +4245,8 @@ const ACT = {
   forgot: async () => {
     const email = $('#auth-email').value.trim();
     if (!email) { authMsg('Digite seu e-mail acima e toque de novo em "Esqueci minha senha".'); $('#auth-email').focus(); return; }
-    try { await api.reset(email); authMsg('Enviamos um link para criar nova senha em ' + email + '.', true); } catch (e) { authMsg(errMsg(e)); }
+    try { await api.reset(email); authHelp('Se esse e-mail tiver conta, enviamos o link para criar uma senha nova. Não chegou em 2 minutos? Peça o link no WhatsApp.', email, true); }
+    catch (e) { const net = /fetch|network/i.test(String(e?.message)); authHelp(net ? errMsg(e) : 'Peça o link para criar uma senha nova no WhatsApp do suporte: a gente manda na hora.', email, !net); }
   },
   txType: el => { const t = el.dataset.t; TX.type = t === 'out' ? (TX.type === 'card' ? 'card' : 'out') : t; TX.touchedType = true; updTxAll(); },
   txPay: el => { if (el.dataset.card) { TX.type = 'card'; TX.card_id = el.dataset.card; } else TX.type = 'out'; TX.touchedPay = true; updTxPay(); updTxSeg(); },
