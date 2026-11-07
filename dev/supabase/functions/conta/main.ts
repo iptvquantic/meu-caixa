@@ -27,6 +27,11 @@ export function start(createClient: CreateClient) {
       const j = await r.json();
       return { signup: !j?.disable_signup };
     },
+    // conta que não existe: com a chave certa o login responde "não encontrada" (404); com a chave errada, 401/403
+    adminOk: async () => {
+      const { error } = await sb.auth.admin.getUserById('00000000-0000-0000-0000-000000000000');
+      return !!error && (error.status === 404 || /not.?found/i.test(String(error.message)));
+    },
     // o segredo da função embaralha o endereço: o código não volta a ser o IP
     hash: async (s) => hex(await crypto.subtle.digest('SHA-256', enc.encode(`${SECRET}|${s}`))),
     allow: async (h) => {

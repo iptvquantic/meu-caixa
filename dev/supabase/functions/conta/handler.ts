@@ -11,6 +11,7 @@ export type Profile = { plan: string | null; email: string | null };
 export type Deps = {
   cfg: Cfg;
   settings: () => Promise<{ signup: boolean } | null>; // configuração pública do login (cadastro aberto?)
+  adminOk: () => Promise<boolean>; // a chave de serviço abre a administração do login? (sem ler conta nenhuma)
   hash: (s: string) => Promise<string>;
   allow: (ipHash: string) => Promise<boolean>; // true = pode criar (e anota a tentativa)
   createUser: (email: string, password: string) => Promise<void>; // conta já confirmada
@@ -43,10 +44,11 @@ export async function handle(req: Request, d: Deps): Promise<Response> {
   const H = { ...cors(req.headers.get('origin') ?? '', d.cfg.allowed), 'Content-Type': 'application/json' };
   const json: Json = (b, status = 200) => new Response(JSON.stringify(b), { status, headers: H });
   if (req.method === 'OPTIONS') return new Response('ok', { headers: H });
-  // saúde: só a configuração pública do login (sem ler dado de ninguém)
+  // saúde: a configuração pública do login e se a chave de serviço abre a administração do login (procura uma conta
+  // que não existe: não lê dado de ninguém)
   if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) {
-    const s = await d.settings().catch(() => null);
-    return json({ ok: !!s, signup: s ? s.signup : null });
+    const [s, admin] = await Promise.all([d.settings().catch(() => null), d.adminOk().catch(() => false)]);
+    return json({ ok: !!s && admin, signup: s ? s.signup : null, admin });
   }
   if (req.method !== 'POST') return json({ error: 'Método não permitido' }, 405);
   let b: Record<string, unknown> | null = null;

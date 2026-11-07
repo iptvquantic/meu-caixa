@@ -13,6 +13,7 @@ function deps(o = {}) {
   const d = {
     cfg: { allowed: [ORIGIN], appUrl: 'https://iptvquantic.github.io/meu-caixa/app.html' },
     settings: async () => { if (st.settingsDown) throw new Error('fora'); return { signup: st.signup }; },
+    adminOk: async () => { if (st.adminDown) throw new Error('401'); return !st.badKey; },
     hash: async (s) => 'h:' + s.length + ':' + s.replace(/[^a-z0-9]/gi, '').slice(-12).padStart(40, '0'),
     allow: async (h) => { if (st.allowFail) throw new Error('rpc fora'); st.attempts.push(h); return st.attempts.filter((x) => x === h).length <= 5; },
     createUser: async (email) => { if (st.users.has(email)) throw new Error('A user with this email address has already been registered'); if (st.createFail) throw new Error('gotrue 500'); st.users.add(email); },
@@ -36,7 +37,11 @@ ok(cors(ORIGIN, [ORIGIN])['Access-Control-Allow-Origin'] === ORIGIN && cors('htt
   const { d, st } = deps();
   let r = await handle(new Request('https://x/functions/v1/conta?health=1', { headers: { origin: ORIGIN } }), d);
   let j = await r.json();
-  ok(r.status === 200 && j.ok === true && j.signup === true, 'saúde: configuração pública do login (cadastro aberto)');
+  ok(r.status === 200 && j.ok === true && j.signup === true && j.admin === true, 'saúde: configuração pública do login (cadastro aberto) e a chave de serviço abre a administração');
+  st.badKey = true;
+  r = await handle(new Request('https://x/functions/v1/conta?health=1'), d); j = await r.json();
+  ok(j.ok === false && j.admin === false && j.signup === true, 'saúde: chave de serviço recusada aparece como ok=false (o monitor avisa)');
+  st.badKey = false;
   st.settingsDown = true;
   r = await handle(new Request('https://x/functions/v1/conta?health=1'), d); j = await r.json();
   ok(j.ok === false && j.signup === null, 'saúde: login fora do ar aparece como ok=false');
